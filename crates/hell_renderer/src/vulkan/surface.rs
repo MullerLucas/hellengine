@@ -5,8 +5,8 @@ use std::os::raw;
 pub type VulkanSurfaceCreateInfo = (*mut raw::c_void, raw::c_ulong); //(display, window)
 
 pub struct VulkanSurface {
-    surface: vk::SurfaceKHR,
-    surface_loader: ash::extensions::khr::Surface,
+    pub surface: vk::SurfaceKHR,
+    pub surface_loader: ash::extensions::khr::Surface,
 }
 
 

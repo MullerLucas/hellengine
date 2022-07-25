@@ -2,6 +2,27 @@ use ash::vk;
 use std::os::raw;
 use std::{ptr, ffi};
 
+
+pub struct DebugData {
+    pub debug_utils_loader: ash::extensions::ext::DebugUtils,
+    pub debug_messenger: vk::DebugUtilsMessengerEXT,
+}
+
+impl DebugData {
+    pub fn new(entry: &ash::Entry, instance: &ash::Instance) -> Self {
+        let debug_utils_loader = ash::extensions::ext::DebugUtils::new(entry, instance);
+        let messenger_create_info = populate_debug_messenger_create_info();
+        let debug_messenger = unsafe { debug_utils_loader.create_debug_utils_messenger(&messenger_create_info, None).expect("failed to create debug_utils_messenger") };
+
+        Self {
+            debug_utils_loader,
+            debug_messenger,
+        }
+    }
+}
+
+
+
 pub fn populate_debug_messenger_create_info() -> vk::DebugUtilsMessengerCreateInfoEXT {
     vk::DebugUtilsMessengerCreateInfoEXT {
         s_type: vk::StructureType::DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,

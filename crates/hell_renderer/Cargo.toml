@@ -8,4 +8,5 @@ edition = "2021"
 [dependencies]
 hell_utils = { path = "../hell_utils" }
 
+num = "0.4.0"
 ash = "0.37.0+1.3.209"
