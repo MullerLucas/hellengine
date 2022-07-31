@@ -69,14 +69,14 @@ impl WinitWindow {
                 }
                 Event::RedrawRequested(_) => {
                     let delta_time = fps.delta_time();
-                    // self.draw_frame(delta_time);
                     update_cb(delta_time);
 
                     fps.tick_frame();
                 }
-                Event::LoopDestroyed => unsafe {
-                    // self.device.device_wait_idle().unwrap();
-                },
+                // TODO: uncomment
+                // Event::LoopDestroyed => unsafe {
+                //     self.device.device_wait_idle().unwrap();
+                // },
                 _ => {}
 
             }

@@ -5,7 +5,6 @@ use ash::vk;
 use super::config;
 use super::phys_device::VulkanPhysDevice;
 use super::queues::VulkanQueues;
-use super::surface::VulkanSurface;
 
 
 pub struct VulkanLogicDevice {
@@ -17,8 +16,7 @@ pub struct VulkanLogicDevice {
 impl VulkanLogicDevice {
     pub fn new(
         instance: &ash::Instance,
-        phys_device: &VulkanPhysDevice,
-        surface_data: &VulkanSurface,
+        phys_device: &VulkanPhysDevice
     ) -> Self {
 
         let queue_priorities = [1.0_f32];

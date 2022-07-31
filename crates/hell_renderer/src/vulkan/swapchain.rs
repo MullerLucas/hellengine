@@ -1,32 +1,40 @@
+use std::ptr;
 use ash::vk;
 
+use crate::vulkan::image;
+
+use super::logic_device::VulkanLogicDevice;
+use super::phys_device::VulkanPhysDevice;
 use super::surface::VulkanSurface;
 
 
-pub struct VulkanSwapchain {
+
+
+
+pub struct VulkanSwapchainSupport {
     pub capabilities: vk::SurfaceCapabilitiesKHR,
     pub formats: Vec<vk::SurfaceFormatKHR>,
     pub present_modes: Vec<vk::PresentModeKHR>
 }
 
-impl VulkanSwapchain {
-    pub fn new(phys_device: vk::PhysicalDevice, surface_data: &VulkanSurface) -> Self {
+impl VulkanSwapchainSupport {
+    pub fn new(phys_device: vk::PhysicalDevice, surface: &VulkanSurface) -> Self {
         let capabilities = unsafe {
-            surface_data
+            surface
                 .surface_loader
-                .get_physical_device_surface_capabilities(phys_device, surface_data.surface)
+                .get_physical_device_surface_capabilities(phys_device, surface.surface)
                 .unwrap()
         };
         let formats = unsafe {
-            surface_data
+            surface
                 .surface_loader
-                .get_physical_device_surface_formats(phys_device, surface_data.surface)
+                .get_physical_device_surface_formats(phys_device, surface.surface)
                 .unwrap()
         };
         let present_modes = unsafe {
-            surface_data
+            surface
                 .surface_loader
-                .get_physical_device_surface_present_modes(phys_device, surface_data.surface)
+                .get_physical_device_surface_present_modes(phys_device, surface.surface)
                 .unwrap()
         };
 
@@ -97,5 +105,124 @@ impl VulkanSwapchain {
         } else {
             desired_img_count.min(self.capabilities.max_image_count)
         }
+    }
+}
+
+
+
+
+
+
+
+
+
+pub struct VulkanSwapchain {
+    pub swapchain: vk::SwapchainKHR,
+    pub swapchain_loader: ash::extensions::khr::Swapchain,
+    pub swapchain_support: VulkanSwapchainSupport,
+
+    pub _imgs: Vec<vk::Image>,
+    pub img_views: Vec<vk::ImageView>,
+
+    pub surface_format: vk::SurfaceFormatKHR,
+    pub extent: vk::Extent2D,
+}
+
+
+impl VulkanSwapchain {
+    pub fn new(instance: &ash::Instance, phys_device: &VulkanPhysDevice, device: &VulkanLogicDevice, surface: &VulkanSurface, window_height: u32, window_width: u32) -> VulkanSwapchain {
+        let swapchain_support = VulkanSwapchainSupport::new(phys_device.device, surface);
+
+        let surface_format = swapchain_support.choose_swap_surface_format();
+        let swap_present_mode = swapchain_support.choose_swap_present_mode();
+        let extent = swapchain_support.choose_swap_extend(window_width, window_height);
+        let swap_img_count = swapchain_support.choose_img_count();
+
+        let is_single_queue = phys_device.queue_support.single_queue();
+        let queue_indices: Vec<_> = phys_device.queue_support.indices().into_iter().collect();
+
+        let create_info = vk::SwapchainCreateInfoKHR {
+            s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
+            p_next: ptr::null(),
+            flags: vk::SwapchainCreateFlagsKHR::empty(),
+            surface: surface.surface,
+            min_image_count: swap_img_count,
+            image_format: surface_format.format,
+            image_color_space: surface_format.color_space,
+            image_extent: extent,
+            image_array_layers: 1,  // always 1, unless for stereoscopic 3D applications
+            image_usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,     // directly render to the images in the swap-chain
+
+            image_sharing_mode: if is_single_queue { vk::SharingMode::EXCLUSIVE } else { vk::SharingMode::CONCURRENT },
+            queue_family_index_count: if is_single_queue { 0 } else { 2 },
+            p_queue_family_indices: if is_single_queue { ptr::null() } else { queue_indices.as_ptr() },
+
+            pre_transform: swapchain_support.capabilities.current_transform,
+            composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE, // blend with other windows in the window system?
+            present_mode: swap_present_mode,
+            clipped: vk::TRUE, // ignore color of pixels, that are obscured by other windows
+            old_swapchain: vk::SwapchainKHR::null(),
+        };
+
+        let swapchain_loader = ash::extensions::khr::Swapchain::new(instance, &device.device);
+        let swapchain = unsafe {
+            swapchain_loader
+                .create_swapchain(&create_info, None)
+                .expect("failed to create swapchain")
+        };
+
+        let imgs = unsafe { swapchain_loader.get_swapchain_images(swapchain).unwrap() };
+        let img_views = image::create_img_views(&device.device, &imgs, 1, surface_format.format, vk::ImageAspectFlags::COLOR);
+
+
+
+        println!("swapchain created with {} images...", imgs.len());
+
+        VulkanSwapchain {
+            swapchain,
+            swapchain_loader,
+            swapchain_support,
+            _imgs: imgs,
+            img_views,
+
+            surface_format,
+            extent,
+        }
+    }
+}
+
+
+impl VulkanSwapchain {
+    // TODO: error handling
+    pub fn aquire_next_image(&self, img_available_sem: vk::Semaphore) -> (u32, bool) {
+        unsafe {
+            self.swapchain_loader.acquire_next_image(
+                self.swapchain, u64::MAX, img_available_sem, vk::Fence::null()
+            )
+            .unwrap()
+        }
+    }
+
+    pub fn create_pipeline_viewport_data(&self) -> (vk::Viewport, vk::Rect2D, vk::PipelineViewportStateCreateInfo) {
+        let viewport = vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: self.extent.width as f32,
+            height: self.extent.height as f32,
+            min_depth: 0.0,
+            max_depth: 1.0,
+        };
+
+        let sissor = vk::Rect2D {
+            offset: vk::Offset2D::default(),
+            extent: self.extent
+        };
+
+        let viewport_state_info = vk::PipelineViewportStateCreateInfo::builder()
+            .viewports(&[viewport])
+            .scissors(&[sissor])
+            .build();
+
+        (viewport, sissor, viewport_state_info)
     }
 }

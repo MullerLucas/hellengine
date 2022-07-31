@@ -5,20 +5,18 @@ use std::fmt;
 
 use crate::vulkan::config;
 use crate::vulkan::queues::{self, VulkanQueueSupport};
-use crate::vulkan::swapchain::VulkanSwapchain;
 
 use super::surface::VulkanSurface;
-
-
-
-
+use super::swapchain::VulkanSwapchainSupport;
 
 pub struct VulkanPhysDevice {
     pub device: vk::PhysicalDevice,
     pub score: u32,
-    pub props: vk::PhysicalDeviceProperties,
+    pub device_props: vk::PhysicalDeviceProperties,
     pub features: vk::PhysicalDeviceFeatures,
     pub queue_support: VulkanQueueSupport,
+    pub swapchain_support: VulkanSwapchainSupport,
+    pub depth_format: vk::Format,
 }
 
 impl VulkanPhysDevice {
@@ -27,7 +25,7 @@ impl VulkanPhysDevice {
 
         let device = all_devices
             .into_iter()
-            .map(|d| {
+            .flat_map(|d| {
                 VulkanPhysDevice::rate_device_suitability(
                     instance,
                     d,
@@ -37,7 +35,6 @@ impl VulkanPhysDevice {
             })
             .filter(|d| d.score > 0)
             .max_by(|r1, r2| r1.score.cmp(&r2.score));
-
 
         let device = match device {
             None => {
@@ -51,25 +48,24 @@ impl VulkanPhysDevice {
         device
     }
 
-
     pub fn rate_device_suitability(
         instance: &ash::Instance,
         phys_device: vk::PhysicalDevice,
-        surface_data: &VulkanSurface,
+        surface: &VulkanSurface,
         extension_names: &[&str],
-    ) -> VulkanPhysDevice {
-        let props = unsafe { instance.get_physical_device_properties(phys_device) };
+    ) -> Option<VulkanPhysDevice> {
+        let device_props = unsafe { instance.get_physical_device_properties(phys_device) };
         let features = unsafe { instance.get_physical_device_features(phys_device) };
-        let mut score = 0;
+        let mut _score = 0;
 
-        let device_name = unsafe { CStr::from_ptr(props.device_name.as_ptr()) };
+        let device_name = unsafe { CStr::from_ptr(device_props.device_name.as_ptr()) };
         println!("rate device: {:?}", device_name);
 
         // api version
         // -----------
-        let major_version = vk::api_version_major(props.api_version);
-        let minor_version = vk::api_version_minor(props.api_version);
-        let patch_version = vk::api_version_patch(props.api_version);
+        let major_version = vk::api_version_major(device_props.api_version);
+        let minor_version = vk::api_version_minor(device_props.api_version);
+        let patch_version = vk::api_version_patch(device_props.api_version);
 
         println!(
             "\t> API Version: {}.{}.{}",
@@ -78,10 +74,10 @@ impl VulkanPhysDevice {
 
         // device-type
         // -----------
-        println!("\t> device-type: {:?}", props.device_type);
-        match props.device_type {
-            vk::PhysicalDeviceType::DISCRETE_GPU => score += 1000,
-            _ => score += 100,
+        println!("\t> device-type: {:?}", device_props.device_type);
+        match device_props.device_type {
+            vk::PhysicalDeviceType::DISCRETE_GPU => _score += 1000,
+            _ => _score += 100,
         };
 
         // shaders
@@ -92,7 +88,7 @@ impl VulkanPhysDevice {
             features.geometry_shader
         );
         if features.geometry_shader == vk::FALSE {
-            score = 0;
+            _score = 0;
         }
 
         // sampler
@@ -102,49 +98,56 @@ impl VulkanPhysDevice {
             features.sampler_anisotropy
         );
         if features.sampler_anisotropy == vk::FALSE {
-            score = 0;
+            _score = 0;
         }
 
         // queue-families
         // --------------
         queues::print_queue_families(instance, phys_device);
 
-        let queues = VulkanQueueSupport::new(instance, phys_device, surface_data);
-        if !queues.is_complete() {
-            score = 0;
+        let queue_support = VulkanQueueSupport::new(instance, phys_device, surface);
+        if !queue_support.is_complete() {
+            _score = 0;
             println!("> no suitable queues were found!");
         } else {
-            println!("queue-families found: {:?}", queues);
+            println!("queue-families found: {:?}", queue_support);
         }
 
         // extensions
         // ----------
-        if !check_device_extension_support(instance, phys_device, extension_names) {
-            score = 0;
-            println!("> not all device extensions are supported!");
-        } else {
-            // swap-chains
-            // -----------
-            let swap_chain_support = VulkanSwapchain::new(phys_device, surface_data);
-            if !swap_chain_support.is_suitable() {
-                score = 0;
-                println!("> no suitable swap-chain found!");
-            }
-        }
+        let swapchain_support =
+            if !check_device_extension_support(instance, phys_device, extension_names) {
+                _score = 0;
+                println!("> not all device extensions are supported!");
+                return None;
+            } else {
+                // swap-chains
+                // -----------
+                let swapchain_support = VulkanSwapchainSupport::new(phys_device, surface);
+                if !swapchain_support.is_suitable() {
+                    _score = 0;
+                    println!("> no suitable swap-chain found!");
+                }
+                swapchain_support
+            };
 
-        VulkanPhysDevice {
+        let depth_format = find_depth_format(instance, phys_device);
+
+        Some(VulkanPhysDevice {
             device: phys_device,
-            score,
-            props,
+            score: _score,
+            device_props,
             features,
-            queue_support: queues,
-        }
+            queue_support,
+            swapchain_support,
+            depth_format,
+        })
     }
 }
 
 impl fmt::Debug for VulkanPhysDevice {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let device_name = unsafe { CStr::from_ptr(self.props.device_name.as_ptr()) };
+        let device_name = unsafe { CStr::from_ptr(self.device_props.device_name.as_ptr()) };
 
         write!(
             f,
@@ -187,7 +190,7 @@ fn check_device_extension_support(
     remaining_extensions.is_empty()
 }
 
-pub fn find_supported_foramt(
+pub fn find_supported_format(
     instance: &ash::Instance,
     phys_device: vk::PhysicalDevice,
     candidates: &[vk::Format],
@@ -215,6 +218,21 @@ pub fn find_supported_foramt(
     panic!("failed to find supported format!");
 }
 
+fn find_depth_format(instance: &ash::Instance, phys_device: vk::PhysicalDevice) -> vk::Format {
+    find_supported_format(
+        instance,
+        phys_device,
+        &[
+            vk::Format::D32_SFLOAT,
+            vk::Format::D32_SFLOAT_S8_UINT,
+            vk::Format::D24_UNORM_S8_UINT
+        ],
+        vk::ImageTiling::OPTIMAL,
+        vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT
+    )
+}
+
+
 pub fn get_max_useable_sample_count(
     instance: &ash::Instance,
     phys_device: vk::PhysicalDevice,
@@ -240,4 +258,3 @@ pub fn get_max_useable_sample_count(
         vk::SampleCountFlags::TYPE_1
     }
 }
-
