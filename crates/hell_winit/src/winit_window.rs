@@ -1,9 +1,13 @@
 use std::os::raw;
 
+use hell_renderer::vulkan::pipeline::VulkanGraphicsPipeline;
+use hell_renderer::vulkan::vulkan_core::VulkanCore;
+
 use winit::dpi::LogicalSize;
 use winit::error::OsError;
 use winit::event::{VirtualKeyCode, ElementState, KeyboardInput, WindowEvent, Event};
 use winit::event_loop::{EventLoop, ControlFlow};
+use winit::window::Window;
 
 use crate::utils::fps_limiter::FPSLimiter;
 
@@ -13,6 +17,10 @@ use crate::utils::fps_limiter::FPSLimiter;
 pub struct WinitWindow {
     event_loop: winit::event_loop::EventLoop<()>,
     window: winit::window::Window,
+
+    // TODO: restructure
+    core: VulkanCore,
+    pipeline: VulkanGraphicsPipeline,
 }
 
 impl WinitWindow {
@@ -25,27 +33,44 @@ impl WinitWindow {
             .with_inner_size(size)
             .build(&event_loop)?;
 
+        let core = VulkanCore::new(WinitWindow::create_surface_info(&window)).unwrap();
+        let pipeline = VulkanGraphicsPipeline::new(&core);
 
         Ok(Self {
             event_loop,
-            window
+            window,
+
+            core,
+            pipeline,
         })
     }
+}
 
-    pub fn create_surface_info(&self) -> (*mut raw::c_void, raw::c_ulong) {
+// TODO: impl Drop
+// impl WinitWindow {
+//     fn drop_manual(&self) {
+//         println!("> dropping WinitWindow...");
+//
+//         self.pipeline.drop_manual(&self.core.device.device);
+//     }
+// }
+
+
+impl WinitWindow {
+
+    pub fn create_surface_info(window: &Window) -> (*mut raw::c_void, raw::c_ulong) {
         use winit::platform::unix::WindowExtUnix;
 
-        let x11_display = self.window.xlib_display().unwrap();
-        let x11_window = self.window.xlib_window().unwrap();
+        let x11_display = window.xlib_display().unwrap();
+        let x11_window = window.xlib_window().unwrap();
 
         (x11_display, x11_window)
     }
 
-    pub fn main_loop(self, update_cb: fn(f32) -> ()) {
+    pub fn main_loop(mut self) {
         let mut fps = FPSLimiter::new();
 
         self.event_loop.run(move |event, _, control_flow| {
-
 
             match event {
                 Event::WindowEvent { event, .. } => match event {
@@ -69,19 +94,20 @@ impl WinitWindow {
                 }
                 Event::RedrawRequested(_) => {
                     let delta_time = fps.delta_time();
-                    update_cb(delta_time);
+                    self.core.draw_frame(&self.pipeline, delta_time);
 
                     fps.tick_frame();
                 }
-                // TODO: uncomment
-                // Event::LoopDestroyed => unsafe {
-                //     self.device.device_wait_idle().unwrap();
-                // },
+                Event::LoopDestroyed => {
+                    self.core.device.wait_idle();
+                    // TODO: drop
+                    // self.drop_manual();
+                    // self.pipeline.drop_manual(&self.core.device.device);
+                },
                 _ => {}
 
             }
-
-
         });
+
     }
 }

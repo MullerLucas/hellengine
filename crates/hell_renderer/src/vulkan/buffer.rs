@@ -44,7 +44,7 @@ impl VulkanBuffer {
 
         let mem_type_idx = find_memory_type(
             &core.instance,
-            core.phys_device.device,
+            core.phys_device.phys_device,
             mem_requirements.memory_type_bits,
             properties,
         );
@@ -158,9 +158,18 @@ impl VulkanBuffer {
 
         device_buffer
     }
-
 }
 
+
+impl VulkanBuffer {
+    pub fn drop_manual(&self, device: &ash::Device) {
+        println!("> droping buffer...");
+
+        unsafe {
+            device.destroy_buffer(self.buffer, None);
+        }
+    }
+}
 
 
 

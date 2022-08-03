@@ -10,7 +10,7 @@ use super::surface::VulkanSurface;
 use super::swapchain::VulkanSwapchainSupport;
 
 pub struct VulkanPhysDevice {
-    pub device: vk::PhysicalDevice,
+    pub phys_device: vk::PhysicalDevice,
     pub score: u32,
     pub device_props: vk::PhysicalDeviceProperties,
     pub features: vk::PhysicalDeviceFeatures,
@@ -18,6 +18,7 @@ pub struct VulkanPhysDevice {
     pub swapchain_support: VulkanSwapchainSupport,
     pub depth_format: vk::Format,
 }
+
 
 impl VulkanPhysDevice {
     pub fn pick_phys_device(instance: &ash::Instance, surface: &VulkanSurface) -> Self {
@@ -134,7 +135,7 @@ impl VulkanPhysDevice {
         let depth_format = find_depth_format(instance, phys_device);
 
         Some(VulkanPhysDevice {
-            device: phys_device,
+            phys_device,
             score: _score,
             device_props,
             features,
@@ -152,7 +153,7 @@ impl fmt::Debug for VulkanPhysDevice {
         write!(
             f,
             "DeviceSuitability: '{:?}'::'{:?}' => {}",
-            device_name, self.device, self.score
+            device_name, self.phys_device, self.score
         )
     }
 }

@@ -64,7 +64,7 @@ impl VulkanImage {
 
         let memory_type_index = buffer::find_memory_type(
             &core.instance,
-            core.phys_device.device,
+            core.phys_device.phys_device,
             mem_requirements.memory_type_bits,
             properties,
         );
@@ -238,13 +238,7 @@ pub fn create_img_view(
     }
 }
 
-pub fn create_img_views(
-    device: &ash::Device,
-    imgs: &[vk::Image],
-    mip_levels: u32,
-    format: vk::Format,
-    aspect_mask: vk::ImageAspectFlags,
-) -> Vec<vk::ImageView> {
+pub fn create_img_views(device: &ash::Device, imgs: &[vk::Image], mip_levels: u32, format: vk::Format, aspect_mask: vk::ImageAspectFlags,) -> Vec<vk::ImageView> {
     imgs.iter()
         .map(|&i| create_img_view(device, i, mip_levels, format, aspect_mask))
         .collect()

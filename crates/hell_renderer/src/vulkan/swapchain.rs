@@ -96,6 +96,7 @@ impl VulkanSwapchainSupport {
         }
     }
 
+    // NOTE: FRAMES-IN-FLIGHT must be the same as swapchain-img-count - otherwise Vulkan won't be able to aquire the next swapchain image for presentation ... ? idk
     pub fn choose_img_count(&self) -> u32 {
         let desired_img_count = self.capabilities.min_image_count + 1;
 
@@ -126,12 +127,15 @@ pub struct VulkanSwapchain {
 
     pub surface_format: vk::SurfaceFormatKHR,
     pub extent: vk::Extent2D,
+
+    pub viewport: [vk::Viewport; 1],
+    pub sissor: [vk::Rect2D; 1],
 }
 
 
 impl VulkanSwapchain {
     pub fn new(instance: &ash::Instance, phys_device: &VulkanPhysDevice, device: &VulkanLogicDevice, surface: &VulkanSurface, window_height: u32, window_width: u32) -> VulkanSwapchain {
-        let swapchain_support = VulkanSwapchainSupport::new(phys_device.device, surface);
+        let swapchain_support = VulkanSwapchainSupport::new(phys_device.phys_device, surface);
 
         let surface_format = swapchain_support.choose_swap_surface_format();
         let swap_present_mode = swapchain_support.choose_swap_present_mode();
@@ -140,6 +144,7 @@ impl VulkanSwapchain {
 
         let is_single_queue = phys_device.queue_support.single_queue();
         let queue_indices: Vec<_> = phys_device.queue_support.indices().into_iter().collect();
+
 
         let create_info = vk::SwapchainCreateInfoKHR {
             s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
@@ -174,6 +179,22 @@ impl VulkanSwapchain {
         let imgs = unsafe { swapchain_loader.get_swapchain_images(swapchain).unwrap() };
         let img_views = image::create_img_views(&device.device, &imgs, 1, surface_format.format, vk::ImageAspectFlags::COLOR);
 
+        // panic!("TEST: {:?}", extent);
+
+
+        let viewport = [vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: extent.width as f32,
+            height: extent.height as f32,
+            min_depth: 0.0,
+            max_depth: 1.0,
+        }];
+
+        let sissor = [vk::Rect2D {
+            offset: vk::Offset2D { x: 0, y: 0 },
+            extent
+        }];
 
 
         println!("swapchain created with {} images...", imgs.len());
@@ -187,6 +208,24 @@ impl VulkanSwapchain {
 
             surface_format,
             extent,
+
+            viewport,
+            sissor,
+        }
+    }
+}
+
+impl VulkanSwapchain {
+    // TODO: impl Drop
+    pub fn drop_manual(&mut self, device: &ash::Device) {
+        println!("> dropping VulkanSwapchain...");
+
+        unsafe {
+            self.img_views.iter().for_each(|&v| {
+                device.destroy_image_view(v, None);
+            });
+            // cleans up all swapchain images
+            self.swapchain_loader.destroy_swapchain(self.swapchain, None);
         }
     }
 }
@@ -196,33 +235,16 @@ impl VulkanSwapchain {
     // TODO: error handling
     pub fn aquire_next_image(&self, img_available_sem: vk::Semaphore) -> (u32, bool) {
         unsafe {
-            self.swapchain_loader.acquire_next_image(
-                self.swapchain, u64::MAX, img_available_sem, vk::Fence::null()
-            )
-            .unwrap()
+            self.swapchain_loader.acquire_next_image(self.swapchain, u64::MAX, img_available_sem, vk::Fence::null()).unwrap()
         }
     }
 
-    pub fn create_pipeline_viewport_data(&self) -> (vk::Viewport, vk::Rect2D, vk::PipelineViewportStateCreateInfo) {
-        let viewport = vk::Viewport {
-            x: 0.0,
-            y: 0.0,
-            width: self.extent.width as f32,
-            height: self.extent.height as f32,
-            min_depth: 0.0,
-            max_depth: 1.0,
-        };
-
-        let sissor = vk::Rect2D {
-            offset: vk::Offset2D::default(),
-            extent: self.extent
-        };
-
+    pub fn create_pipeline_viewport_data(&self) -> vk::PipelineViewportStateCreateInfo {
         let viewport_state_info = vk::PipelineViewportStateCreateInfo::builder()
-            .viewports(&[viewport])
-            .scissors(&[sissor])
+            .viewports(&self.viewport)
+            .scissors(&self.sissor)
             .build();
 
-        (viewport, sissor, viewport_state_info)
+        viewport_state_info
     }
 }

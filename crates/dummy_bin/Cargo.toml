@@ -7,4 +7,3 @@ edition = "2021"
 
 [dependencies]
 hell_winit = { path = "../hell_winit" }
-hell_renderer = { path = "../hell_renderer" }

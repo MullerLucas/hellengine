@@ -39,9 +39,6 @@ pub struct VulkanCore {
     // TODO: move
     pub curr_frame_idx: u32,
     pub frame_data: Vec<VulkanFrameData>,
-    pub graphics_cmd_buffer: VulkanCommandPool,
-
-
 }
 
 impl VulkanCore {
@@ -61,7 +58,6 @@ impl VulkanCore {
 
         // TODO: move
         let frame_data = VulkanFrameData::create_for_frames(&device.device);
-        let graphics_cmd_buffer = VulkanCommandPool::new(&device.device, device.queues.graphics_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
 
 
         Ok(Self {
@@ -82,20 +78,35 @@ impl VulkanCore {
 
             curr_frame_idx: 0,
             frame_data,
-            graphics_cmd_buffer,
         })
     }
 }
 
 impl Drop for VulkanCore {
-    // TODO:
+    // TODO: implement
     fn drop(&mut self) {
+        println!("> dropping VulkanCore");
+        let device = &self.device.device;
 
+        self.frame_data.iter().for_each(|f| {
+            f.drop_manual(device);
+        });
+
+        self.debug_data.drop_manual();
+        self.graphics_cmd_pool.drop_manual(device);
+        self.transfer_cmd_pool.drop_manual(device);
+        self.swapchain.drop_manual(device);
+        self.surface.drop_manual();
+
+        unsafe {
+            self.instance.destroy_instance(None);
+        }
     }
 }
 
 impl VulkanCore {
     pub fn draw_frame(&mut self, pipeline: &VulkanGraphicsPipeline, _delta_time: f32) {
+        println!("++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
         let device = &self.device.device;
 
         let frame_idx = self.curr_frame_idx as usize;
@@ -103,24 +114,23 @@ impl VulkanCore {
 
         frame_data.wait_for_in_flight(&self.device.device);
 
-        self.swapchain.aquire_next_image(frame_data.img_available_sem[0]);
+        let (swap_img_idx, _suboptimal_for_surface) = self.swapchain.aquire_next_image(frame_data.img_available_sem[0]);
 
-        self.graphics_cmd_buffer.reset_cmd_buffer(&self.device.device, frame_idx);
-        self.graphics_cmd_pool.record_cmd_buffer(self, pipeline, frame_idx, config::INDICES);
+        self.graphics_cmd_pool.reset_cmd_buffer(&self.device.device, frame_idx);
+        self.graphics_cmd_pool.record_cmd_buffer(self, pipeline, frame_idx, swap_img_idx as usize, config::INDICES);
 
+        frame_data.reset_in_flight(device);
         frame_data.submit_queue(device, self.device.queues.graphics_queue, &[self.graphics_cmd_pool.get_buffer_for_frame(frame_idx)]);
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        frame_data.present_queue(self.device.queues.present_queue, &self.swapchain, &[swap_img_idx]);
 
-
-
+        println!("RENDERED -FRAME: {} -- {}", self.curr_frame_idx, swap_img_idx);
         self.curr_frame_idx = (self.curr_frame_idx + 1) % config::MAX_FRAMES_IN_FLIGHT;
     }
 }
 
 
-
-
 fn create_instance(entry: &ash::Entry, app_name: &str) -> VkResult<ash::Instance> {
-
     if config::ENABLE_VALIDATION_LAYERS
         && !validation_layers::check_validation_layer_support(entry, config::VALIDATION_LAYER_NAMES)
     {

@@ -77,7 +77,7 @@ impl VulkanLogicDevice {
 
         let device = unsafe {
             instance
-                .create_device(phys_device.device, &logic_device_create_info, None)
+                .create_device(phys_device.phys_device, &logic_device_create_info, None)
                 .expect("failed to create logical device")
         };
 
@@ -86,6 +86,26 @@ impl VulkanLogicDevice {
         Self {
             device,
             queues
+        }
+    }
+}
+
+impl Drop for VulkanLogicDevice {
+    fn drop(&mut self) {
+        println!("> dropping VulkanLogicDevice...");
+
+        unsafe {
+            // cleans up device queues
+            self.device.destroy_device(None);
+        }
+    }
+}
+
+impl VulkanLogicDevice {
+    // TODO: error handling
+    pub fn wait_idle(&self) {
+        unsafe {
+            self.device.device_wait_idle().unwrap();
         }
     }
 }

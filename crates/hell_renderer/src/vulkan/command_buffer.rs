@@ -18,7 +18,7 @@ pub struct VulkanCommandPool {
 impl VulkanCommandPool {
     pub fn new(device: &ash::Device, queue_family_idx: u32, pool_flags: vk::CommandPoolCreateFlags) -> Self {
         let pool = create_pool(device, queue_family_idx, pool_flags);
-        let buffers = create_buffers(pool, device);
+        let buffers = create_buffers(pool, device, config::MAX_FRAMES_IN_FLIGHT);
 
         Self {
             pool,
@@ -39,6 +39,18 @@ impl VulkanCommandPool {
     }
 }
 
+impl VulkanCommandPool {
+    // TODO: impl Drop
+    pub fn drop_manual(&mut self, device: &ash::Device) {
+        println!("> dropping VulkanCommandPool...");
+
+        unsafe {
+            // destroys all associated command buffers
+            device.destroy_command_pool(self.pool, None);
+        }
+    }
+}
+
 
 // TODO: error handling
 fn create_pool(device: &ash::Device, queue_family_idx: u32, flags: vk::CommandPoolCreateFlags) -> vk::CommandPool {
@@ -51,11 +63,11 @@ fn create_pool(device: &ash::Device, queue_family_idx: u32, flags: vk::CommandPo
 }
 
 // TODO: error handling
-fn create_buffers(pool: vk::CommandPool, device: &ash::Device) -> Vec<vk::CommandBuffer> {
+fn create_buffers(pool: vk::CommandPool, device: &ash::Device, buffer_count: u32) -> Vec<vk::CommandBuffer> {
     let alloc_info = vk::CommandBufferAllocateInfo::builder()
         .command_pool(pool)
         .level(vk::CommandBufferLevel::PRIMARY)
-        .command_buffer_count(config::MAX_FRAMES_IN_FLIGHT)
+        .command_buffer_count(buffer_count)
         .build();
 
     unsafe { device.allocate_command_buffers(&alloc_info).unwrap() }
@@ -138,7 +150,7 @@ impl VulkanCommandPool {
     }
 
     // TODO: error handling
-    pub fn record_cmd_buffer(&self, core: &VulkanCore, pipeline: &VulkanGraphicsPipeline, frame_idx: usize, indices: &[u32]) {
+    pub fn record_cmd_buffer(&self, core: &VulkanCore, pipeline: &VulkanGraphicsPipeline, frame_idx: usize, swqp_img_idx: usize, indices: &[u32]) {
         let begin_info = vk::CommandBufferBeginInfo::default();
         let cmd_buffer = self.cmd_buffers[frame_idx];
         let device = &core.device.device;
@@ -163,8 +175,8 @@ impl VulkanCommandPool {
         };
 
         let render_pass_info = vk::RenderPassBeginInfo::builder()
-            .render_pass(pipeline.render_pass_data.render_pass.pass)
-            .framebuffer(pipeline.render_pass_data.framebuffer.buffer_at(frame_idx))
+            .render_pass(pipeline.render_pass_data.render_pass.render_pass)
+            .framebuffer(pipeline.render_pass_data.framebuffer.buffer_at(swqp_img_idx))
             .clear_values(&clear_values)
             .render_area(render_area)
             .build();

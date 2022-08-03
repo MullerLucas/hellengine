@@ -22,6 +22,17 @@ impl VulkanSurface {
     }
 }
 
+// TODO: impl Drop
+impl VulkanSurface {
+    pub fn drop_manual(&self) {
+        println!("> dropping VulkanSurface...");
+
+        unsafe {
+            self.surface_loader.destroy_surface(self.surface, None);
+        }
+    }
+}
+
 pub fn create_surface(entry: &ash::Entry, instance: &ash::Instance, surface_info: VulkanSurfaceCreateInfo) -> Result<vk::SurfaceKHR, vk::Result> {
     use std::ptr;
 

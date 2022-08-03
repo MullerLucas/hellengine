@@ -23,6 +23,7 @@ impl VulkanGraphicsPipeline {
     // TODO: error handling
     pub fn new(core: &VulkanCore) -> Self {
         let device = &core.device.device;
+        let sample_count = vk::SampleCountFlags::TYPE_1;
 
         let render_pass_data = VulkanRenderPassData::new(core);
 
@@ -34,14 +35,18 @@ impl VulkanGraphicsPipeline {
 
         let input_assembly = create_pipeline_input_assembly_data();
 
-        let (_, _, viewport_state_info) = core.swapchain.create_pipeline_viewport_data();
+        let viewport_state_info = core.swapchain.create_pipeline_viewport_data();
 
         let rasterization_info = create_pipeline_rasterization_data();
-        let depth_stencil_info = create_pipeline_depth_stencil_data();
+        let multisample_state_info = create_multisample_state_date(sample_count);
+        let stencil_state = create_stencil_state_data();
+        let depth_stencil_info = create_pipeline_depth_stencil_data(stencil_state);
 
-        let (_, color_blend_info) = create_pipeline_blend_data();
+        let color_blend_attachments = [create_color_blend_attachment()];
+        let color_blend_info = create_pipeline_blend_data(&color_blend_attachments);
 
-        let (_, pipeline_layout) = create_pipeline_layout_data(device);
+        let pipeline_layout_info = create_pipeline_layout_info_data();
+        let pipeline_layout = create_pipeline_layout_data(device, &pipeline_layout_info);
 
         let pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
             .stages(shader_stages)
@@ -49,18 +54,23 @@ impl VulkanGraphicsPipeline {
             .input_assembly_state(&input_assembly)
             .viewport_state(&viewport_state_info)
             .rasterization_state(&rasterization_info)
+            .multisample_state(&multisample_state_info)
             .depth_stencil_state(&depth_stencil_info)
             .color_blend_state(&color_blend_info)
             .layout(pipeline_layout)
-            .render_pass(render_pass_data.render_pass.pass)
+            .render_pass(render_pass_data.render_pass.render_pass)
             .subpass(0)
+            .base_pipeline_handle(vk::Pipeline::null())
+            .base_pipeline_index(-1)
             .build();
 
         let pipeline = unsafe { device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None).unwrap()[0] };
 
         // TODO: move
-        let vertex_buffer = VulkanBuffer::from_vertices(core, &config::VERTICES);
-        let index_buffer = VulkanBuffer::from_indices(core, &config::INDICES);
+        let vertex_buffer = VulkanBuffer::from_vertices(core, config::VERTICES);
+        let index_buffer = VulkanBuffer::from_indices(core, config::INDICES);
+
+        shader.drop_manual(&core.device.device);
 
         Self {
             render_pass_data,
@@ -69,6 +79,21 @@ impl VulkanGraphicsPipeline {
 
             vertex_buffer,
             index_buffer
+        }
+    }
+}
+
+impl VulkanGraphicsPipeline {
+    pub fn drop_manual(&self, device: &ash::Device) {
+        println!("> dropping VulkanGraphicsPipeline...");
+
+        self.vertex_buffer.drop_manual(device);
+        self.index_buffer.drop_manual(device);
+        self.render_pass_data.drop_manual(device);
+
+        unsafe {
+            device.destroy_pipeline(self.pipeline, None);
+            device.destroy_pipeline_layout(self.pipeline_layout, None);
         }
     }
 }
@@ -96,16 +121,39 @@ fn create_pipeline_rasterization_data() -> vk::PipelineRasterizationStateCreateI
         .build()
 }
 
-fn create_pipeline_depth_stencil_data() -> vk::PipelineDepthStencilStateCreateInfo {
+fn create_multisample_state_date(sample_count: vk::SampleCountFlags) -> vk::PipelineMultisampleStateCreateInfo {
+    vk::PipelineMultisampleStateCreateInfo::builder()
+        .rasterization_samples(sample_count)
+        .build()
+}
+
+fn create_stencil_state_data() -> vk::StencilOpState {
+    vk::StencilOpState {
+        fail_op: vk::StencilOp::KEEP,
+        pass_op: vk::StencilOp::KEEP,
+        depth_fail_op: vk::StencilOp::KEEP,
+        compare_op: vk::CompareOp::ALWAYS,
+        compare_mask: 0,
+        write_mask: 0,
+        reference: 0,
+    }
+}
+
+fn create_pipeline_depth_stencil_data(stencil_state: vk::StencilOpState) -> vk::PipelineDepthStencilStateCreateInfo {
     vk::PipelineDepthStencilStateCreateInfo::builder()
         .depth_test_enable(false)
         .depth_write_enable(false)
         .depth_bounds_test_enable(false)
+        .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL)
+        .front(stencil_state)
+        .back(stencil_state)
+        .min_depth_bounds(0.0)
+        .max_depth_bounds(1.0)
         .build()
 }
 
-fn create_pipeline_blend_data() -> (vk::PipelineColorBlendAttachmentState, vk::PipelineColorBlendStateCreateInfo) {
-    let color_blend_attachment = vk::PipelineColorBlendAttachmentState::builder()
+fn create_color_blend_attachment() -> vk::PipelineColorBlendAttachmentState  {
+    vk::PipelineColorBlendAttachmentState::builder()
         .blend_enable(false)
         .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
         .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
@@ -114,26 +162,26 @@ fn create_pipeline_blend_data() -> (vk::PipelineColorBlendAttachmentState, vk::P
         .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
         .alpha_blend_op(vk::BlendOp::ADD)
         .color_write_mask(vk::ColorComponentFlags::RGBA)
-        .build();
+        .build()
+}
+fn create_pipeline_blend_data(color_blend_attachments: &[vk::PipelineColorBlendAttachmentState]) -> vk::PipelineColorBlendStateCreateInfo {
 
-    let color_blend_info = vk::PipelineColorBlendStateCreateInfo::builder()
+    vk::PipelineColorBlendStateCreateInfo::builder()
         .logic_op_enable(false)
         .logic_op(vk::LogicOp::COPY)
-        .attachments(&[color_blend_attachment])
+        .attachments(color_blend_attachments)
         .blend_constants([0.0, 0.0, 0.0, 0.0])
-        .build();
-
-    (color_blend_attachment, color_blend_info)
+        .build()
 }
 
 // TODO: error handling
-fn create_pipeline_layout_data(device: &ash::Device /*, set_layouts: &[vk::DescriptorSetLayout]*/) -> (vk::PipelineLayoutCreateInfo, vk::PipelineLayout) {
-    let layout_info = vk::PipelineLayoutCreateInfo::builder()
+
+fn create_pipeline_layout_info_data() -> vk::PipelineLayoutCreateInfo {
+    vk::PipelineLayoutCreateInfo::builder()
         // .set_layouts(set_layouts)
         .push_constant_ranges(&[])
-        .build();
-
-    let layout = unsafe { device.create_pipeline_layout(&layout_info, None). unwrap() };
-
-    (layout_info, layout)
+        .build()
+}
+fn create_pipeline_layout_data(device: &ash::Device, layout_info: &vk::PipelineLayoutCreateInfo /*, set_layouts: &[vk::DescriptorSetLayout]*/) -> vk::PipelineLayout {
+    unsafe { device.create_pipeline_layout(layout_info, None).unwrap() }
 }

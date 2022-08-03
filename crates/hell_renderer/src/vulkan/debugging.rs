@@ -21,6 +21,17 @@ impl DebugData {
     }
 }
 
+// TODO: impl Drop
+impl DebugData {
+    pub fn drop_manual(&self) {
+        unsafe {
+            println!("> dropping DebugData");
+
+            self.debug_utils_loader.destroy_debug_utils_messenger(self.debug_messenger, None);
+        }
+    }
+}
+
 
 
 pub fn populate_debug_messenger_create_info() -> vk::DebugUtilsMessengerCreateInfoEXT {

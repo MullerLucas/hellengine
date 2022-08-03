@@ -15,7 +15,7 @@ impl VulkanFramebuffer {
     pub fn new(
         device: &ash::Device,
         swapchain: &VulkanSwapchain,
-        color_img_view: vk::ImageView,
+        // color_img_view: vk::ImageView,
         render_pass: &VulkanRenderPass,
     ) -> Self {
 
@@ -23,10 +23,11 @@ impl VulkanFramebuffer {
             .iter()
             .map(|sv| {
 
-                let attachments = [color_img_view, *sv];
+                // let attachments = [color_img_view, *sv];
+                let attachments = [*sv];
 
                 let buffer_info = vk::FramebufferCreateInfo::builder()
-                    .render_pass(render_pass.pass)
+                    .render_pass(render_pass.render_pass)
                     .attachments(&attachments) // sets count
                     .width(swapchain.extent.width)
                     .height(swapchain.extent.height)
@@ -45,7 +46,19 @@ impl VulkanFramebuffer {
 }
 
 impl VulkanFramebuffer {
-    pub fn buffer_at(&self, idx: usize) -> vk::Framebuffer {
-        self.buffers[idx]
+    pub fn drop_manual(&self, device: &ash::Device) {
+        println!("> dropping VulkanFramebuffer...");
+
+        unsafe {
+            self.buffers.iter().for_each(|b| {
+                device.destroy_framebuffer(*b, None);
+            });
+        }
+    }
+}
+
+impl VulkanFramebuffer {
+    pub fn buffer_at(&self, img_idx: usize) -> vk::Framebuffer {
+        self.buffers[img_idx]
     }
 }

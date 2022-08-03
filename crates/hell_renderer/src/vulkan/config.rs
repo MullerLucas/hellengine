@@ -19,8 +19,8 @@ pub const DEVICE_EXTENSION_NAMES: &[&str] = &[
     "VK_KHR_swapchain"
 ];
 
-pub const VERT_SHADER_PATH: &str = "shaders/spv/triangle_vert.spv";
-pub const FRAG_SHADER_PATH: &str = "shaders/spv/triangle_frag.spv";
+pub const VERT_SHADER_PATH: &str = "shaders/sprite.vert.spv";
+pub const FRAG_SHADER_PATH: &str = "shaders/sprite.frag.spv";
 
 pub const MAX_FRAMES_IN_FLIGHT: u32 = 2;
 
