@@ -1,19 +1,19 @@
 use std::ptr;
 
 use ash::vk;
-use super::framebuffer::VulkanFramebuffer;
-use super::vulkan_core::VulkanCore;
+use super::framebuffer::Framebuffer;
+use super::vulkan_core::Core;
 
 
 
 
 
-pub struct VulkanRenderPass {
+pub struct RenderPass {
     pub render_pass: vk::RenderPass,
 }
 
-impl VulkanRenderPass {
-    pub fn new(core: &VulkanCore) -> Self {
+impl RenderPass {
+    pub fn new(core: &Core) -> Self {
         let swap_format = core.swapchain.surface_format.format;
         let msaa_samples = vk::SampleCountFlags::TYPE_1;
 
@@ -146,16 +146,16 @@ impl VulkanRenderPass {
             p_dependencies: subpass_dependencies.as_ptr(),
         };
 
-        let pass = unsafe { core.device.device.create_render_pass(&render_pass_info, None).unwrap() };
+        let pass = unsafe { core.device.vk_device.create_render_pass(&render_pass_info, None).unwrap() };
 
 
         Self { render_pass: pass }
     }
 }
 
-impl VulkanRenderPass {
+impl RenderPass {
     pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> dropping VulkanRenderPass...");
+        println!("> dropping RenderPass...");
 
         unsafe {
             device.destroy_render_pass(self.render_pass, None);
@@ -166,17 +166,17 @@ impl VulkanRenderPass {
 
 
 
-pub struct VulkanRenderPassData {
-    pub render_pass: VulkanRenderPass,
+pub struct RenderPassData {
+    pub render_pass: RenderPass,
     // pub color_img: VulkanImage,
-    pub framebuffer: VulkanFramebuffer,
+    pub framebuffer: Framebuffer,
 }
 
-impl VulkanRenderPassData {
-    pub fn new(core: &VulkanCore) -> Self {
-        let render_pass = VulkanRenderPass::new(core);
+impl RenderPassData {
+    pub fn new(core: &Core) -> Self {
+        let render_pass = RenderPass::new(core);
         // let color_img = VulkanImage::default_for_color_resource(core);
-        let framebuffer = VulkanFramebuffer::new(&core.device.device, &core.swapchain, /*color_img.view,*/ &render_pass);
+        let framebuffer = Framebuffer::new(&core.device.vk_device, &core.swapchain, /*color_img.view,*/ &render_pass);
 
         Self {
             render_pass,
@@ -185,16 +185,16 @@ impl VulkanRenderPassData {
         }
     }
 
-    pub fn recreate_framebuffer(&mut self, core: &VulkanCore) {
-        self.framebuffer.drop_manual(&core.device.device);
-        let framebuffer = VulkanFramebuffer::new(&core.device.device, &core.swapchain, /*color_img.view,*/ &self.render_pass);
+    pub fn recreate_framebuffer(&mut self, core: &Core) {
+        self.framebuffer.drop_manual(&core.device.vk_device);
+        let framebuffer = Framebuffer::new(&core.device.vk_device, &core.swapchain, /*color_img.view,*/ &self.render_pass);
         self.framebuffer = framebuffer;
     }
 }
 
-impl VulkanRenderPassData {
+impl RenderPassData {
     pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> dropping VulkanRenderPassData...");
+        println!("> dropping RenderPassData...");
 
         self.framebuffer.drop_manual(device);
         self.render_pass.drop_manual(device);

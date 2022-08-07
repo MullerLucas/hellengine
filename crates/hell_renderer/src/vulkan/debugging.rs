@@ -3,6 +3,9 @@ use std::os::raw;
 use std::{ptr, ffi};
 
 
+
+
+
 pub struct DebugData {
     pub debug_utils_loader: ash::extensions::ext::DebugUtils,
     pub debug_messenger: vk::DebugUtilsMessengerEXT,
@@ -21,9 +24,8 @@ impl DebugData {
     }
 }
 
-// TODO: impl Drop
-impl DebugData {
-    pub fn drop_manual(&self) {
+impl Drop for DebugData {
+    fn drop(&mut self) {
         unsafe {
             println!("> dropping DebugData");
 

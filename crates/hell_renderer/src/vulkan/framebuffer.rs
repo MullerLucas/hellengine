@@ -1,22 +1,22 @@
 use ash::vk;
 
 use super::config;
-use super::render_pass::VulkanRenderPass;
-use super::swapchain::VulkanSwapchain;
+use super::render_pass::RenderPass;
+use super::swapchain::Swapchain;
 
 
 
-pub struct VulkanFramebuffer {
+pub struct Framebuffer {
     buffers: Vec<vk::Framebuffer>,
 }
 
-impl VulkanFramebuffer {
+impl Framebuffer {
 
     pub fn new(
         device: &ash::Device,
-        swapchain: &VulkanSwapchain,
+        swapchain: &Swapchain,
         // color_img_view: vk::ImageView,
-        render_pass: &VulkanRenderPass,
+        render_pass: &RenderPass,
     ) -> Self {
 
         let buffers = swapchain.img_views
@@ -45,9 +45,9 @@ impl VulkanFramebuffer {
     }
 }
 
-impl VulkanFramebuffer {
+impl Framebuffer {
     pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> dropping VulkanFramebuffer...");
+        println!("> dropping Framebuffer...");
 
         unsafe {
             self.buffers.iter().for_each(|b| {
@@ -57,7 +57,7 @@ impl VulkanFramebuffer {
     }
 }
 
-impl VulkanFramebuffer {
+impl Framebuffer {
     pub fn buffer_at(&self, img_idx: usize) -> vk::Framebuffer {
         self.buffers[img_idx]
     }

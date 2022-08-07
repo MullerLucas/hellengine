@@ -4,9 +4,9 @@ use std::ffi::CStr;
 use std::fmt;
 
 use crate::vulkan::config;
-use crate::vulkan::queues::{self, VulkanQueueSupport};
+use crate::vulkan::queues::{self, QueueSupport};
 
-use super::surface::VulkanSurface;
+use super::surface::Surface;
 use super::swapchain::VulkanSwapchainSupport;
 
 pub struct VulkanPhysDevice {
@@ -14,14 +14,14 @@ pub struct VulkanPhysDevice {
     pub score: u32,
     pub device_props: vk::PhysicalDeviceProperties,
     pub features: vk::PhysicalDeviceFeatures,
-    pub queue_support: VulkanQueueSupport,
+    pub queue_support: QueueSupport,
     pub swapchain_support: VulkanSwapchainSupport,
     pub depth_format: vk::Format,
 }
 
 
 impl VulkanPhysDevice {
-    pub fn pick_phys_device(instance: &ash::Instance, surface: &VulkanSurface) -> Self {
+    pub fn pick_phys_device(instance: &ash::Instance, surface: &Surface) -> Self {
         let all_devices = unsafe { instance.enumerate_physical_devices().unwrap() };
 
         let device = all_devices
@@ -52,7 +52,7 @@ impl VulkanPhysDevice {
     pub fn rate_device_suitability(
         instance: &ash::Instance,
         phys_device: vk::PhysicalDevice,
-        surface: &VulkanSurface,
+        surface: &Surface,
         extension_names: &[&str],
     ) -> Option<VulkanPhysDevice> {
         let device_props = unsafe { instance.get_physical_device_properties(phys_device) };
@@ -106,7 +106,7 @@ impl VulkanPhysDevice {
         // --------------
         queues::print_queue_families(instance, phys_device);
 
-        let queue_support = VulkanQueueSupport::new(instance, phys_device, surface);
+        let queue_support = QueueSupport::new(instance, phys_device, surface);
         if !queue_support.is_complete() {
             _score = 0;
             println!("> no suitable queues were found!");
@@ -234,28 +234,28 @@ fn find_depth_format(instance: &ash::Instance, phys_device: vk::PhysicalDevice) 
 }
 
 
-pub fn get_max_useable_sample_count(
-    instance: &ash::Instance,
-    phys_device: vk::PhysicalDevice,
-) -> vk::SampleCountFlags {
-    let phys_device_props = unsafe { instance.get_physical_device_properties(phys_device) };
-
-    let counts = phys_device_props.limits.framebuffer_color_sample_counts
-        & phys_device_props.limits.framebuffer_depth_sample_counts;
-
-    if counts.contains(vk::SampleCountFlags::TYPE_64) {
-        vk::SampleCountFlags::TYPE_64
-    } else if counts.contains(vk::SampleCountFlags::TYPE_32) {
-        vk::SampleCountFlags::TYPE_32
-    } else if counts.contains(vk::SampleCountFlags::TYPE_16) {
-        vk::SampleCountFlags::TYPE_16
-    } else if counts.contains(vk::SampleCountFlags::TYPE_8) {
-        vk::SampleCountFlags::TYPE_8
-    } else if counts.contains(vk::SampleCountFlags::TYPE_4) {
-        vk::SampleCountFlags::TYPE_4
-    } else if counts.contains(vk::SampleCountFlags::TYPE_2) {
-        vk::SampleCountFlags::TYPE_2
-    } else {
-        vk::SampleCountFlags::TYPE_1
-    }
-}
+// pub fn _get_max_useable_sample_count(
+//     instance: &ash::Instance,
+//     phys_device: vk::PhysicalDevice,
+// ) -> vk::SampleCountFlags {
+//     let phys_device_props = unsafe { instance.get_physical_device_properties(phys_device) };
+//
+//     let counts = phys_device_props.limits.framebuffer_color_sample_counts
+//         & phys_device_props.limits.framebuffer_depth_sample_counts;
+//
+//     if counts.contains(vk::SampleCountFlags::TYPE_64) {
+//         vk::SampleCountFlags::TYPE_64
+//     } else if counts.contains(vk::SampleCountFlags::TYPE_32) {
+//         vk::SampleCountFlags::TYPE_32
+//     } else if counts.contains(vk::SampleCountFlags::TYPE_16) {
+//         vk::SampleCountFlags::TYPE_16
+//     } else if counts.contains(vk::SampleCountFlags::TYPE_8) {
+//         vk::SampleCountFlags::TYPE_8
+//     } else if counts.contains(vk::SampleCountFlags::TYPE_4) {
+//         vk::SampleCountFlags::TYPE_4
+//     } else if counts.contains(vk::SampleCountFlags::TYPE_2) {
+//         vk::SampleCountFlags::TYPE_2
+//     } else {
+//         vk::SampleCountFlags::TYPE_1
+//     }
+// }

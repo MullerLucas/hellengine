@@ -4,16 +4,16 @@ use ash::vk;
 
 use super::config;
 use super::phys_device::VulkanPhysDevice;
-use super::queues::VulkanQueues;
+use super::queues::Queues;
 
 
-pub struct VulkanLogicDevice {
-    pub device: ash::Device,
-    pub queues: VulkanQueues,
+pub struct LogicDevice {
+    pub vk_device: ash::Device,
+    pub queues: Queues,
 }
 
 
-impl VulkanLogicDevice {
+impl LogicDevice {
     pub fn new(
         instance: &ash::Instance,
         phys_device: &VulkanPhysDevice
@@ -81,31 +81,31 @@ impl VulkanLogicDevice {
                 .expect("failed to create logical device")
         };
 
-        let queues = VulkanQueues::from_support(&device, &phys_device.queue_support);
+        let queues = Queues::from_support(&device, &phys_device.queue_support);
 
         Self {
-            device,
+            vk_device: device,
             queues
         }
     }
 }
 
-impl VulkanLogicDevice {
-    pub fn drop_manual(&mut self) {
-        println!("> dropping VulkanLogicDevice...");
+impl Drop for LogicDevice {
+    fn drop(&mut self) {
+        println!("> dropping LogicDevice...");
 
         unsafe {
             // cleans up device queues
-            self.device.destroy_device(None);
+            self.vk_device.destroy_device(None);
         }
     }
 }
 
-impl VulkanLogicDevice {
+impl LogicDevice {
     // TODO: error handling
     pub fn wait_idle(&self) {
         unsafe {
-            self.device.device_wait_idle().unwrap();
+            self.vk_device.device_wait_idle().unwrap();
         }
     }
 }

@@ -67,49 +67,19 @@ impl WinitWindow {
 impl WinitWindow {
     pub fn main_loop(self, mut app: HellApp) {
         let mut fps = FPSLimiter::new();
-
-
         let mut handle_resize = false;
+
 
         self.event_loop.run(move |event, _, control_flow| {
             match event {
-                Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
-                                state: ElementState::Pressed,
-                                ..
-                            },
-                        ..
-                    } => {
-                        dbg!("> escape pressed");
-                        *control_flow = ControlFlow::Exit;
-                    }
-                    _ => (),
+                Event::WindowEvent { event, .. } => {
+                    Self::handle_window_event(&event, control_flow);
                 },
                 Event::MainEventsCleared => {
                     self.window.request_redraw();
                 }
                 Event::RedrawRequested(_) => {
-                    // TODO: check resize logic
-                    if handle_resize {
-                        let window_extent = WinitWindow::get_winit_window_extent(&self.window);
-
-                        if (window_extent.width * window_extent.height) > 0 {
-                            app.on_window_changed(&window_extent);
-                            handle_resize = false;
-                            println!("> resize was handled...");
-                        } else {
-                            println!("> can't handle resize - window-extent is zero");
-                        }
-                    } else {
-                        let delta_time = fps.delta_time();
-                        handle_resize = app.draw_frame(delta_time);
-                    }
-
-                    fps.tick_frame();
+                    WinitWindow::handle_redraw_request(&mut handle_resize, &self.window, &mut app, &mut fps);
                 }
                 Event::LoopDestroyed => {
                     app.wait_idle();
@@ -120,5 +90,38 @@ impl WinitWindow {
 
             // "drop(app);" on last iteration
         });
+    }
+
+    fn handle_window_event(event: &winit::event::WindowEvent, control_flow: &mut winit::event_loop::ControlFlow) {
+        match event {
+            WindowEvent::CloseRequested => { *control_flow = ControlFlow::Exit },
+
+            WindowEvent::KeyboardInput { input: KeyboardInput { virtual_keycode: Some(VirtualKeyCode::Escape), state: ElementState::Pressed, .. }, .. } => {
+                println!("> window-event: escape pressed");
+                *control_flow = ControlFlow::Exit;
+            }
+
+            _ => (),
+        }
+    }
+
+    fn handle_redraw_request(handle_resize: &mut bool, window: &winit::window::Window, app: &mut HellApp, fps: &mut FPSLimiter) {
+        // TODO: check resize logic
+        if *handle_resize {
+            let window_extent = WinitWindow::get_winit_window_extent(window);
+
+            if (window_extent.width * window_extent.height) > 0 {
+                app.on_window_changed(&window_extent);
+                *handle_resize = false;
+                println!("> resize was handled...");
+            } else {
+                println!("> can't handle resize - window-extent is zero");
+            }
+        } else {
+            let delta_time = fps.delta_time();
+            *handle_resize = app.draw_frame(delta_time);
+        }
+
+        fps.tick_frame();
     }
 }

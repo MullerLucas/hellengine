@@ -2,20 +2,22 @@ use std::ptr;
 
 use ash::vk;
 
+use super::buffer::Buffer;
 use super::config;
-use super::logic_device::VulkanLogicDevice;
-use super::pipeline::VulkanGraphicsPipeline;
-use super::vulkan_core::VulkanCore;
+use super::logic_device::LogicDevice;
+use super::pipeline::GraphicsPipeline;
+use super::render_pass::RenderPassData;
+use super::vulkan_core::Core;
 
 
 
 
-pub struct VulkanCommandPool {
+pub struct CommandPool {
     pub pool: vk::CommandPool,
     pub cmd_buffers: Vec<vk::CommandBuffer>
 }
 
-impl VulkanCommandPool {
+impl CommandPool {
     pub fn new(device: &ash::Device, queue_family_idx: u32, pool_flags: vk::CommandPoolCreateFlags) -> Self {
         let pool = create_pool(device, queue_family_idx, pool_flags);
         let buffers = create_buffers(pool, device, config::MAX_FRAMES_IN_FLIGHT);
@@ -26,12 +28,12 @@ impl VulkanCommandPool {
         }
     }
 
-    pub fn default_for_graphics(device: &VulkanLogicDevice) -> Self {
-        VulkanCommandPool::new(&device.device, device.queues.graphics_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+    pub fn default_for_graphics(device: &LogicDevice) -> Self {
+        CommandPool::new(&device.vk_device, device.queues.graphics.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
     }
 
-    pub fn default_for_transfer(device: &VulkanLogicDevice) -> Self {
-        VulkanCommandPool::new(&device.device, device.queues.transfer_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER | vk::CommandPoolCreateFlags::TRANSIENT)
+    pub fn default_for_transfer(device: &LogicDevice) -> Self {
+        CommandPool::new(&device.vk_device, device.queues.transfer.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER | vk::CommandPoolCreateFlags::TRANSIENT)
     }
 
     pub fn get_buffer_for_frame(&self, frame_idx: usize) -> vk::CommandBuffer {
@@ -39,10 +41,10 @@ impl VulkanCommandPool {
     }
 }
 
-impl VulkanCommandPool {
+impl CommandPool {
     // TODO: impl Drop
     pub fn drop_manual(&mut self, device: &ash::Device) {
-        println!("> dropping VulkanCommandPool...");
+        println!("> dropping CommandPool...");
 
         unsafe {
             // destroys all associated command buffers
@@ -74,7 +76,7 @@ fn create_buffers(pool: vk::CommandPool, device: &ash::Device, buffer_count: u32
 }
 
 
-impl VulkanCommandPool {
+impl CommandPool {
     // TODO: return safe handle
     pub fn begin_single_time_commands(&self, device: &ash::Device) -> vk::CommandBuffer {
         let alloc_info = vk::CommandBufferAllocateInfo {
@@ -138,7 +140,7 @@ impl VulkanCommandPool {
 
 
 
-impl VulkanCommandPool {
+impl CommandPool {
     // TODO: error handling
     pub fn reset_cmd_buffer(&self, device: &ash::Device, curr_frame: usize) {
         unsafe {
@@ -150,10 +152,11 @@ impl VulkanCommandPool {
     }
 
     // TODO: error handling
-    pub fn record_cmd_buffer(&self, core: &VulkanCore, pipeline: &VulkanGraphicsPipeline, frame_idx: usize, swqp_img_idx: usize, indices: &[u32]) {
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_cmd_buffer(&self, core: &Core, pipeline: &GraphicsPipeline, render_pass_data: &RenderPassData, frame_idx: usize, swqp_img_idx: usize, index_count: u32, vertex_buffer: &Buffer, index_buffer: &Buffer) {
         let begin_info = vk::CommandBufferBeginInfo::default();
         let cmd_buffer = self.cmd_buffers[frame_idx];
-        let device = &core.device.device;
+        let device = &core.device.vk_device;
 
         unsafe { device.begin_command_buffer(cmd_buffer, &begin_info).unwrap(); }
 
@@ -175,8 +178,8 @@ impl VulkanCommandPool {
         };
 
         let render_pass_info = vk::RenderPassBeginInfo::builder()
-            .render_pass(pipeline.render_pass_data.render_pass.render_pass)
-            .framebuffer(pipeline.render_pass_data.framebuffer.buffer_at(swqp_img_idx))
+            .render_pass(render_pass_data.render_pass.render_pass)
+            .framebuffer(render_pass_data.framebuffer.buffer_at(swqp_img_idx))
             .clear_values(&clear_values)
             .render_area(render_area)
             .build();
@@ -188,13 +191,13 @@ impl VulkanCommandPool {
             device.cmd_begin_render_pass(cmd_buffer, &render_pass_info, vk::SubpassContents::INLINE);
 
             device.cmd_bind_pipeline(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
-            let vertex_buffers = [pipeline.vertex_buffer.buffer];
+            let vertex_buffers = [vertex_buffer.buffer];
             device.cmd_bind_vertex_buffers(cmd_buffer, 0, &vertex_buffers, &[0]);
-            device.cmd_bind_index_buffer(cmd_buffer, pipeline.index_buffer.buffer, 0, config::INDEX_TYPE);
+            device.cmd_bind_index_buffer(cmd_buffer, index_buffer.buffer, 0, config::INDEX_TYPE);
             // TODO: descriptor_sets
             // device.cmd_bind_descriptor_sets( cmd_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline_layout, 0, &[pipeline.descriptor_sets[curr_frame]], &[] );
 
-            device.cmd_draw_indexed(cmd_buffer, indices.len() as u32, 1, 0, 0, 0);
+            device.cmd_draw_indexed(cmd_buffer, index_count, 1, 0, 0, 0);
 
             device.cmd_end_render_pass(cmd_buffer);
         }

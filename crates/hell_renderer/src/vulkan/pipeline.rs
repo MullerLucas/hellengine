@@ -1,33 +1,29 @@
 use ash::vk;
 
-use super::buffer::VulkanBuffer;
 use super::config;
-use super::render_pass::VulkanRenderPassData;
-use super::shader::VulkanShader;
+use super::render_pass::RenderPassData;
+use super::shader::Shader;
 use super::vertext::VertexInfo;
-use super::vulkan_core::VulkanCore;
+use super::vulkan_core::Core;
 
 
 
-pub struct VulkanGraphicsPipeline {
-    pub render_pass_data: VulkanRenderPassData,
+pub struct GraphicsPipeline {
+    // pub render_pass_data: VulkanRenderPassData,
     pub pipeline_layout: vk::PipelineLayout,
     pub pipeline: vk::Pipeline,
 
-    // TODO: move
-    pub vertex_buffer: VulkanBuffer,
-    pub index_buffer: VulkanBuffer,
 }
 
-impl VulkanGraphicsPipeline {
+impl GraphicsPipeline {
     // TODO: error handling
-    pub fn new(core: & VulkanCore) -> Self {
-        let device = &core.device.device;
+    pub fn new(core: &Core, render_pass_data: &RenderPassData) -> Self {
+        let device = &core.device.vk_device;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 
-        let render_pass_data = VulkanRenderPassData::new(core);
+        // let render_pass_data = VulkanRenderPassData::new(core);
 
-        let shader = VulkanShader::new(&core.device.device, config::VERT_SHADER_PATH, config::FRAG_SHADER_PATH);
+        let shader = Shader::new(&core.device.vk_device, config::VERT_SHADER_PATH, config::FRAG_SHADER_PATH);
         let shader_stages = shader.get_stage_create_infos();
 
         let vertex_info = VertexInfo::new();
@@ -66,34 +62,23 @@ impl VulkanGraphicsPipeline {
 
         let pipeline = unsafe { device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None).unwrap()[0] };
 
-        // TODO: move
-        let vertex_buffer = VulkanBuffer::from_vertices(core, config::VERTICES);
-        let index_buffer = VulkanBuffer::from_indices(core, config::INDICES);
-
-        shader.drop_manual(&core.device.device);
+        shader.drop_manual(&core.device.vk_device);
 
         Self {
-            render_pass_data,
+            // render_pass_data,
             pipeline_layout,
             pipeline,
-
-            vertex_buffer,
-            index_buffer
         }
     }
 
-    pub fn recreate_framebuffer(&mut self, core: &VulkanCore) {
-        self.render_pass_data.recreate_framebuffer(core);
-    }
+    // pub fn recreate_framebuffer(&mut self, core: &VulkanCore) {
+    //     self.render_pass_data.recreate_framebuffer(core);
+    // }
 }
 
-impl VulkanGraphicsPipeline {
+impl GraphicsPipeline {
     pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> dropping VulkanGraphicsPipeline...");
-
-        self.vertex_buffer.drop_manual(device);
-        self.index_buffer.drop_manual(device);
-        self.render_pass_data.drop_manual(device);
+        println!("> dropping GraphicsPipeline...");
 
         unsafe {
             device.destroy_pipeline(self.pipeline, None);

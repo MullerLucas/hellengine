@@ -6,13 +6,13 @@ use std::{fs, ffi};
 
 
 
-pub struct VulkanShader {
+pub struct Shader {
     pub vert_module: VulkanShaderModule,
     pub frag_module: VulkanShaderModule,
     stage_create_infos: [vk::PipelineShaderStageCreateInfo; 2],
 }
 
-impl VulkanShader {
+impl Shader {
     pub fn new(device: &ash::Device, vert_path: &str, frag_path: &str) -> Self {
         let vert_module = VulkanShaderModule::new(device, vert_path);
         let frag_module = VulkanShaderModule::new(device, frag_path);
@@ -34,7 +34,7 @@ impl VulkanShader {
     }
 
     pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> dropping VulkanShader...");
+        println!("> dropping Shader...");
 
         unsafe {
             device.destroy_shader_module(self.vert_module.module, None);

@@ -1,29 +1,107 @@
 use std::collections::HashSet;
 use ash::vk;
 
-use super::surface::VulkanSurface;
+use super::surface::Surface;
 
 
-#[derive(Debug, Default)]
-pub struct VulkanQueueSupport {
-    pub graphics_family: Option<u32>,
-    pub present_family: Option<u32>,
-    pub transfer_family: Option<u32>,
+
+// ----------------------------------------------------------------------------
+// queue-famiyy
+// ----------------------------------------------------------------------------
+
+#[derive(Debug)]
+pub struct QueueFamily {
+    pub idx: u32,
+    pub properties : vk::QueueFamilyProperties,
 }
 
-impl VulkanQueueSupport {
-    pub fn new(instance: &ash::Instance, phys_device: vk::PhysicalDevice, surface_data: &VulkanSurface) -> Self {
-        let props = unsafe { instance.get_physical_device_queue_family_properties(phys_device) };
+impl QueueFamily {
+    pub fn new(idx: u32, properties: vk::QueueFamilyProperties) -> Self {
+        Self { idx, properties }
+    }
+}
 
 
-        let mut result = VulkanQueueSupport::default();
-        for (idx , prop) in props.iter().enumerate() {
+
+// ----------------------------------------------------------------------------
+// queue
+// ----------------------------------------------------------------------------
+
+pub struct Queue {
+    pub family_idx: u32,
+    pub queue_idx: u32,
+    pub vk_queue: vk::Queue,
+}
+
+impl Queue {
+    pub fn new(device: &ash::Device, family_idx: u32, queue_idx: u32) -> Self {
+        let vk_queue = unsafe { device.get_device_queue(family_idx, queue_idx) };
+
+        Self {
+            family_idx,
+            queue_idx,
+            vk_queue
+        }
+    }
+}
+
+
+
+// ----------------------------------------------------------------------------
+// queues
+// ----------------------------------------------------------------------------
+
+pub struct Queues {
+    pub graphics: Queue,
+    pub present: Queue,
+    pub transfer: Queue,
+}
+
+impl Queues {
+    pub fn from_support(device: &ash::Device, support: &QueueSupport) -> Self {
+        let graphics_family = support.graphics_family.as_ref().unwrap();
+        let present_family = support.present_family.as_ref().unwrap();
+        let transfer_family = support.transfer_family.as_ref().unwrap();
+
+        let graphics_queue = Queue::new(device, graphics_family.idx, 0);
+        let present_queue = Queue::new(device, present_family.idx, 0);
+        let transfer_queue = Queue::new(device, transfer_family.idx, 0);
+
+        Self {
+            graphics: graphics_queue,
+            present: present_queue,
+            transfer: transfer_queue,
+        }
+    }
+}
+
+
+
+
+// ----------------------------------------------------------------------------
+// queue-support
+// ----------------------------------------------------------------------------
+
+#[derive(Debug, Default)]
+pub struct QueueSupport {
+    pub graphics_family: Option<QueueFamily>,
+    pub present_family: Option<QueueFamily>,
+    pub transfer_family: Option<QueueFamily>,
+}
+
+impl QueueSupport {
+    pub fn new(instance: &ash::Instance, phys_device: vk::PhysicalDevice, surface_data: &Surface) -> Self {
+        let properties = unsafe { instance.get_physical_device_queue_family_properties(phys_device) };
+
+
+        let mut result = QueueSupport::default();
+        for (idx , prop) in properties.into_iter().enumerate() {
             let idx = idx as u32;
 
             if prop.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
-                result.graphics_family = Some(idx);
+                result.graphics_family = Some(QueueFamily::new(idx, prop));
             } else if prop.queue_flags.contains(vk::QueueFlags::TRANSFER) {
-                result.transfer_family = Some(idx);
+                result.transfer_family = Some(QueueFamily::new(idx, prop));
             }
 
             if result.present_family.is_none() {
@@ -34,7 +112,7 @@ impl VulkanQueueSupport {
                 };
 
                 if present_is_supported {
-                    result.present_family = Some(idx);
+                    result.present_family = Some(QueueFamily::new(idx, prop));
                 }
             }
 
@@ -47,14 +125,16 @@ impl VulkanQueueSupport {
 
 }
 
-impl VulkanQueueSupport {
+impl QueueSupport {
+    // TODO:
     pub fn single_queue(&self) -> bool {
-        self.graphics_family.unwrap() == self.present_family.unwrap()
+        self.graphics_family.as_ref().unwrap().idx == self.present_family.as_ref().unwrap().idx
     }
 
     pub fn indices(&self) -> HashSet<u32> {
-        [self.graphics_family, self.present_family, self.transfer_family].into_iter()
+        [self.graphics_family.as_ref(), self.present_family.as_ref(), self.transfer_family.as_ref()].into_iter()
             .flatten()
+            .map(|f| f.idx)
             .collect()
     }
 
@@ -75,35 +155,5 @@ pub fn print_queue_families(instance: &ash::Instance, device: vk::PhysicalDevice
         if prop.queue_flags.contains(vk::QueueFlags::COMPUTE) { println!("\t\t> COMPUTE-QUEUE"); }
         if prop.queue_flags.contains(vk::QueueFlags::TRANSFER) { println!("\t\t> TRANSFER-QUEUE"); }
         if prop.queue_flags.contains(vk::QueueFlags::SPARSE_BINDING) { println!("\t\t> SPARSE-BINDING-QUEUE"); }
-    }
-}
-
-
-
-pub struct VulkanQueues {
-    pub graphics_idx: u32,
-    pub graphics_queue: vk::Queue,
-    pub _present_idx: u32,
-    pub present_queue: vk::Queue,
-    pub transfer_idx: u32,
-    pub transfer_queue: vk::Queue,
-}
-
-impl VulkanQueues {
-    pub fn from_support(device: &ash::Device, support: &VulkanQueueSupport) -> Self {
-        let graphics_idx = support.graphics_family.unwrap();
-        let present_idx = support.present_family.unwrap();
-        let transfer_idx = support.transfer_family.unwrap();
-
-        unsafe {
-            Self {
-                graphics_idx,
-                graphics_queue: device.get_device_queue(graphics_idx, 0),
-                _present_idx: present_idx,
-                present_queue: device.get_device_queue(present_idx, 0),
-                transfer_idx,
-                transfer_queue: device.get_device_queue(transfer_idx, 0),
-            }
-        }
     }
 }

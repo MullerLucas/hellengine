@@ -4,9 +4,9 @@ use ash::vk;
 
 use crate::vulkan::image;
 
-use super::logic_device::VulkanLogicDevice;
+use super::logic_device::LogicDevice;
 use super::phys_device::VulkanPhysDevice;
-use super::surface::VulkanSurface;
+use super::surface::Surface;
 
 
 
@@ -19,7 +19,7 @@ pub struct VulkanSwapchainSupport {
 }
 
 impl VulkanSwapchainSupport {
-    pub fn new(phys_device: vk::PhysicalDevice, surface: &VulkanSurface) -> Self {
+    pub fn new(phys_device: vk::PhysicalDevice, surface: &Surface) -> Self {
         let capabilities = unsafe {
             surface
                 .surface_loader
@@ -117,8 +117,8 @@ impl VulkanSwapchainSupport {
 
 
 
-pub struct VulkanSwapchain {
-    pub swapchain: vk::SwapchainKHR,
+pub struct Swapchain {
+    pub vk_swapchain: vk::SwapchainKHR,
     pub swapchain_loader: ash::extensions::khr::Swapchain,
     pub swapchain_support: VulkanSwapchainSupport,
 
@@ -133,8 +133,8 @@ pub struct VulkanSwapchain {
 }
 
 
-impl VulkanSwapchain {
-    pub fn new(instance: &ash::Instance, phys_device: &VulkanPhysDevice, device: &VulkanLogicDevice, surface: &VulkanSurface, window_width: u32, window_height: u32) -> VulkanSwapchain {
+impl Swapchain {
+    pub fn new(instance: &ash::Instance, phys_device: &VulkanPhysDevice, device: &LogicDevice, surface: &Surface, window_width: u32, window_height: u32) -> Swapchain {
         let swapchain_support = VulkanSwapchainSupport::new(phys_device.phys_device, surface);
 
         let surface_format = swapchain_support.choose_swap_surface_format();
@@ -169,7 +169,7 @@ impl VulkanSwapchain {
             old_swapchain: vk::SwapchainKHR::null(),
         };
 
-        let swapchain_loader = ash::extensions::khr::Swapchain::new(instance, &device.device);
+        let swapchain_loader = ash::extensions::khr::Swapchain::new(instance, &device.vk_device);
         let swapchain = unsafe {
             swapchain_loader
                 .create_swapchain(&create_info, None)
@@ -177,7 +177,7 @@ impl VulkanSwapchain {
         };
 
         let imgs = unsafe { swapchain_loader.get_swapchain_images(swapchain).unwrap() };
-        let img_views = image::create_img_views(&device.device, &imgs, 1, surface_format.format, vk::ImageAspectFlags::COLOR);
+        let img_views = image::create_img_views(&device.vk_device, &imgs, 1, surface_format.format, vk::ImageAspectFlags::COLOR);
 
         // panic!("TEST: {:?}", extent);
 
@@ -199,8 +199,8 @@ impl VulkanSwapchain {
 
         println!("swapchain created with {} images...", imgs.len());
 
-        VulkanSwapchain {
-            swapchain,
+        Swapchain {
+            vk_swapchain: swapchain,
             swapchain_loader,
             swapchain_support,
             _imgs: imgs,
@@ -215,27 +215,27 @@ impl VulkanSwapchain {
     }
 }
 
-impl VulkanSwapchain {
+impl Swapchain {
     // TODO: impl Drop
     pub fn drop_manual(&mut self, device: &ash::Device) {
-        println!("> dropping VulkanSwapchain...");
+        println!("> dropping Swapchain...");
 
         unsafe {
             self.img_views.iter().for_each(|&v| {
                 device.destroy_image_view(v, None);
             });
             // cleans up all swapchain images
-            self.swapchain_loader.destroy_swapchain(self.swapchain, None);
+            self.swapchain_loader.destroy_swapchain(self.vk_swapchain, None);
         }
     }
 }
 
 
-impl VulkanSwapchain {
+impl Swapchain {
     // TODO: error handling
     pub fn aquire_next_image(&self, img_available_sem: vk::Semaphore) -> VkResult<(u32, bool)> {
         unsafe {
-            self.swapchain_loader.acquire_next_image(self.swapchain, u64::MAX, img_available_sem, vk::Fence::null())
+            self.swapchain_loader.acquire_next_image(self.vk_swapchain, u64::MAX, img_available_sem, vk::Fence::null())
         }
     }
 

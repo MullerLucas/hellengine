@@ -1,23 +1,23 @@
 use std::{ptr, mem};
 use ash::vk;
 
-use super::command_buffer::VulkanCommandPool;
+use super::command_buffer::CommandPool;
 use super::vertext::Vertex;
-use super::vulkan_core::VulkanCore;
+use super::vulkan_core::Core;
 
 
-pub struct VulkanBuffer {
+pub struct Buffer {
     pub buffer: vk::Buffer,
     pub mem: vk::DeviceMemory,
     pub size: vk::DeviceSize,
 }
 
-impl VulkanBuffer {
+impl Buffer {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        core: &VulkanCore, size: vk::DeviceSize, usage: vk::BufferUsageFlags, properties: vk::MemoryPropertyFlags, sharing_mode: vk::SharingMode, queue_family_indices: Option<&[u32]>
+        core: &Core, size: vk::DeviceSize, usage: vk::BufferUsageFlags, properties: vk::MemoryPropertyFlags, sharing_mode: vk::SharingMode, queue_family_indices: Option<&[u32]>
     ) -> Self {
-        let device = &core.device.device;
+        let device = &core.device.vk_device;
 
         let mut buffer_info = vk::BufferCreateInfo {
             s_type: vk::StructureType::BUFFER_CREATE_INFO,
@@ -42,7 +42,7 @@ impl VulkanBuffer {
 
 
         let mem_type_idx = find_memory_type(
-            &core.instance,
+            &core.instance.instance,
             core.phys_device.phys_device,
             mem_requirements.memory_type_bits,
             properties,
@@ -71,13 +71,13 @@ impl VulkanBuffer {
     }
 
     // TODO: error handling
-    pub fn from_vertices(core: &VulkanCore, vertices: &[Vertex]) -> Self {
-        let device = &core.device.device;
+    pub fn from_vertices(core: &Core, vertices: &[Vertex]) -> Self {
+        let device = &core.device.vk_device;
 
         let buffer_size = std::mem::size_of_val(vertices) as vk::DeviceSize;
         println!("VERT-SIZE: {}", buffer_size);
 
-        let staging_buffer = VulkanBuffer::new(
+        let staging_buffer = Buffer::new(
             core,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
@@ -92,17 +92,17 @@ impl VulkanBuffer {
             device.unmap_memory(staging_buffer.mem);
         }
 
-        let device_buffer = VulkanBuffer::new(
+        let device_buffer = Buffer::new(
             core,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
             vk::SharingMode::CONCURRENT, // TODO: not optimal
-            Some(&[core.device.queues.graphics_idx, core.device.queues.transfer_idx])
+            Some(&[core.device.queues.graphics.family_idx, core.device.queues.transfer.family_idx])
         );
 
         copy_buffer(
-            device, &core.transfer_cmd_pool, core.device.queues.transfer_queue,
+            device, &core.transfer_cmd_pool, core.device.queues.transfer.vk_queue,
             &staging_buffer, &device_buffer
         );
 
@@ -117,12 +117,12 @@ impl VulkanBuffer {
         device_buffer
     }
 
-    pub fn from_indices(core: &VulkanCore, indices: &[u32]) -> Self {
-        let device = &core.device.device;
+    pub fn from_indices(core: &Core, indices: &[u32]) -> Self {
+        let device = &core.device.vk_device;
 
         let buffer_size = mem::size_of_val(indices) as vk::DeviceSize;
 
-        let staging_buffer = VulkanBuffer::new(
+        let staging_buffer = Buffer::new(
             core,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
@@ -137,16 +137,16 @@ impl VulkanBuffer {
             device.unmap_memory(staging_buffer.mem);
         }
 
-        let device_buffer = VulkanBuffer::new(
+        let device_buffer = Buffer::new(
             core,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
             vk::SharingMode::CONCURRENT,
-            Some(&[core.device.queues.graphics_idx, core.device.queues.transfer_idx])
+            Some(&[core.device.queues.graphics.family_idx, core.device.queues.transfer.family_idx])
         );
 
-        copy_buffer(device, &core.transfer_cmd_pool, core.device.queues.transfer_queue, &staging_buffer, &device_buffer);
+        copy_buffer(device, &core.transfer_cmd_pool, core.device.queues.transfer.vk_queue, &staging_buffer, &device_buffer);
 
         unsafe {
             // TODO: implement Drop for VulkanBuffer
@@ -161,9 +161,9 @@ impl VulkanBuffer {
 }
 
 
-impl VulkanBuffer {
+impl Buffer {
     pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> droping buffer...");
+        println!("> dropping Buffer...");
 
         unsafe {
             device.destroy_buffer(self.buffer, None);
@@ -186,7 +186,7 @@ pub fn find_memory_type(instance: &ash::Instance, phys_device: vk::PhysicalDevic
     panic!("failed to find suitable memory-type");
 }
 
-fn copy_buffer(device: &ash::Device, cmd_pool: &VulkanCommandPool, queue: vk::Queue, src_buff: &VulkanBuffer, dst_buff: &VulkanBuffer) {
+fn copy_buffer(device: &ash::Device, cmd_pool: &CommandPool, queue: vk::Queue, src_buff: &Buffer, dst_buff: &Buffer) {
     let command_buffer = cmd_pool.begin_single_time_commands(device);
 
     let copy_region = vk::BufferCopy {
