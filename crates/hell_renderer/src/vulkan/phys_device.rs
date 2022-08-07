@@ -6,28 +6,28 @@ use std::fmt;
 use crate::vulkan::config;
 use crate::vulkan::queues::{self, QueueSupport};
 
+use super::SwapchainSupport;
 use super::surface::Surface;
-use super::swapchain::VulkanSwapchainSupport;
 
-pub struct VulkanPhysDevice {
+pub struct PhysDevice {
     pub phys_device: vk::PhysicalDevice,
     pub score: u32,
     pub device_props: vk::PhysicalDeviceProperties,
     pub features: vk::PhysicalDeviceFeatures,
     pub queue_support: QueueSupport,
-    pub swapchain_support: VulkanSwapchainSupport,
+    pub swapchain_support: SwapchainSupport,
     pub depth_format: vk::Format,
 }
 
 
-impl VulkanPhysDevice {
+impl PhysDevice {
     pub fn pick_phys_device(instance: &ash::Instance, surface: &Surface) -> Self {
         let all_devices = unsafe { instance.enumerate_physical_devices().unwrap() };
 
         let device = all_devices
             .into_iter()
             .flat_map(|d| {
-                VulkanPhysDevice::rate_device_suitability(
+                PhysDevice::rate_device_suitability(
                     instance,
                     d,
                     surface,
@@ -54,7 +54,7 @@ impl VulkanPhysDevice {
         phys_device: vk::PhysicalDevice,
         surface: &Surface,
         extension_names: &[&str],
-    ) -> Option<VulkanPhysDevice> {
+    ) -> Option<PhysDevice> {
         let device_props = unsafe { instance.get_physical_device_properties(phys_device) };
         let features = unsafe { instance.get_physical_device_features(phys_device) };
         let mut _score = 0;
@@ -124,7 +124,7 @@ impl VulkanPhysDevice {
             } else {
                 // swap-chains
                 // -----------
-                let swapchain_support = VulkanSwapchainSupport::new(phys_device, surface);
+                let swapchain_support = SwapchainSupport::new(phys_device, surface);
                 if !swapchain_support.is_suitable() {
                     _score = 0;
                     println!("> no suitable swap-chain found!");
@@ -134,7 +134,7 @@ impl VulkanPhysDevice {
 
         let depth_format = find_depth_format(instance, phys_device);
 
-        Some(VulkanPhysDevice {
+        Some(PhysDevice {
             phys_device,
             score: _score,
             device_props,
@@ -146,7 +146,7 @@ impl VulkanPhysDevice {
     }
 }
 
-impl fmt::Debug for VulkanPhysDevice {
+impl fmt::Debug for PhysDevice {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let device_name = unsafe { CStr::from_ptr(self.device_props.device_name.as_ptr()) };
 

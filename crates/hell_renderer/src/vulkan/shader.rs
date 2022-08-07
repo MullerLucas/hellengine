@@ -7,15 +7,15 @@ use std::{fs, ffi};
 
 
 pub struct Shader {
-    pub vert_module: VulkanShaderModule,
-    pub frag_module: VulkanShaderModule,
+    pub vert_module: ShaderModule,
+    pub frag_module: ShaderModule,
     stage_create_infos: [vk::PipelineShaderStageCreateInfo; 2],
 }
 
 impl Shader {
     pub fn new(device: &ash::Device, vert_path: &str, frag_path: &str) -> Self {
-        let vert_module = VulkanShaderModule::new(device, vert_path);
-        let frag_module = VulkanShaderModule::new(device, frag_path);
+        let vert_module = ShaderModule::new(device, vert_path);
+        let frag_module = ShaderModule::new(device, frag_path);
 
         let stage_create_infos = [
             vert_module.stage_create_info(vk::ShaderStageFlags::VERTEX),
@@ -45,12 +45,12 @@ impl Shader {
 
 
 
-pub struct VulkanShaderModule {
+pub struct ShaderModule {
     pub entrypoint: ffi::CString,
     pub module: vk::ShaderModule,
 }
 
-impl VulkanShaderModule {
+impl ShaderModule {
     pub fn new(device: &ash::Device, code_path: &str) -> Self {
         let entrypoint = ffi::CString::new("main").unwrap();
         let code = read_shader_code(Path::new(code_path));

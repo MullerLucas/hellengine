@@ -1,4 +1,4 @@
 #!/bin/env bash
 
-./.tools/build.sh
+./tools/build.sh
 cargo run

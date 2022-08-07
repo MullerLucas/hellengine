@@ -34,7 +34,7 @@ impl Image {
         properties: vk::MemoryPropertyFlags,
         aspect_mask: vk::ImageAspectFlags,
     ) -> Self {
-        let device = &core.device.vk_device;
+        let device = &core.device.device;
 
         let mip_levels = match mip_level_override {
             Some(m) => m,

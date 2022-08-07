@@ -146,7 +146,7 @@ impl RenderPass {
             p_dependencies: subpass_dependencies.as_ptr(),
         };
 
-        let pass = unsafe { core.device.vk_device.create_render_pass(&render_pass_info, None).unwrap() };
+        let pass = unsafe { core.device.device.create_render_pass(&render_pass_info, None).unwrap() };
 
 
         Self { render_pass: pass }
@@ -176,7 +176,7 @@ impl RenderPassData {
     pub fn new(core: &Core) -> Self {
         let render_pass = RenderPass::new(core);
         // let color_img = VulkanImage::default_for_color_resource(core);
-        let framebuffer = Framebuffer::new(&core.device.vk_device, &core.swapchain, /*color_img.view,*/ &render_pass);
+        let framebuffer = Framebuffer::new(&core.device.device, &core.swapchain, /*color_img.view,*/ &render_pass);
 
         Self {
             render_pass,
@@ -186,8 +186,8 @@ impl RenderPassData {
     }
 
     pub fn recreate_framebuffer(&mut self, core: &Core) {
-        self.framebuffer.drop_manual(&core.device.vk_device);
-        let framebuffer = Framebuffer::new(&core.device.vk_device, &core.swapchain, /*color_img.view,*/ &self.render_pass);
+        self.framebuffer.drop_manual(&core.device.device);
+        let framebuffer = Framebuffer::new(&core.device.device, &core.swapchain, /*color_img.view,*/ &self.render_pass);
         self.framebuffer = framebuffer;
     }
 }

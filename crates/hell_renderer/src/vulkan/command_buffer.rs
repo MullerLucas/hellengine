@@ -2,7 +2,7 @@ use std::ptr;
 
 use ash::vk;
 
-use super::buffer::Buffer;
+use super::buffer::{Buffer, UniformData};
 use super::config;
 use super::logic_device::LogicDevice;
 use super::pipeline::GraphicsPipeline;
@@ -29,11 +29,11 @@ impl CommandPool {
     }
 
     pub fn default_for_graphics(device: &LogicDevice) -> Self {
-        CommandPool::new(&device.vk_device, device.queues.graphics.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+        CommandPool::new(&device.device, device.queues.graphics.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
     }
 
     pub fn default_for_transfer(device: &LogicDevice) -> Self {
-        CommandPool::new(&device.vk_device, device.queues.transfer.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER | vk::CommandPoolCreateFlags::TRANSIENT)
+        CommandPool::new(&device.device, device.queues.transfer.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER | vk::CommandPoolCreateFlags::TRANSIENT)
     }
 
     pub fn get_buffer_for_frame(&self, frame_idx: usize) -> vk::CommandBuffer {
@@ -153,23 +153,30 @@ impl CommandPool {
 
     // TODO: error handling
     #[allow(clippy::too_many_arguments)]
-    pub fn record_cmd_buffer(&self, core: &Core, pipeline: &GraphicsPipeline, render_pass_data: &RenderPassData, frame_idx: usize, swqp_img_idx: usize, index_count: u32, vertex_buffer: &Buffer, index_buffer: &Buffer) {
+    pub fn record_cmd_buffer(
+        &self,
+        core: &Core,
+        pipeline: &GraphicsPipeline,
+        render_pass_data: &RenderPassData,
+        frame_idx: usize,
+        swqp_img_idx: usize,
+        index_count: u32,
+        vertex_buffer: &Buffer,
+        index_buffer: &Buffer,
+        uniform_data: &UniformData,
+    ) {
+
         let begin_info = vk::CommandBufferBeginInfo::default();
         let cmd_buffer = self.cmd_buffers[frame_idx];
-        let device = &core.device.vk_device;
+        let device = &core.device.device;
 
         unsafe { device.begin_command_buffer(cmd_buffer, &begin_info).unwrap(); }
 
         // one clear-color per attachment with load-op-clear - order should be identical
         let clear_values = [
             vk::ClearValue {
-                color: vk::ClearColorValue { float32: [0.0, 0.2, 0.2, 1.0] }
+                color: vk::ClearColorValue { float32: config::CLEAR_COLOR }
             },
-            // vk::ClearValue {
-            //     // range of depths 0.0 - 1.0 in Vulkan - 1.0 = far-view-plane - 0.0 = new-view-plane
-            //     // initial value = furhest away value = 1.0
-            //     depth_stencil: vk::ClearDepthStencilValue { depth: 1.0, stencil: 0, },
-            // },
         ];
 
         let render_area = vk::Rect2D {
@@ -186,7 +193,6 @@ impl CommandPool {
 
 
         // recorrd commands
-
         unsafe {
             device.cmd_begin_render_pass(cmd_buffer, &render_pass_info, vk::SubpassContents::INLINE);
 
@@ -194,8 +200,9 @@ impl CommandPool {
             let vertex_buffers = [vertex_buffer.buffer];
             device.cmd_bind_vertex_buffers(cmd_buffer, 0, &vertex_buffers, &[0]);
             device.cmd_bind_index_buffer(cmd_buffer, index_buffer.buffer, 0, config::INDEX_TYPE);
-            // TODO: descriptor_sets
-            // device.cmd_bind_descriptor_sets( cmd_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline_layout, 0, &[pipeline.descriptor_sets[curr_frame]], &[] );
+
+            let descriptor_set = [uniform_data.descriptor_pool.sets[frame_idx]];
+            device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline_layout, 0, &descriptor_set, &[]);
 
             device.cmd_draw_indexed(cmd_buffer, index_count, 1, 0, 0, 0);
 

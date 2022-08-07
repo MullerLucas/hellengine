@@ -3,12 +3,12 @@ use std::{ptr, ffi};
 use ash::vk;
 
 use super::config;
-use super::phys_device::VulkanPhysDevice;
+use super::phys_device::PhysDevice;
 use super::queues::Queues;
 
 
 pub struct LogicDevice {
-    pub vk_device: ash::Device,
+    pub device: ash::Device,
     pub queues: Queues,
 }
 
@@ -16,7 +16,7 @@ pub struct LogicDevice {
 impl LogicDevice {
     pub fn new(
         instance: &ash::Instance,
-        phys_device: &VulkanPhysDevice
+        phys_device: &PhysDevice
     ) -> Self {
 
         let queue_priorities = [1.0_f32];
@@ -84,7 +84,7 @@ impl LogicDevice {
         let queues = Queues::from_support(&device, &phys_device.queue_support);
 
         Self {
-            vk_device: device,
+            device,
             queues
         }
     }
@@ -96,7 +96,7 @@ impl Drop for LogicDevice {
 
         unsafe {
             // cleans up device queues
-            self.vk_device.destroy_device(None);
+            self.device.destroy_device(None);
         }
     }
 }
@@ -105,7 +105,7 @@ impl LogicDevice {
     // TODO: error handling
     pub fn wait_idle(&self) {
         unsafe {
-            self.vk_device.device_wait_idle().unwrap();
+            self.device.device_wait_idle().unwrap();
         }
     }
 }

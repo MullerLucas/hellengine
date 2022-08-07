@@ -2,9 +2,16 @@ use std::{ptr, mem};
 use ash::vk;
 
 use super::command_buffer::CommandPool;
+use super::config;
+use super::descriptors::DescriptorPool;
 use super::vertext::Vertex;
 use super::vulkan_core::Core;
 
+
+
+// ----------------------------------------------------------------------------
+// buffer
+// ----------------------------------------------------------------------------
 
 pub struct Buffer {
     pub buffer: vk::Buffer,
@@ -17,7 +24,7 @@ impl Buffer {
     pub fn new(
         core: &Core, size: vk::DeviceSize, usage: vk::BufferUsageFlags, properties: vk::MemoryPropertyFlags, sharing_mode: vk::SharingMode, queue_family_indices: Option<&[u32]>
     ) -> Self {
-        let device = &core.device.vk_device;
+        let device = &core.device.device;
 
         let mut buffer_info = vk::BufferCreateInfo {
             s_type: vk::StructureType::BUFFER_CREATE_INFO,
@@ -72,7 +79,7 @@ impl Buffer {
 
     // TODO: error handling
     pub fn from_vertices(core: &Core, vertices: &[Vertex]) -> Self {
-        let device = &core.device.vk_device;
+        let device = &core.device.device;
 
         let buffer_size = std::mem::size_of_val(vertices) as vk::DeviceSize;
         println!("VERT-SIZE: {}", buffer_size);
@@ -118,7 +125,7 @@ impl Buffer {
     }
 
     pub fn from_indices(core: &Core, indices: &[u32]) -> Self {
-        let device = &core.device.vk_device;
+        let device = &core.device.device;
 
         let buffer_size = mem::size_of_val(indices) as vk::DeviceSize;
 
@@ -157,6 +164,17 @@ impl Buffer {
 
 
         device_buffer
+    }
+
+    pub fn from_uniform(core: &Core) -> Self {
+        Buffer::new(
+            core,
+            UniformBufferObject::device_size(),
+            vk::BufferUsageFlags::UNIFORM_BUFFER,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            vk::SharingMode::EXCLUSIVE,
+            None,
+        )
     }
 }
 
@@ -200,4 +218,94 @@ fn copy_buffer(device: &ash::Device, cmd_pool: &CommandPool, queue: vk::Queue, s
     }
 
     cmd_pool.end_single_time_commands(device, command_buffer, queue);
+}
+
+
+
+
+// ----------------------------------------------------------------------------
+// uniform-buffer
+// ----------------------------------------------------------------------------
+
+
+#[allow(dead_code)]
+pub struct UniformBufferObject {
+    model: glam::Mat4,
+    view: glam::Mat4,
+    proj: glam::Mat4,
+}
+
+impl UniformBufferObject {
+    pub fn device_size() -> vk::DeviceSize {
+        std::mem::size_of::<Self>() as vk::DeviceSize
+    }
+}
+
+
+
+
+pub struct UniformData {
+    pub ubo: UniformBufferObject,
+    pub uniform_buffers_per_frame: Vec<Buffer>,
+    pub descriptor_pool: DescriptorPool
+}
+
+impl UniformData {
+    pub fn new(core: &Core, aspect_ratio: f32) -> Self {
+        let device = &core.device.device;
+
+        let ubo = UniformBufferObject {
+            model: glam::Mat4::IDENTITY,
+            view: glam::Mat4::look_at_rh(glam::vec3(2.0, 2.0, 2.0), glam::vec3(0.0, 0.0, 0.0), glam::vec3(0.0, 0.0, 1.0)),
+            proj: {
+                // opengl -> y coord of the clip coords is inverted -> flip sign of scaling factor of the y-axis in the proj-matrix
+                let mut proj = glam::Mat4::perspective_rh(f32::to_radians(90.0), aspect_ratio, 0.1, 10.0);
+                proj.y_axis.y *= -1.0;
+                proj
+            }
+        };
+
+        let uniform_buffers_per_frame: Vec<_> = (0..config::MAX_FRAMES_IN_FLIGHT)
+            .into_iter()
+            .map(|_| Buffer::from_uniform(core))
+            .collect();
+
+        let descriptor_pool = DescriptorPool::new(device, &uniform_buffers_per_frame).unwrap();
+
+        Self {
+            ubo,
+            uniform_buffers_per_frame,
+            descriptor_pool
+        }
+    }
+}
+
+impl UniformData {
+    pub fn drop_manual(&self, device: &ash::Device) {
+        println!("> dropping UniformData...");
+
+        self.uniform_buffers_per_frame.iter().for_each(|b| b.drop_manual(device));
+        self.descriptor_pool.drop_manual(device);
+    }
+}
+
+
+impl UniformData {
+    // TODO: error handling
+    pub fn update_uniform_buffer(&mut self, core: &Core, img_idx: usize, delta_time: f32) {
+        let device = &core.device.device;
+
+        let angle = f32::to_radians(90.0) * (delta_time / 2.0);
+        self.ubo.model = glam::Mat4::from_rotation_y(angle);
+
+        let buff_size = std::mem::size_of::<UniformBufferObject>() as u64;
+        let uniform_buffer = &self.uniform_buffers_per_frame[img_idx];
+
+
+        unsafe {
+            let data_ptr = device.map_memory(uniform_buffer.mem, 0, buff_size, vk::MemoryMapFlags::empty()).unwrap() as *mut UniformBufferObject;
+            data_ptr.copy_from_nonoverlapping(&self.ubo, 1);
+            device.unmap_memory(uniform_buffer.mem);
+        }
+    }
 }

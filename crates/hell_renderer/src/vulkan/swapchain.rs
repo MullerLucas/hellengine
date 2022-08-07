@@ -5,20 +5,20 @@ use ash::vk;
 use crate::vulkan::image;
 
 use super::logic_device::LogicDevice;
-use super::phys_device::VulkanPhysDevice;
+use super::phys_device::PhysDevice;
 use super::surface::Surface;
 
 
 
 
 
-pub struct VulkanSwapchainSupport {
+pub struct SwapchainSupport {
     pub capabilities: vk::SurfaceCapabilitiesKHR,
     pub formats: Vec<vk::SurfaceFormatKHR>,
     pub present_modes: Vec<vk::PresentModeKHR>
 }
 
-impl VulkanSwapchainSupport {
+impl SwapchainSupport {
     pub fn new(phys_device: vk::PhysicalDevice, surface: &Surface) -> Self {
         let capabilities = unsafe {
             surface
@@ -120,7 +120,7 @@ impl VulkanSwapchainSupport {
 pub struct Swapchain {
     pub vk_swapchain: vk::SwapchainKHR,
     pub swapchain_loader: ash::extensions::khr::Swapchain,
-    pub swapchain_support: VulkanSwapchainSupport,
+    pub swapchain_support: SwapchainSupport,
 
     pub _imgs: Vec<vk::Image>,
     pub img_views: Vec<vk::ImageView>,
@@ -134,8 +134,8 @@ pub struct Swapchain {
 
 
 impl Swapchain {
-    pub fn new(instance: &ash::Instance, phys_device: &VulkanPhysDevice, device: &LogicDevice, surface: &Surface, window_width: u32, window_height: u32) -> Swapchain {
-        let swapchain_support = VulkanSwapchainSupport::new(phys_device.phys_device, surface);
+    pub fn new(instance: &ash::Instance, phys_device: &PhysDevice, device: &LogicDevice, surface: &Surface, window_width: u32, window_height: u32) -> Swapchain {
+        let swapchain_support = SwapchainSupport::new(phys_device.phys_device, surface);
 
         let surface_format = swapchain_support.choose_swap_surface_format();
         let swap_present_mode = swapchain_support.choose_swap_present_mode();
@@ -169,7 +169,7 @@ impl Swapchain {
             old_swapchain: vk::SwapchainKHR::null(),
         };
 
-        let swapchain_loader = ash::extensions::khr::Swapchain::new(instance, &device.vk_device);
+        let swapchain_loader = ash::extensions::khr::Swapchain::new(instance, &device.device);
         let swapchain = unsafe {
             swapchain_loader
                 .create_swapchain(&create_info, None)
@@ -177,7 +177,7 @@ impl Swapchain {
         };
 
         let imgs = unsafe { swapchain_loader.get_swapchain_images(swapchain).unwrap() };
-        let img_views = image::create_img_views(&device.vk_device, &imgs, 1, surface_format.format, vk::ImageAspectFlags::COLOR);
+        let img_views = image::create_img_views(&device.device, &imgs, 1, surface_format.format, vk::ImageAspectFlags::COLOR);
 
         // panic!("TEST: {:?}", extent);
 
@@ -246,5 +246,10 @@ impl Swapchain {
             .build();
 
         viewport_state_info
+    }
+
+
+    pub fn aspect_ratio(&self) -> f32 {
+        self.extent.width as f32 / self.extent.height as f32
     }
 }

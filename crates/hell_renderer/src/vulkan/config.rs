@@ -29,3 +29,5 @@ pub const ENABLE_SAMPLE_SHADING: bool = true;
 
 
 pub const FRAME_BUFFER_LAYER_COUNT: u32 = 1;
+
+pub const CLEAR_COLOR: [f32; 4] = [0.1, 0.1, 0.1, 1.0];

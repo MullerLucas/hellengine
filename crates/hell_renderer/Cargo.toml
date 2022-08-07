@@ -11,5 +11,5 @@ hell_utils = { path = "../hell_utils" }
 
 num = "0.4.0"
 ash = "0.37.0+1.3.209"
-glam = "0.21.2"
+glam = { version = "0.21.2", features = ["debug-glam-assert"] }
 memoffset = "0.6.5"

@@ -1,7 +1,7 @@
 use ash::prelude::VkResult;
 pub use ash::vk;
 
-use super::config;
+use super::{config, Core};
 use super::swapchain::Swapchain;
 
 
@@ -14,7 +14,9 @@ pub struct FrameData {
 }
 
 impl FrameData {
-    pub fn new(device: &ash::Device) -> Self {
+    pub fn new(core: &Core) -> Self {
+        let device = &core.device.device;
+
         let semaphore_info = vk::SemaphoreCreateInfo::default();
 
         let fence_info = vk::FenceCreateInfo::builder()
@@ -31,13 +33,13 @@ impl FrameData {
             img_available_sem: [img_available_sem],
             render_finished_sem: [render_finished_sem],
             in_flight_fence: [in_flight_fence],
-            wait_stages: [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT]
+            wait_stages: [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
         }
     }
 
-    pub fn create_for_frames(device: &ash::Device) -> Vec<Self> {
+    pub fn create_for_frames(core: &Core) -> Vec<Self> {
         (0..config::MAX_FRAMES_IN_FLIGHT).into_iter()
-            .map(|_| FrameData::new(device))
+            .map(|_| FrameData::new(core))
             .collect()
     }
 }

@@ -1,5 +1,6 @@
 use ash::vk;
 
+use super::buffer::UniformData;
 use super::config;
 use super::render_pass::RenderPassData;
 use super::shader::Shader;
@@ -9,21 +10,19 @@ use super::vulkan_core::Core;
 
 
 pub struct GraphicsPipeline {
-    // pub render_pass_data: VulkanRenderPassData,
     pub pipeline_layout: vk::PipelineLayout,
     pub pipeline: vk::Pipeline,
-
 }
 
 impl GraphicsPipeline {
     // TODO: error handling
-    pub fn new(core: &Core, render_pass_data: &RenderPassData) -> Self {
-        let device = &core.device.vk_device;
+    pub fn new(core: &Core, render_pass_data: &RenderPassData, unfirom_data: &UniformData) -> Self {
+        let device = &core.device.device;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 
         // let render_pass_data = VulkanRenderPassData::new(core);
 
-        let shader = Shader::new(&core.device.vk_device, config::VERT_SHADER_PATH, config::FRAG_SHADER_PATH);
+        let shader = Shader::new(&core.device.device, config::VERT_SHADER_PATH, config::FRAG_SHADER_PATH);
         let shader_stages = shader.get_stage_create_infos();
 
         let vertex_info = VertexInfo::new();
@@ -41,7 +40,12 @@ impl GraphicsPipeline {
         let color_blend_attachments = [create_color_blend_attachment()];
         let color_blend_info = create_pipeline_blend_data(&color_blend_attachments);
 
-        let pipeline_layout_info = create_pipeline_layout_info_data();
+        let descriptor_layouts = &[unfirom_data.descriptor_pool.layout.layout];
+        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder()
+            .set_layouts(descriptor_layouts)
+            .push_constant_ranges(&[])
+            .build();
+
         let pipeline_layout = create_pipeline_layout_data(device, &pipeline_layout_info);
 
         let pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
@@ -62,10 +66,9 @@ impl GraphicsPipeline {
 
         let pipeline = unsafe { device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None).unwrap()[0] };
 
-        shader.drop_manual(&core.device.vk_device);
+        shader.drop_manual(&core.device.device);
 
         Self {
-            // render_pass_data,
             pipeline_layout,
             pipeline,
         }
@@ -101,7 +104,7 @@ fn create_pipeline_rasterization_data() -> vk::PipelineRasterizationStateCreateI
         .rasterizer_discard_enable(false) // prevetns geometry to pass through te rasterizer stage
         .polygon_mode(vk::PolygonMode::FILL)
         .cull_mode(vk::CullModeFlags::NONE)
-        .front_face(vk::FrontFace::CLOCKWISE)
+        .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
         .depth_bias_enable(false)
         .depth_bias_constant_factor(0.0)
         .depth_bias_clamp(0.0)
@@ -163,14 +166,6 @@ fn create_pipeline_blend_data(color_blend_attachments: &[vk::PipelineColorBlendA
         .build()
 }
 
-// TODO: error handling
-
-fn create_pipeline_layout_info_data() -> vk::PipelineLayoutCreateInfo {
-    vk::PipelineLayoutCreateInfo::builder()
-        // .set_layouts(set_layouts)
-        .push_constant_ranges(&[])
-        .build()
-}
 fn create_pipeline_layout_data(device: &ash::Device, layout_info: &vk::PipelineLayoutCreateInfo /*, set_layouts: &[vk::DescriptorSetLayout]*/) -> vk::PipelineLayout {
     unsafe { device.create_pipeline_layout(layout_info, None).unwrap() }
 }
