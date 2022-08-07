@@ -6,15 +6,15 @@ use memoffset::offset_of;
 pub struct Vertex {
     pub pos: glam::Vec4,
     pub color: glam::Vec4,
-    pub tex_coord: glam::Vec2,
+    // pub tex_coord: glam::Vec2,
 }
 
 impl Vertex {
-    pub const fn from_arrays(pos: [f32; 4], color: [f32; 4], tex_coord: [f32; 2]) -> Self {
+    pub const fn from_arrays(pos: [f32; 4], color: [f32; 4], _tex_coord: [f32; 2]) -> Self {
         Self {
             pos: glam::Vec4::from_array(pos),
             color: glam::Vec4::from_array(color),
-            tex_coord: glam::Vec2::from_array(tex_coord)
+            // tex_coord: glam::Vec2::from_array(tex_coord)
         }
     }
 }
@@ -32,11 +32,11 @@ impl Vertex {
         vec![
             vk::VertexInputAttributeDescription { location: 0, binding: 0, format: vk::Format::R32G32B32A32_SFLOAT, offset: offset_of!(Self, pos) as u32 },
             vk::VertexInputAttributeDescription { location: 1, binding: 0, format: vk::Format::R32G32B32A32_SFLOAT, offset: offset_of!(Self, color) as u32 },
-            vk::VertexInputAttributeDescription { location: 2, binding: 0, format: vk::Format::R32G32_SFLOAT,       offset: offset_of!(Self, tex_coord) as u32 },
+            // vk::VertexInputAttributeDescription { location: 2, binding: 0, format: vk::Format::R32G32_SFLOAT,       offset: offset_of!(Self, tex_coord) as u32 },
         ]
     }
 
-    pub const fn get_device_size() -> vk::DeviceSize {
+    pub const fn structure_size() -> vk::DeviceSize {
         mem::size_of::<Self>() as vk::DeviceSize
     }
 }

@@ -1,5 +1,4 @@
-use std::ptr;
-
+use ash::prelude::VkResult;
 pub use ash::vk;
 
 use super::config;
@@ -69,7 +68,7 @@ impl VulkanFrameData {
     }
 
     // TODO: error handling
-    pub fn reset_in_flight(&self, device: &ash::Device) {
+    pub fn reset_in_flight_fence(&self, device: &ash::Device) {
         unsafe {
             device.reset_fences(&self.in_flight_fence).unwrap();
         }
@@ -92,7 +91,7 @@ impl VulkanFrameData {
     }
 
     // TODO: error handling
-    pub fn present_queue(&self, queue: vk::Queue, swapchain: &VulkanSwapchain, img_indices: &[u32]) {
+    pub fn present_queue(&self, queue: vk::Queue, swapchain: &VulkanSwapchain, img_indices: &[u32]) -> VkResult<bool> {
         let s = &[swapchain.swapchain];
         let present_info = vk::PresentInfoKHR::builder()
             .wait_semaphores(&self.render_finished_sem)
@@ -101,7 +100,7 @@ impl VulkanFrameData {
             .build();
 
         unsafe {
-            swapchain.swapchain_loader.queue_present(queue, &present_info).unwrap();
+            swapchain.swapchain_loader.queue_present(queue, &present_info)
         }
     }
 }

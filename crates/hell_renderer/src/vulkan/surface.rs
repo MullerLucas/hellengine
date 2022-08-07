@@ -1,8 +1,6 @@
 use ash::vk;
-use std::os::raw;
+use hell_common::window::HellSurfaceInfo;
 
-
-pub type VulkanSurfaceCreateInfo = (*mut raw::c_void, raw::c_ulong); //(display, window)
 
 pub struct VulkanSurface {
     pub surface: vk::SurfaceKHR,
@@ -11,7 +9,7 @@ pub struct VulkanSurface {
 
 
 impl VulkanSurface {
-    pub fn new(entry: &ash::Entry, instance: &ash::Instance, surface_info: VulkanSurfaceCreateInfo) -> Self {
+    pub fn new(entry: &ash::Entry, instance: &ash::Instance, surface_info: &HellSurfaceInfo) -> Self {
         let surface = create_surface(entry, instance, surface_info).unwrap();
         let surface_loader = ash::extensions::khr::Surface::new(entry, instance);
 
@@ -33,11 +31,11 @@ impl VulkanSurface {
     }
 }
 
-pub fn create_surface(entry: &ash::Entry, instance: &ash::Instance, surface_info: VulkanSurfaceCreateInfo) -> Result<vk::SurfaceKHR, vk::Result> {
+pub fn create_surface(entry: &ash::Entry, instance: &ash::Instance, surface_info: &HellSurfaceInfo) -> Result<vk::SurfaceKHR, vk::Result> {
     use std::ptr;
 
-    let x11_display = surface_info.0;
-    let x11_window = surface_info.1;
+    let x11_display = surface_info.get_display();
+    let x11_window = surface_info.get_window();
 
     let x11_create_info = vk::XlibSurfaceCreateInfoKHR {
         s_type: vk::StructureType::XLIB_SURFACE_CREATE_INFO_KHR,

@@ -3,6 +3,7 @@ use std::os::raw;
 
 use ash::prelude::VkResult;
 use ash::vk;
+use hell_common::window::{HellSurfaceInfo, HellWindowExtent};
 
 use super::command_buffer::VulkanCommandPool;
 use super::debugging::DebugData;
@@ -10,7 +11,7 @@ use super::frame::VulkanFrameData;
 use super::logic_device::VulkanLogicDevice;
 use super::phys_device::VulkanPhysDevice;
 use super::pipeline::VulkanGraphicsPipeline;
-use super::surface::{VulkanSurface, VulkanSurfaceCreateInfo};
+use super::surface::VulkanSurface;
 use super::swapchain::VulkanSwapchain;
 use super::{validation_layers, platforms, debugging, config};
 
@@ -42,7 +43,7 @@ pub struct VulkanCore {
 }
 
 impl VulkanCore {
-    pub fn new(surface_info: VulkanSurfaceCreateInfo) -> VkResult<Self> {
+    pub fn new(surface_info: &HellSurfaceInfo, windwow_extent: &HellWindowExtent) -> VkResult<Self> {
         let entry = unsafe { ash::Entry::load().unwrap() };
         let instance = create_instance(&entry, config::APP_NAME)?;
         let debug_data = DebugData::new(&entry, &instance);
@@ -54,7 +55,7 @@ impl VulkanCore {
         let graphics_cmd_pool = VulkanCommandPool::default_for_graphics(&device);
         let transfer_cmd_pool = VulkanCommandPool::default_for_transfer(&device);
 
-        let swapchain = VulkanSwapchain::new(&instance, &phys_device, &device, &surface, config::WINDOW_WIDTH, config::WINDOW_HEIGHT);
+        let swapchain = VulkanSwapchain::new(&instance, &phys_device, &device, &surface, windwow_extent.width, windwow_extent.height);
 
         // TODO: move
         let frame_data = VulkanFrameData::create_for_frames(&device.device);
@@ -80,10 +81,24 @@ impl VulkanCore {
             frame_data,
         })
     }
+
+    pub fn recreate_swapchain(&mut self, window_extent: &HellWindowExtent) {
+        println!("> recreating swapchain...");
+
+        self.swapchain.drop_manual(&self.device.device);
+
+        let swapchain = VulkanSwapchain::new(&self.instance, &self.phys_device, &self.device, &self.surface, window_extent.width, window_extent.height);
+        self.swapchain = swapchain;
+    }
+
+    pub fn wait_device_idle(&self) {
+        println!("> waiting for the device to be idle...");
+        self.device.wait_idle();
+        println!("> done waiting for the device to be idle...");
+    }
 }
 
 impl Drop for VulkanCore {
-    // TODO: implement
     fn drop(&mut self) {
         println!("> dropping VulkanCore");
         let device = &self.device.device;
@@ -92,11 +107,12 @@ impl Drop for VulkanCore {
             f.drop_manual(device);
         });
 
-        self.debug_data.drop_manual();
         self.graphics_cmd_pool.drop_manual(device);
         self.transfer_cmd_pool.drop_manual(device);
         self.swapchain.drop_manual(device);
+        self.device.drop_manual();
         self.surface.drop_manual();
+        self.debug_data.drop_manual();
 
         unsafe {
             self.instance.destroy_instance(None);
@@ -105,8 +121,9 @@ impl Drop for VulkanCore {
 }
 
 impl VulkanCore {
-    pub fn draw_frame(&mut self, pipeline: &VulkanGraphicsPipeline, _delta_time: f32) {
-        println!("++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+    pub fn draw_frame(&mut self, pipeline: &VulkanGraphicsPipeline, _delta_time: f32) -> bool {
+        // println!("++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+
         let device = &self.device.device;
 
         let frame_idx = self.curr_frame_idx as usize;
@@ -114,21 +131,41 @@ impl VulkanCore {
 
         frame_data.wait_for_in_flight(&self.device.device);
 
-        let (swap_img_idx, _suboptimal_for_surface) = self.swapchain.aquire_next_image(frame_data.img_available_sem[0]);
+        // TODO: check
+        // let swap_img_idx = match self.swapchain.aquire_next_image(frame_data.img_available_sem[0]) {
+        //     Ok((idx, _)) => { idx },
+        //     Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => { return true },
+        //     _ => { panic!("failed to aquire next image") }
+        // };
+        let (swap_img_idx, _is_suboptimal) = self.swapchain.aquire_next_image(frame_data.img_available_sem[0]).unwrap();
 
         self.graphics_cmd_pool.reset_cmd_buffer(&self.device.device, frame_idx);
         self.graphics_cmd_pool.record_cmd_buffer(self, pipeline, frame_idx, swap_img_idx as usize, config::INDICES);
 
-        frame_data.reset_in_flight(device);
+        // delay resetting the fence until we know for sure we will be submitting work with it (not return early)
+        frame_data.reset_in_flight_fence(device);
         frame_data.submit_queue(device, self.device.queues.graphics_queue, &[self.graphics_cmd_pool.get_buffer_for_frame(frame_idx)]);
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        frame_data.present_queue(self.device.queues.present_queue, &self.swapchain, &[swap_img_idx]);
 
-        println!("RENDERED -FRAME: {} -- {}", self.curr_frame_idx, swap_img_idx);
+        // std::thread::sleep(std::time::Duration::from_secs(1));
+
+        let present_result = frame_data.present_queue(self.device.queues.present_queue, &self.swapchain, &[swap_img_idx]);
+
+        // TODO: check
+        // do this after queue-present to ensure that the semaphores are in a consistent state - otherwise a signaled semaphore may never be properly waited upon
+        let is_resized = match present_result {
+            Ok(is_suboptimal) => { is_suboptimal },
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR | vk::Result::SUBOPTIMAL_KHR)  => { true },
+            _ => { panic!("failed to aquire next image") }
+        };
+
+        // println!("RENDERED -FRAME: {} -- {}", self.curr_frame_idx, swap_img_idx);
+
         self.curr_frame_idx = (self.curr_frame_idx + 1) % config::MAX_FRAMES_IN_FLIGHT;
+
+
+        is_resized
     }
 }
-
 
 fn create_instance(entry: &ash::Entry, app_name: &str) -> VkResult<ash::Instance> {
     if config::ENABLE_VALIDATION_LAYERS

@@ -1,4 +1,4 @@
 #!/bin/env bash
 
-./compile_shaders.sh
+./.tools/build.sh
 cargo run

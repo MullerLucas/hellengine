@@ -1,10 +1,10 @@
 [package]
-name = "dummy_bin"
+name = "hell_app"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hell_app = { path = "../hell_app" }
-hell_winit = { path = "../hell_winit" }
+hell_common = { path = "../hell_common" }
+hell_renderer = { path = "../hell_renderer" }

@@ -2,7 +2,6 @@ use std::ptr;
 
 use ash::vk;
 use super::framebuffer::VulkanFramebuffer;
-use super::image::VulkanImage;
 use super::vulkan_core::VulkanCore;
 
 
@@ -169,21 +168,27 @@ impl VulkanRenderPass {
 
 pub struct VulkanRenderPassData {
     pub render_pass: VulkanRenderPass,
-    pub color_img: VulkanImage,
+    // pub color_img: VulkanImage,
     pub framebuffer: VulkanFramebuffer,
 }
 
 impl VulkanRenderPassData {
     pub fn new(core: &VulkanCore) -> Self {
         let render_pass = VulkanRenderPass::new(core);
-        let color_img = VulkanImage::default_for_color_resource(core);
+        // let color_img = VulkanImage::default_for_color_resource(core);
         let framebuffer = VulkanFramebuffer::new(&core.device.device, &core.swapchain, /*color_img.view,*/ &render_pass);
 
         Self {
             render_pass,
-            color_img,
+            // color_img,
             framebuffer,
         }
+    }
+
+    pub fn recreate_framebuffer(&mut self, core: &VulkanCore) {
+        self.framebuffer.drop_manual(&core.device.device);
+        let framebuffer = VulkanFramebuffer::new(&core.device.device, &core.swapchain, /*color_img.view,*/ &self.render_pass);
+        self.framebuffer = framebuffer;
     }
 }
 

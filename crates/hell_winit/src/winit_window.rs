@@ -1,13 +1,10 @@
-use std::os::raw;
-
-use hell_renderer::vulkan::pipeline::VulkanGraphicsPipeline;
-use hell_renderer::vulkan::vulkan_core::VulkanCore;
+use hell_app::HellApp;
+use hell_common::window::{HellWindow, HellSurfaceInfo, HellWindowExtent};
 
 use winit::dpi::LogicalSize;
 use winit::error::OsError;
 use winit::event::{VirtualKeyCode, ElementState, KeyboardInput, WindowEvent, Event};
 use winit::event_loop::{EventLoop, ControlFlow};
-use winit::window::Window;
 
 use crate::utils::fps_limiter::FPSLimiter;
 
@@ -17,10 +14,6 @@ use crate::utils::fps_limiter::FPSLimiter;
 pub struct WinitWindow {
     event_loop: winit::event_loop::EventLoop<()>,
     window: winit::window::Window,
-
-    // TODO: restructure
-    core: VulkanCore,
-    pipeline: VulkanGraphicsPipeline,
 }
 
 impl WinitWindow {
@@ -33,45 +26,52 @@ impl WinitWindow {
             .with_inner_size(size)
             .build(&event_loop)?;
 
-        let core = VulkanCore::new(WinitWindow::create_surface_info(&window)).unwrap();
-        let pipeline = VulkanGraphicsPipeline::new(&core);
-
         Ok(Self {
             event_loop,
             window,
-
-            core,
-            pipeline,
         })
     }
 }
 
-// TODO: impl Drop
-// impl WinitWindow {
-//     fn drop_manual(&self) {
-//         println!("> dropping WinitWindow...");
-//
-//         self.pipeline.drop_manual(&self.core.device.device);
-//     }
-// }
-
-
-impl WinitWindow {
-
-    pub fn create_surface_info(window: &Window) -> (*mut raw::c_void, raw::c_ulong) {
+impl HellWindow for WinitWindow {
+    fn create_surface_info(&self) -> HellSurfaceInfo {
         use winit::platform::unix::WindowExtUnix;
 
-        let x11_display = window.xlib_display().unwrap();
-        let x11_window = window.xlib_window().unwrap();
+        let x11_display = self.window.xlib_display().unwrap();
+        let x11_window = self.window.xlib_window().unwrap();
 
-        (x11_display, x11_window)
+        HellSurfaceInfo::new(x11_display, x11_window)
     }
 
-    pub fn main_loop(mut self) {
+    fn get_window_extent(&self) -> HellWindowExtent {
+        let inner_size = self.window.inner_size();
+
+        HellWindowExtent {
+            width: inner_size.width,
+            height: inner_size.height,
+        }
+    }
+}
+
+impl WinitWindow {
+    pub fn get_winit_window_extent(window: &winit::window::Window) -> HellWindowExtent {
+        let inner_size = window.inner_size();
+
+        HellWindowExtent {
+            width: inner_size.width,
+            height: inner_size.height,
+        }
+    }
+}
+
+impl WinitWindow {
+    pub fn main_loop(self, mut app: HellApp) {
         let mut fps = FPSLimiter::new();
 
-        self.event_loop.run(move |event, _, control_flow| {
 
+        let mut handle_resize = false;
+
+        self.event_loop.run(move |event, _, control_flow| {
             match event {
                 Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
@@ -93,21 +93,32 @@ impl WinitWindow {
                     self.window.request_redraw();
                 }
                 Event::RedrawRequested(_) => {
-                    let delta_time = fps.delta_time();
-                    self.core.draw_frame(&self.pipeline, delta_time);
+                    // TODO: check resize logic
+                    if handle_resize {
+                        let window_extent = WinitWindow::get_winit_window_extent(&self.window);
+
+                        if (window_extent.width * window_extent.height) > 0 {
+                            app.on_window_changed(&window_extent);
+                            handle_resize = false;
+                            println!("> resize was handled...");
+                        } else {
+                            println!("> can't handle resize - window-extent is zero");
+                        }
+                    } else {
+                        let delta_time = fps.delta_time();
+                        handle_resize = app.draw_frame(delta_time);
+                    }
 
                     fps.tick_frame();
                 }
                 Event::LoopDestroyed => {
-                    self.core.device.wait_idle();
-                    // TODO: drop
-                    // self.drop_manual();
-                    // self.pipeline.drop_manual(&self.core.device.device);
+                    app.wait_idle();
                 },
                 _ => {}
 
             }
-        });
 
+            // "drop(app);" on last iteration
+        });
     }
 }

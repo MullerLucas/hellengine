@@ -1,4 +1,5 @@
 use std::ptr;
+use ash::prelude::VkResult;
 use ash::vk;
 
 use crate::vulkan::image;
@@ -96,7 +97,6 @@ impl VulkanSwapchainSupport {
         }
     }
 
-    // NOTE: FRAMES-IN-FLIGHT must be the same as swapchain-img-count - otherwise Vulkan won't be able to aquire the next swapchain image for presentation ... ? idk
     pub fn choose_img_count(&self) -> u32 {
         let desired_img_count = self.capabilities.min_image_count + 1;
 
@@ -134,7 +134,7 @@ pub struct VulkanSwapchain {
 
 
 impl VulkanSwapchain {
-    pub fn new(instance: &ash::Instance, phys_device: &VulkanPhysDevice, device: &VulkanLogicDevice, surface: &VulkanSurface, window_height: u32, window_width: u32) -> VulkanSwapchain {
+    pub fn new(instance: &ash::Instance, phys_device: &VulkanPhysDevice, device: &VulkanLogicDevice, surface: &VulkanSurface, window_width: u32, window_height: u32) -> VulkanSwapchain {
         let swapchain_support = VulkanSwapchainSupport::new(phys_device.phys_device, surface);
 
         let surface_format = swapchain_support.choose_swap_surface_format();
@@ -233,9 +233,9 @@ impl VulkanSwapchain {
 
 impl VulkanSwapchain {
     // TODO: error handling
-    pub fn aquire_next_image(&self, img_available_sem: vk::Semaphore) -> (u32, bool) {
+    pub fn aquire_next_image(&self, img_available_sem: vk::Semaphore) -> VkResult<(u32, bool)> {
         unsafe {
-            self.swapchain_loader.acquire_next_image(self.swapchain, u64::MAX, img_available_sem, vk::Fence::null()).unwrap()
+            self.swapchain_loader.acquire_next_image(self.swapchain, u64::MAX, img_available_sem, vk::Fence::null())
         }
     }
 

@@ -188,7 +188,8 @@ impl VulkanCommandPool {
             device.cmd_begin_render_pass(cmd_buffer, &render_pass_info, vk::SubpassContents::INLINE);
 
             device.cmd_bind_pipeline(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
-            device.cmd_bind_vertex_buffers(cmd_buffer, 0, &[pipeline.vertex_buffer.buffer], &[0]);
+            let vertex_buffers = [pipeline.vertex_buffer.buffer];
+            device.cmd_bind_vertex_buffers(cmd_buffer, 0, &vertex_buffers, &[0]);
             device.cmd_bind_index_buffer(cmd_buffer, pipeline.index_buffer.buffer, 0, config::INDEX_TYPE);
             // TODO: descriptor_sets
             // device.cmd_bind_descriptor_sets( cmd_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline_layout, 0, &[pipeline.descriptor_sets[curr_frame]], &[] );

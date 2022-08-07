@@ -4,7 +4,7 @@ use std::io::Read;
 use std::path::Path;
 use std::{fs, ffi};
 
-use super::vulkan_core::VulkanCore;
+
 
 pub struct VulkanShader {
     pub vert_module: VulkanShaderModule,

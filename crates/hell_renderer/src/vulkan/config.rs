@@ -26,10 +26,11 @@ pub const MAX_FRAMES_IN_FLIGHT: u32 = 2;
 
 
 pub static VERTICES: &[Vertex] = &[
-    Vertex::from_arrays([-0.5, -0.5,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
-    Vertex::from_arrays([ 0.5, -0.5,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 0.0]),
-    Vertex::from_arrays([ 0.5,  0.5,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 1.0]),
+    Vertex::from_arrays([-0.5, -0.5,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [1.0, 0.0]),
+    Vertex::from_arrays([ 0.5, -0.5,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0]),
+    Vertex::from_arrays([ 0.5,  0.5,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 1.0]),
     Vertex::from_arrays([-0.5,  0.5,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
+
     // Vertex::from_arrays([-0.5, -0.5, -0.5, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
     // Vertex::from_arrays([ 0.5, -0.5, -0.5, 1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 0.0]),
     // Vertex::from_arrays([ 0.5,  0.5, -0.5, 1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 1.0]),
@@ -37,7 +38,7 @@ pub static VERTICES: &[Vertex] = &[
 ];
 
 pub const INDEX_TYPE: vk::IndexType = vk::IndexType::UINT32;
-pub static INDICES: &[u32] = &[     // u32 is also possible
+pub static INDICES: &[u32] = &[     // u16 is also possible
     0, 1, 2,
     2, 3, 0,
     // 4, 5, 6,

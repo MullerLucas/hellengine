@@ -90,8 +90,8 @@ impl VulkanLogicDevice {
     }
 }
 
-impl Drop for VulkanLogicDevice {
-    fn drop(&mut self) {
+impl VulkanLogicDevice {
+    pub fn drop_manual(&mut self) {
         println!("> dropping VulkanLogicDevice...");
 
         unsafe {

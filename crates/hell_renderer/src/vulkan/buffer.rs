@@ -15,9 +15,8 @@ pub struct VulkanBuffer {
 impl VulkanBuffer {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        core: &VulkanCore, size: vk::DeviceSize,
-        usage: vk::BufferUsageFlags, properties: vk::MemoryPropertyFlags, sharing_mode: vk::SharingMode, queue_family_indices: Option<&[u32]>)
-    -> Self {
+        core: &VulkanCore, size: vk::DeviceSize, usage: vk::BufferUsageFlags, properties: vk::MemoryPropertyFlags, sharing_mode: vk::SharingMode, queue_family_indices: Option<&[u32]>
+    ) -> Self {
         let device = &core.device.device;
 
         let mut buffer_info = vk::BufferCreateInfo {
@@ -75,7 +74,8 @@ impl VulkanBuffer {
     pub fn from_vertices(core: &VulkanCore, vertices: &[Vertex]) -> Self {
         let device = &core.device.device;
 
-        let buffer_size = Vertex::get_device_size();
+        let buffer_size = std::mem::size_of_val(vertices) as vk::DeviceSize;
+        println!("VERT-SIZE: {}", buffer_size);
 
         let staging_buffer = VulkanBuffer::new(
             core,
@@ -167,6 +167,7 @@ impl VulkanBuffer {
 
         unsafe {
             device.destroy_buffer(self.buffer, None);
+            device.free_memory(self.mem, None);
         }
     }
 }

@@ -114,6 +114,18 @@ impl VulkanImage {
     }
 }
 
+impl VulkanImage {
+    pub fn drop_manual(&self, device: &ash::Device) {
+        println!("> dropping VulkanImage...");
+
+        unsafe {
+            device.destroy_image_view(self.view, None);
+            device.destroy_image(self.img, None);
+            device.free_memory(self.mem, None);
+        }
+    }
+}
+
 pub fn calc_mip_levels(width: u32, height: u32) -> u32 {
     (cmp::max(width, height) as f32).log2().floor() as u32 + 1
 }
