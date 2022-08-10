@@ -4,22 +4,22 @@ use ash::vk;
 
 use crate::vulkan::image;
 
-use super::logic_device::LogicDevice;
-use super::phys_device::PhysDevice;
-use super::surface::Surface;
+use super::logic_device::VulkanLogicDevice;
+use super::phys_device::VulkanPhysDevice;
+use super::surface::VulkanSurface;
 
 
 
 
 
-pub struct SwapchainSupport {
+pub struct VulkanSwapchainSupport {
     pub capabilities: vk::SurfaceCapabilitiesKHR,
     pub formats: Vec<vk::SurfaceFormatKHR>,
     pub present_modes: Vec<vk::PresentModeKHR>
 }
 
-impl SwapchainSupport {
-    pub fn new(phys_device: vk::PhysicalDevice, surface: &Surface) -> Self {
+impl VulkanSwapchainSupport {
+    pub fn new(phys_device: vk::PhysicalDevice, surface: &VulkanSurface) -> Self {
         let capabilities = unsafe {
             surface
                 .surface_loader
@@ -117,10 +117,10 @@ impl SwapchainSupport {
 
 
 
-pub struct Swapchain {
+pub struct VulkanSwapchain {
     pub vk_swapchain: vk::SwapchainKHR,
     pub swapchain_loader: ash::extensions::khr::Swapchain,
-    pub swapchain_support: SwapchainSupport,
+    pub swapchain_support: VulkanSwapchainSupport,
 
     pub _imgs: Vec<vk::Image>,
     pub img_views: Vec<vk::ImageView>,
@@ -133,9 +133,9 @@ pub struct Swapchain {
 }
 
 
-impl Swapchain {
-    pub fn new(instance: &ash::Instance, phys_device: &PhysDevice, device: &LogicDevice, surface: &Surface, window_width: u32, window_height: u32) -> Swapchain {
-        let swapchain_support = SwapchainSupport::new(phys_device.phys_device, surface);
+impl VulkanSwapchain {
+    pub fn new(instance: &ash::Instance, phys_device: &VulkanPhysDevice, device: &VulkanLogicDevice, surface: &VulkanSurface, window_width: u32, window_height: u32) -> VulkanSwapchain {
+        let swapchain_support = VulkanSwapchainSupport::new(phys_device.phys_device, surface);
 
         let surface_format = swapchain_support.choose_swap_surface_format();
         let swap_present_mode = swapchain_support.choose_swap_present_mode();
@@ -199,7 +199,7 @@ impl Swapchain {
 
         println!("swapchain created with {} images...", imgs.len());
 
-        Swapchain {
+        VulkanSwapchain {
             vk_swapchain: swapchain,
             swapchain_loader,
             swapchain_support,
@@ -215,7 +215,7 @@ impl Swapchain {
     }
 }
 
-impl Swapchain {
+impl VulkanSwapchain {
     // TODO: impl Drop
     pub fn drop_manual(&mut self, device: &ash::Device) {
         println!("> dropping Swapchain...");
@@ -231,7 +231,7 @@ impl Swapchain {
 }
 
 
-impl Swapchain {
+impl VulkanSwapchain {
     // TODO: error handling
     pub fn aquire_next_image(&self, img_available_sem: vk::Semaphore) -> VkResult<(u32, bool)> {
         unsafe {

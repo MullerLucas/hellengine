@@ -1,19 +1,19 @@
 use std::ptr;
 
 use ash::vk;
-use super::framebuffer::Framebuffer;
-use super::vulkan_core::Core;
+use super::framebuffer::VulkanFramebuffer;
+use super::vulkan_core::VulkanCore;
 
 
 
 
 
-pub struct RenderPass {
+pub struct VulkanRenderPass {
     pub render_pass: vk::RenderPass,
 }
 
-impl RenderPass {
-    pub fn new(core: &Core) -> Self {
+impl VulkanRenderPass {
+    pub fn new(core: &VulkanCore) -> Self {
         let swap_format = core.swapchain.surface_format.format;
         let msaa_samples = vk::SampleCountFlags::TYPE_1;
 
@@ -153,7 +153,7 @@ impl RenderPass {
     }
 }
 
-impl RenderPass {
+impl VulkanRenderPass {
     pub fn drop_manual(&self, device: &ash::Device) {
         println!("> dropping RenderPass...");
 
@@ -166,17 +166,17 @@ impl RenderPass {
 
 
 
-pub struct RenderPassData {
-    pub render_pass: RenderPass,
+pub struct VulkanRenderPassData {
+    pub render_pass: VulkanRenderPass,
     // pub color_img: VulkanImage,
-    pub framebuffer: Framebuffer,
+    pub framebuffer: VulkanFramebuffer,
 }
 
-impl RenderPassData {
-    pub fn new(core: &Core) -> Self {
-        let render_pass = RenderPass::new(core);
+impl VulkanRenderPassData {
+    pub fn new(core: &VulkanCore) -> Self {
+        let render_pass = VulkanRenderPass::new(core);
         // let color_img = VulkanImage::default_for_color_resource(core);
-        let framebuffer = Framebuffer::new(&core.device.device, &core.swapchain, /*color_img.view,*/ &render_pass);
+        let framebuffer = VulkanFramebuffer::new(&core.device.device, &core.swapchain, /*color_img.view,*/ &render_pass);
 
         Self {
             render_pass,
@@ -185,14 +185,14 @@ impl RenderPassData {
         }
     }
 
-    pub fn recreate_framebuffer(&mut self, core: &Core) {
+    pub fn recreate_framebuffer(&mut self, core: &VulkanCore) {
         self.framebuffer.drop_manual(&core.device.device);
-        let framebuffer = Framebuffer::new(&core.device.device, &core.swapchain, /*color_img.view,*/ &self.render_pass);
+        let framebuffer = VulkanFramebuffer::new(&core.device.device, &core.swapchain, /*color_img.view,*/ &self.render_pass);
         self.framebuffer = framebuffer;
     }
 }
 
-impl RenderPassData {
+impl VulkanRenderPassData {
     pub fn drop_manual(&self, device: &ash::Device) {
         println!("> dropping RenderPassData...");
 

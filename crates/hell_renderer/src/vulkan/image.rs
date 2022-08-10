@@ -1,8 +1,9 @@
 use ash::vk;
 use std::{cmp, ptr};
 
-use super::vulkan_core::Core;
-use super::buffer;
+use super::buffer::copy_buffer_to_img;
+use super::vulkan_core::VulkanCore;
+use super::{buffer, VulkanBuffer, VulkanCommandPool, VulkanQueue};
 
 
 
@@ -12,18 +13,17 @@ use super::buffer;
 // ------------------------------------------------------------------------------------------------
 
 #[allow(dead_code)]
-pub struct Image {
+pub struct VulkanImage {
     pub img: vk::Image,
     pub mem: vk::DeviceMemory,
     pub view: vk::ImageView,
     pub mip_levels: u32,
 }
 
-impl Image {
-    #[allow(dead_code)]
+impl VulkanImage {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        core: &Core,
+        core: &VulkanCore,
         width: u32,
         height: u32,
         mip_level_override: Option<u32>,
@@ -98,7 +98,7 @@ impl Image {
 
         let view = create_img_view(device, img, mip_levels, format, aspect_mask);
 
-        Image {
+        VulkanImage {
             img,
             mem,
             view,
@@ -106,8 +106,7 @@ impl Image {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn default_for_color_resource(core: &Core) -> Self {
+    pub fn _default_for_color_resource(core: &VulkanCore) -> Self {
         Self::new(
             core,
             core.swapchain.extent.width,
@@ -121,9 +120,24 @@ impl Image {
             vk::ImageAspectFlags::COLOR
         )
     }
+
+    pub fn default_for_texture(core: &VulkanCore, width: u32, height: u32) -> Self {
+        Self::new(
+            core,
+            width,
+            height,
+            Some(1),
+            vk::SampleCountFlags::TYPE_1,
+            vk::Format::R8G8B8A8_SRGB,
+            vk::ImageTiling::OPTIMAL,
+            vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            vk::ImageAspectFlags::COLOR
+        )
+    }
 }
 
-impl Image {
+impl VulkanImage {
     #[allow(dead_code)]
     pub fn drop_manual(&self, device: &ash::Device) {
         println!("> dropping Image...");
@@ -179,7 +193,78 @@ pub fn create_img_view(
     }
 }
 
+fn transition_image_layout(device: &ash::Device, cmd_pool: &VulkanCommandPool, queue: &VulkanQueue, img: vk::Image, _format: vk::Format, old_layout: vk::ImageLayout, new_layout: vk::ImageLayout) {
+    let cmd_buffer = cmd_pool.begin_single_time_commands(device);
 
+    let subresource_range = vk::ImageSubresourceRange::builder()
+        .aspect_mask(vk::ImageAspectFlags::COLOR)
+        .base_mip_level(0)
+        .level_count(1)
+        .base_array_layer(0)
+        .layer_count(1)
+        .build();
+
+    let mut barrier = vk::ImageMemoryBarrier::builder()
+        .old_layout(old_layout)
+        .new_layout(new_layout)
+        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .image(img)
+        .subresource_range(subresource_range)
+        .build();
+
+
+     let (src_stage, dst_stage) = match (old_layout, new_layout) {
+        (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => {
+            barrier.src_access_mask = vk::AccessFlags::empty();
+            barrier.dst_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+
+            // transfer-stage ^= pseudo-stage, where transfers happen
+            (
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::TRANSFER,
+            )
+        }
+        (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => {
+            barrier.src_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+            barrier.dst_access_mask = vk::AccessFlags::SHADER_READ;
+
+            (
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+            )
+        }
+        (vk::ImageLayout::UNDEFINED, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL) => {
+            barrier.src_access_mask = vk::AccessFlags::empty();
+            barrier.dst_access_mask = vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
+                | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE;
+
+            // reading: EARLY_FRAGMENT_TEST stage - writing: LATE_FRAGMENT_TEST stage => pick earliest stage
+            (
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+            )
+        }
+        _ => {
+            panic!("unsuported layout transition!");
+        }
+    };
+
+
+    unsafe {
+        device.cmd_pipeline_barrier(
+            cmd_buffer,
+            src_stage,
+            dst_stage,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[barrier],
+        );
+    }
+
+    cmd_pool.end_single_time_commands(device, cmd_buffer, queue.queue);
+}
 
 
 
@@ -191,4 +276,92 @@ pub fn create_img_views(device: &ash::Device, imgs: &[vk::Image], mip_levels: u3
     imgs.iter()
         .map(|&i| create_img_view(device, i, mip_levels, format, aspect_mask))
         .collect()
+}
+
+
+
+
+// ------------------------------------------------------------------------------------------------
+// texture-image
+// ------------------------------------------------------------------------------------------------
+
+pub struct VulkanTextureImage {
+    pub img: VulkanImage,
+}
+
+impl VulkanTextureImage {
+    // TODO: error handling
+    pub fn new(core: &VulkanCore, path: impl AsRef<std::path::Path>) -> Self {
+        let device = &core.device.device;
+
+        let raw_img = image::open(path).unwrap();
+        raw_img.flipv();
+
+        let img_width = raw_img.width();
+        let img_height = raw_img.height();
+        let img_size = (std::mem::size_of::<u8>() as u32 * img_width * img_height * 4) as vk::DeviceSize;
+
+        if img_size == 0 {
+            panic!("failed to load image at");
+        }
+
+        let img_data = match &raw_img {
+            image::DynamicImage::ImageLuma8(_) | image::DynamicImage::ImageRgb8(_) => {
+                raw_img.to_rgba8().into_raw()
+            },
+            image::DynamicImage::ImageLumaA8(_) | image::DynamicImage::ImageRgba8(_) => {
+                raw_img.into_bytes()
+            }
+            _ => { panic!("invalid image format"); }
+        };
+
+        let staging_buffer = VulkanBuffer::from_texture_staging(core, img_size);
+
+        unsafe {
+            let data_ptr = device.map_memory(staging_buffer.mem, 0, img_size, vk::MemoryMapFlags::empty()).unwrap() as *mut u8;
+            data_ptr.copy_from_nonoverlapping(img_data.as_ptr(), img_data.len());
+            device.unmap_memory(staging_buffer.mem);
+        }
+
+        let img = VulkanImage::default_for_texture(core, img_width, img_height);
+
+        // prepare for being copied into
+        transition_image_layout(
+            device,
+            &core.graphics_cmd_pool,
+            &core.device.queues.graphics,
+            img.img,
+            vk::Format::R8G8B8A8_SRGB,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL
+        );
+
+        copy_buffer_to_img(core, staging_buffer.buffer, img.img, img_width, img_height);
+
+        // prepare for being read by shader
+        transition_image_layout(
+            device,
+            &core.graphics_cmd_pool,
+            &core.device.queues.graphics,
+            img.img,
+            vk::Format::R8G8B8A8_SRGB,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+        );
+
+        staging_buffer.drop_manual(device);
+
+
+        Self {
+            img
+        }
+    }
+}
+
+impl VulkanTextureImage {
+    pub fn drop_manual(&self, device: &ash::Device) {
+        println!("> dropping VulkanTextureImage");
+
+        self.img.drop_manual(device);
+    }
 }

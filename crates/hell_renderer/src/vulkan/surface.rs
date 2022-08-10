@@ -2,13 +2,13 @@ use ash::vk;
 use hell_common::window::HellSurfaceInfo;
 
 
-pub struct Surface {
+pub struct VulkanSurface {
     pub surface: vk::SurfaceKHR,
     pub surface_loader: ash::extensions::khr::Surface,
 }
 
 
-impl Surface {
+impl VulkanSurface {
     pub fn new(entry: &ash::Entry, instance: &ash::Instance, surface_info: &HellSurfaceInfo) -> Self {
         let surface = create_surface(entry, instance, surface_info).unwrap();
         let surface_loader = ash::extensions::khr::Surface::new(entry, instance);
@@ -20,7 +20,7 @@ impl Surface {
     }
 }
 
-impl Drop for Surface {
+impl Drop for VulkanSurface {
     fn drop(&mut self) {
         println!("> dropping Surface...");
 

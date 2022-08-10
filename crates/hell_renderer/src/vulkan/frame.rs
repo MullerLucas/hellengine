@@ -1,20 +1,20 @@
 use ash::prelude::VkResult;
 pub use ash::vk;
 
-use super::{config, Core};
-use super::swapchain::Swapchain;
+use super::{config, VulkanCore};
+use super::swapchain::VulkanSwapchain;
 
 
 
-pub struct FrameData {
+pub struct VulkanFrameData {
     pub img_available_sem: [vk::Semaphore; 1],
     pub render_finished_sem: [vk::Semaphore; 1],
     pub in_flight_fence: [vk::Fence; 1],
     pub wait_stages: [vk::PipelineStageFlags; 1],
 }
 
-impl FrameData {
-    pub fn new(core: &Core) -> Self {
+impl VulkanFrameData {
+    pub fn new(core: &VulkanCore) -> Self {
         let device = &core.device.device;
 
         let semaphore_info = vk::SemaphoreCreateInfo::default();
@@ -37,14 +37,14 @@ impl FrameData {
         }
     }
 
-    pub fn create_for_frames(core: &Core) -> Vec<Self> {
+    pub fn create_for_frames(core: &VulkanCore) -> Vec<Self> {
         (0..config::MAX_FRAMES_IN_FLIGHT).into_iter()
-            .map(|_| FrameData::new(core))
+            .map(|_| VulkanFrameData::new(core))
             .collect()
     }
 }
 
-impl FrameData {
+impl VulkanFrameData {
     // TODO: impl Drop
     pub fn drop_manual(&self, device: &ash::Device) {
         println!("> dropping FrameData...");
@@ -57,7 +57,7 @@ impl FrameData {
     }
 }
 
-impl FrameData {
+impl VulkanFrameData {
     // TODO: error handling
     pub fn wait_for_in_flight(&self, device: &ash::Device) {
         unsafe {
@@ -93,7 +93,7 @@ impl FrameData {
     }
 
     // TODO: error handling
-    pub fn present_queue(&self, queue: vk::Queue, swapchain: &Swapchain, img_indices: &[u32]) -> VkResult<bool> {
+    pub fn present_queue(&self, queue: vk::Queue, swapchain: &VulkanSwapchain, img_indices: &[u32]) -> VkResult<bool> {
         let s = &[swapchain.vk_swapchain];
         let present_info = vk::PresentInfoKHR::builder()
             .wait_semaphores(&self.render_finished_sem)

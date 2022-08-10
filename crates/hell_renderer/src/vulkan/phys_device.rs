@@ -4,30 +4,30 @@ use std::ffi::CStr;
 use std::fmt;
 
 use crate::vulkan::config;
-use crate::vulkan::queues::{self, QueueSupport};
+use crate::vulkan::queues::{self, VulkanQueueSupport};
 
-use super::SwapchainSupport;
-use super::surface::Surface;
+use super::VulkanSwapchainSupport;
+use super::surface::VulkanSurface;
 
-pub struct PhysDevice {
+pub struct VulkanPhysDevice {
     pub phys_device: vk::PhysicalDevice,
     pub score: u32,
     pub device_props: vk::PhysicalDeviceProperties,
     pub features: vk::PhysicalDeviceFeatures,
-    pub queue_support: QueueSupport,
-    pub swapchain_support: SwapchainSupport,
+    pub queue_support: VulkanQueueSupport,
+    pub swapchain_support: VulkanSwapchainSupport,
     pub depth_format: vk::Format,
 }
 
 
-impl PhysDevice {
-    pub fn pick_phys_device(instance: &ash::Instance, surface: &Surface) -> Self {
+impl VulkanPhysDevice {
+    pub fn pick_phys_device(instance: &ash::Instance, surface: &VulkanSurface) -> Self {
         let all_devices = unsafe { instance.enumerate_physical_devices().unwrap() };
 
         let device = all_devices
             .into_iter()
             .flat_map(|d| {
-                PhysDevice::rate_device_suitability(
+                VulkanPhysDevice::rate_device_suitability(
                     instance,
                     d,
                     surface,
@@ -52,9 +52,9 @@ impl PhysDevice {
     pub fn rate_device_suitability(
         instance: &ash::Instance,
         phys_device: vk::PhysicalDevice,
-        surface: &Surface,
+        surface: &VulkanSurface,
         extension_names: &[&str],
-    ) -> Option<PhysDevice> {
+    ) -> Option<VulkanPhysDevice> {
         let device_props = unsafe { instance.get_physical_device_properties(phys_device) };
         let features = unsafe { instance.get_physical_device_features(phys_device) };
         let mut _score = 0;
@@ -98,15 +98,15 @@ impl PhysDevice {
             "\t> sampler-anisotropy is supported: {:?}",
             features.sampler_anisotropy
         );
-        if features.sampler_anisotropy == vk::FALSE {
-            _score = 0;
+        if features.sampler_anisotropy == vk::TRUE {
+            _score += 20;
         }
 
         // queue-families
         // --------------
         queues::print_queue_families(instance, phys_device);
 
-        let queue_support = QueueSupport::new(instance, phys_device, surface);
+        let queue_support = VulkanQueueSupport::new(instance, phys_device, surface);
         if !queue_support.is_complete() {
             _score = 0;
             println!("> no suitable queues were found!");
@@ -124,7 +124,7 @@ impl PhysDevice {
             } else {
                 // swap-chains
                 // -----------
-                let swapchain_support = SwapchainSupport::new(phys_device, surface);
+                let swapchain_support = VulkanSwapchainSupport::new(phys_device, surface);
                 if !swapchain_support.is_suitable() {
                     _score = 0;
                     println!("> no suitable swap-chain found!");
@@ -134,7 +134,7 @@ impl PhysDevice {
 
         let depth_format = find_depth_format(instance, phys_device);
 
-        Some(PhysDevice {
+        Some(VulkanPhysDevice {
             phys_device,
             score: _score,
             device_props,
@@ -146,7 +146,7 @@ impl PhysDevice {
     }
 }
 
-impl fmt::Debug for PhysDevice {
+impl fmt::Debug for VulkanPhysDevice {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let device_name = unsafe { CStr::from_ptr(self.device_props.device_name.as_ptr()) };
 

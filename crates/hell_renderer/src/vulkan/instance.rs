@@ -7,7 +7,7 @@ use super::{config, platforms, validation_layers, debugging};
 
 
 
-pub struct Instance {
+pub struct VulkanInstance {
     pub instance: ash::Instance,
     // NOTE: drop after instance has been dropped,
     pub entry: ash::Entry,
@@ -15,7 +15,7 @@ pub struct Instance {
 
 
 
-impl Instance {
+impl VulkanInstance {
     pub fn new (app_name: &str) -> Self {
         let entry = unsafe { ash::Entry::load().unwrap() };
 
@@ -74,7 +74,7 @@ impl Instance {
     }
 }
 
-impl Drop for Instance {
+impl Drop for VulkanInstance {
     fn drop(&mut self) {
         println!("> dropping Instance...");
 

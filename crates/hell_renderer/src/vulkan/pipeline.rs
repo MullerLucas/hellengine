@@ -1,28 +1,28 @@
 use ash::vk;
 
-use super::buffer::UniformData;
+use super::buffer::VulkanUniformData;
 use super::config;
-use super::render_pass::RenderPassData;
-use super::shader::Shader;
+use super::render_pass::VulkanRenderPassData;
+use super::shader::VulkanShader;
 use super::vertext::VertexInfo;
-use super::vulkan_core::Core;
+use super::vulkan_core::VulkanCore;
 
 
 
-pub struct GraphicsPipeline {
+pub struct VulkanGraphicsPipeline {
     pub pipeline_layout: vk::PipelineLayout,
     pub pipeline: vk::Pipeline,
 }
 
-impl GraphicsPipeline {
+impl VulkanGraphicsPipeline {
     // TODO: error handling
-    pub fn new(core: &Core, render_pass_data: &RenderPassData, unfirom_data: &UniformData) -> Self {
+    pub fn new(core: &VulkanCore, render_pass_data: &VulkanRenderPassData, unfirom_data: &VulkanUniformData) -> Self {
         let device = &core.device.device;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 
         // let render_pass_data = VulkanRenderPassData::new(core);
 
-        let shader = Shader::new(&core.device.device, config::VERT_SHADER_PATH, config::FRAG_SHADER_PATH);
+        let shader = VulkanShader::new(&core.device.device, config::VERT_SHADER_PATH, config::FRAG_SHADER_PATH);
         let shader_stages = shader.get_stage_create_infos();
 
         let vertex_info = VertexInfo::new();
@@ -79,7 +79,7 @@ impl GraphicsPipeline {
     // }
 }
 
-impl GraphicsPipeline {
+impl VulkanGraphicsPipeline {
     pub fn drop_manual(&self, device: &ash::Device) {
         println!("> dropping GraphicsPipeline...");
 

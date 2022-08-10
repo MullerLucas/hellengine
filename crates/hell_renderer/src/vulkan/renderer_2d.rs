@@ -1,13 +1,13 @@
 use ash::vk;
 use hell_common::window::HellWindowExtent;
 
-use super::buffer::{Buffer, UniformData};
+use super::buffer::{VulkanBuffer, VulkanUniformData};
 use super::config;
-use super::frame::FrameData;
-use super::pipeline::GraphicsPipeline;
-use super::render_pass::RenderPassData;
+use super::frame::VulkanFrameData;
+use super::pipeline::VulkanGraphicsPipeline;
+use super::render_pass::VulkanRenderPassData;
 use super::vertext::Vertex;
-use super::vulkan_core::Core;
+use super::vulkan_core::VulkanCore;
 
 
 
@@ -23,32 +23,33 @@ pub static INDICES: &[u32] = &[     // u16 is also possible
     2, 3, 0,
 ];
 
-pub struct Renderer2D  {
+pub struct VulkanRenderer2D  {
     pub curr_frame_idx: u32,
-    pub frame_data: Vec<FrameData>,
+    pub frame_data: Vec<VulkanFrameData>,
 
-    pub vertex_buffer: Buffer,
-    pub index_buffer: Buffer,
+    pub vertex_buffer: VulkanBuffer,
+    pub index_buffer: VulkanBuffer,
 
-    pub uniform_data: UniformData,
+    pub uniform_data: VulkanUniformData,
 
-    render_pass_data: RenderPassData,
-    pipeline: GraphicsPipeline,
-    core: Core,
+    render_pass_data: VulkanRenderPassData,
+    pipeline: VulkanGraphicsPipeline,
+    core: VulkanCore,
 }
 
-impl Renderer2D {
-    pub fn new(core: Core) -> Self {
-        let frame_data = FrameData::create_for_frames(&core);
+impl VulkanRenderer2D {
+    // TODO: error handling
+    pub fn new(core: VulkanCore) -> Self {
+        let frame_data = VulkanFrameData::create_for_frames(&core);
 
-        let vertex_buffer = Buffer::from_vertices(&core, VERTICES);
-        let index_buffer = Buffer::from_indices(&core, INDICES);
+        let vertex_buffer = VulkanBuffer::from_vertices(&core, VERTICES);
+        let index_buffer = VulkanBuffer::from_indices(&core, INDICES);
 
         let aspect_ratio = core.swapchain.aspect_ratio();
-        let uniform_data = UniformData::new(&core, aspect_ratio);
+        let uniform_data = VulkanUniformData::new(&core, aspect_ratio);
 
-        let render_pass_data = RenderPassData::new(&core);
-        let pipeline = GraphicsPipeline::new(&core, &render_pass_data, &uniform_data);
+        let render_pass_data = VulkanRenderPassData::new(&core);
+        let pipeline = VulkanGraphicsPipeline::new(&core, &render_pass_data, &uniform_data);
 
 
 
@@ -58,7 +59,6 @@ impl Renderer2D {
 
             vertex_buffer,
             index_buffer,
-
             uniform_data,
 
             pipeline,
@@ -68,7 +68,7 @@ impl Renderer2D {
     }
 }
 
-impl Drop for Renderer2D {
+impl Drop for VulkanRenderer2D {
     fn drop(&mut self) {
         println!("> dropping Renerer2D...");
 
@@ -80,7 +80,6 @@ impl Drop for Renderer2D {
 
         self.vertex_buffer.drop_manual(device);
         self.index_buffer.drop_manual(device);
-
         self.uniform_data.drop_manual(device);
 
         self.render_pass_data.drop_manual(&self.core.device.device);
@@ -88,7 +87,7 @@ impl Drop for Renderer2D {
     }
 }
 
-impl Renderer2D {
+impl VulkanRenderer2D {
     pub fn wait_idle(&self) {
         self.core.wait_device_idle();
     }
@@ -126,11 +125,11 @@ impl Renderer2D {
 
         // delay resetting the fence until we know for sure we will be submitting work with it (not return early)
         frame_data.reset_in_flight_fence(device);
-        frame_data.submit_queue(device, core.device.queues.graphics.vk_queue, &[core.graphics_cmd_pool.get_buffer_for_frame(frame_idx)]);
+        frame_data.submit_queue(device, core.device.queues.graphics.queue, &[core.graphics_cmd_pool.get_buffer_for_frame(frame_idx)]);
 
         // std::thread::sleep(std::time::Duration::from_secs(1));
 
-        let present_result = frame_data.present_queue(core.device.queues.present.vk_queue, &core.swapchain, &[swap_img_idx]);
+        let present_result = frame_data.present_queue(core.device.queues.present.queue, &core.swapchain, &[swap_img_idx]);
 
         // TODO: check
         // do this after queue-present to ensure that the semaphores are in a consistent state - otherwise a signaled semaphore may never be properly waited upon
@@ -143,7 +142,6 @@ impl Renderer2D {
         // println!("RENDERED -FRAME: {} -- {}", self.curr_frame_idx, swap_img_idx);
 
         self.curr_frame_idx = (self.curr_frame_idx + 1) % config::MAX_FRAMES_IN_FLIGHT;
-
 
         is_resized
     }

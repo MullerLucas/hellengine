@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use ash::vk;
 
-use super::surface::Surface;
+use super::surface::VulkanSurface;
 
 
 
@@ -10,12 +10,12 @@ use super::surface::Surface;
 // ----------------------------------------------------------------------------
 
 #[derive(Debug)]
-pub struct QueueFamily {
+pub struct VulkanQueueFamily {
     pub idx: u32,
     pub properties : vk::QueueFamilyProperties,
 }
 
-impl QueueFamily {
+impl VulkanQueueFamily {
     pub fn new(idx: u32, properties: vk::QueueFamilyProperties) -> Self {
         Self { idx, properties }
     }
@@ -27,20 +27,20 @@ impl QueueFamily {
 // queue
 // ----------------------------------------------------------------------------
 
-pub struct Queue {
+pub struct VulkanQueue {
     pub family_idx: u32,
     pub queue_idx: u32,
-    pub vk_queue: vk::Queue,
+    pub queue: vk::Queue,
 }
 
-impl Queue {
+impl VulkanQueue {
     pub fn new(device: &ash::Device, family_idx: u32, queue_idx: u32) -> Self {
         let vk_queue = unsafe { device.get_device_queue(family_idx, queue_idx) };
 
         Self {
             family_idx,
             queue_idx,
-            vk_queue
+            queue: vk_queue
         }
     }
 }
@@ -51,21 +51,21 @@ impl Queue {
 // queues
 // ----------------------------------------------------------------------------
 
-pub struct Queues {
-    pub graphics: Queue,
-    pub present: Queue,
-    pub transfer: Queue,
+pub struct VulkanQueues {
+    pub graphics: VulkanQueue,
+    pub present: VulkanQueue,
+    pub transfer: VulkanQueue,
 }
 
-impl Queues {
-    pub fn from_support(device: &ash::Device, support: &QueueSupport) -> Self {
+impl VulkanQueues {
+    pub fn from_support(device: &ash::Device, support: &VulkanQueueSupport) -> Self {
         let graphics_family = support.graphics_family.as_ref().unwrap();
         let present_family = support.present_family.as_ref().unwrap();
         let transfer_family = support.transfer_family.as_ref().unwrap();
 
-        let graphics_queue = Queue::new(device, graphics_family.idx, 0);
-        let present_queue = Queue::new(device, present_family.idx, 0);
-        let transfer_queue = Queue::new(device, transfer_family.idx, 0);
+        let graphics_queue = VulkanQueue::new(device, graphics_family.idx, 0);
+        let present_queue = VulkanQueue::new(device, present_family.idx, 0);
+        let transfer_queue = VulkanQueue::new(device, transfer_family.idx, 0);
 
         Self {
             graphics: graphics_queue,
@@ -83,25 +83,25 @@ impl Queues {
 // ----------------------------------------------------------------------------
 
 #[derive(Debug, Default)]
-pub struct QueueSupport {
-    pub graphics_family: Option<QueueFamily>,
-    pub present_family: Option<QueueFamily>,
-    pub transfer_family: Option<QueueFamily>,
+pub struct VulkanQueueSupport {
+    pub graphics_family: Option<VulkanQueueFamily>,
+    pub present_family: Option<VulkanQueueFamily>,
+    pub transfer_family: Option<VulkanQueueFamily>,
 }
 
-impl QueueSupport {
-    pub fn new(instance: &ash::Instance, phys_device: vk::PhysicalDevice, surface_data: &Surface) -> Self {
+impl VulkanQueueSupport {
+    pub fn new(instance: &ash::Instance, phys_device: vk::PhysicalDevice, surface_data: &VulkanSurface) -> Self {
         let properties = unsafe { instance.get_physical_device_queue_family_properties(phys_device) };
 
 
-        let mut result = QueueSupport::default();
+        let mut result = VulkanQueueSupport::default();
         for (idx , prop) in properties.into_iter().enumerate() {
             let idx = idx as u32;
 
             if prop.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
-                result.graphics_family = Some(QueueFamily::new(idx, prop));
+                result.graphics_family = Some(VulkanQueueFamily::new(idx, prop));
             } else if prop.queue_flags.contains(vk::QueueFlags::TRANSFER) {
-                result.transfer_family = Some(QueueFamily::new(idx, prop));
+                result.transfer_family = Some(VulkanQueueFamily::new(idx, prop));
             }
 
             if result.present_family.is_none() {
@@ -112,7 +112,7 @@ impl QueueSupport {
                 };
 
                 if present_is_supported {
-                    result.present_family = Some(QueueFamily::new(idx, prop));
+                    result.present_family = Some(VulkanQueueFamily::new(idx, prop));
                 }
             }
 
@@ -125,7 +125,7 @@ impl QueueSupport {
 
 }
 
-impl QueueSupport {
+impl VulkanQueueSupport {
     // TODO:
     pub fn single_queue(&self) -> bool {
         self.graphics_family.as_ref().unwrap().idx == self.present_family.as_ref().unwrap().idx

@@ -6,12 +6,12 @@ use std::{ptr, ffi};
 
 
 
-pub struct DebugData {
+pub struct VulkanDebugData {
     pub debug_utils_loader: ash::extensions::ext::DebugUtils,
     pub debug_messenger: vk::DebugUtilsMessengerEXT,
 }
 
-impl DebugData {
+impl VulkanDebugData {
     pub fn new(entry: &ash::Entry, instance: &ash::Instance) -> Self {
         let debug_utils_loader = ash::extensions::ext::DebugUtils::new(entry, instance);
         let messenger_create_info = populate_debug_messenger_create_info();
@@ -24,7 +24,7 @@ impl DebugData {
     }
 }
 
-impl Drop for DebugData {
+impl Drop for VulkanDebugData {
     fn drop(&mut self) {
         unsafe {
             println!("> dropping DebugData");

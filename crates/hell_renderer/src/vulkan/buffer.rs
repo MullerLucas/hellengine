@@ -1,11 +1,12 @@
 use std::{ptr, mem};
 use ash::vk;
 
-use super::command_buffer::CommandPool;
-use super::config;
-use super::descriptors::DescriptorPool;
+use super::command_buffer::VulkanCommandPool;
+use super::{config, VulkanSampler};
+use super::descriptors::VulkanDescriptorPool;
+use super::image::VulkanTextureImage;
 use super::vertext::Vertex;
-use super::vulkan_core::Core;
+use super::vulkan_core::VulkanCore;
 
 
 
@@ -13,16 +14,16 @@ use super::vulkan_core::Core;
 // buffer
 // ----------------------------------------------------------------------------
 
-pub struct Buffer {
+pub struct VulkanBuffer {
     pub buffer: vk::Buffer,
     pub mem: vk::DeviceMemory,
     pub size: vk::DeviceSize,
 }
 
-impl Buffer {
+impl VulkanBuffer {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        core: &Core, size: vk::DeviceSize, usage: vk::BufferUsageFlags, properties: vk::MemoryPropertyFlags, sharing_mode: vk::SharingMode, queue_family_indices: Option<&[u32]>
+        core: &VulkanCore, size: vk::DeviceSize, usage: vk::BufferUsageFlags, properties: vk::MemoryPropertyFlags, sharing_mode: vk::SharingMode, queue_family_indices: Option<&[u32]>
     ) -> Self {
         let device = &core.device.device;
 
@@ -78,13 +79,13 @@ impl Buffer {
     }
 
     // TODO: error handling
-    pub fn from_vertices(core: &Core, vertices: &[Vertex]) -> Self {
+    pub fn from_vertices(core: &VulkanCore, vertices: &[Vertex]) -> Self {
         let device = &core.device.device;
 
         let buffer_size = std::mem::size_of_val(vertices) as vk::DeviceSize;
         println!("VERT-SIZE: {}", buffer_size);
 
-        let staging_buffer = Buffer::new(
+        let staging_buffer = VulkanBuffer::new(
             core,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
@@ -99,7 +100,7 @@ impl Buffer {
             device.unmap_memory(staging_buffer.mem);
         }
 
-        let device_buffer = Buffer::new(
+        let device_buffer = VulkanBuffer::new(
             core,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
@@ -109,7 +110,7 @@ impl Buffer {
         );
 
         copy_buffer(
-            device, &core.transfer_cmd_pool, core.device.queues.transfer.vk_queue,
+            device, &core.transfer_cmd_pool, core.device.queues.transfer.queue,
             &staging_buffer, &device_buffer
         );
 
@@ -124,12 +125,12 @@ impl Buffer {
         device_buffer
     }
 
-    pub fn from_indices(core: &Core, indices: &[u32]) -> Self {
+    pub fn from_indices(core: &VulkanCore, indices: &[u32]) -> Self {
         let device = &core.device.device;
 
         let buffer_size = mem::size_of_val(indices) as vk::DeviceSize;
 
-        let staging_buffer = Buffer::new(
+        let staging_buffer = VulkanBuffer::new(
             core,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
@@ -144,7 +145,7 @@ impl Buffer {
             device.unmap_memory(staging_buffer.mem);
         }
 
-        let device_buffer = Buffer::new(
+        let device_buffer = VulkanBuffer::new(
             core,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
@@ -153,7 +154,7 @@ impl Buffer {
             Some(&[core.device.queues.graphics.family_idx, core.device.queues.transfer.family_idx])
         );
 
-        copy_buffer(device, &core.transfer_cmd_pool, core.device.queues.transfer.vk_queue, &staging_buffer, &device_buffer);
+        copy_buffer(device, &core.transfer_cmd_pool, core.device.queues.transfer.queue, &staging_buffer, &device_buffer);
 
         unsafe {
             // TODO: implement Drop for VulkanBuffer
@@ -166,20 +167,31 @@ impl Buffer {
         device_buffer
     }
 
-    pub fn from_uniform(core: &Core) -> Self {
-        Buffer::new(
+    pub fn from_uniform(core: &VulkanCore) -> Self {
+        VulkanBuffer::new(
             core,
-            UniformBufferObject::device_size(),
+            VulkanUniformBufferObject::device_size(),
             vk::BufferUsageFlags::UNIFORM_BUFFER,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             vk::SharingMode::EXCLUSIVE,
             None,
         )
     }
+
+    pub fn from_texture_staging(core: &VulkanCore, img_size: u64) -> Self {
+        VulkanBuffer::new(
+            core,
+            img_size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            vk::SharingMode::EXCLUSIVE,
+            None
+        )
+    }
 }
 
 
-impl Buffer {
+impl VulkanBuffer {
     pub fn drop_manual(&self, device: &ash::Device) {
         println!("> dropping Buffer...");
 
@@ -204,7 +216,7 @@ pub fn find_memory_type(instance: &ash::Instance, phys_device: vk::PhysicalDevic
     panic!("failed to find suitable memory-type");
 }
 
-fn copy_buffer(device: &ash::Device, cmd_pool: &CommandPool, queue: vk::Queue, src_buff: &Buffer, dst_buff: &Buffer) {
+fn copy_buffer(device: &ash::Device, cmd_pool: &VulkanCommandPool, queue: vk::Queue, src_buff: &VulkanBuffer, dst_buff: &VulkanBuffer) {
     let command_buffer = cmd_pool.begin_single_time_commands(device);
 
     let copy_region = vk::BufferCopy {
@@ -220,6 +232,36 @@ fn copy_buffer(device: &ash::Device, cmd_pool: &CommandPool, queue: vk::Queue, s
     cmd_pool.end_single_time_commands(device, command_buffer, queue);
 }
 
+pub fn copy_buffer_to_img(core: &VulkanCore, buffer: vk::Buffer, img: vk::Image, width: u32, height: u32) {
+    let device = &core.device.device;
+    let cmd_buffer = core.transfer_cmd_pool.begin_single_time_commands(device);
+
+    let img_subresource = vk::ImageSubresourceLayers::builder()
+        .aspect_mask(vk::ImageAspectFlags::COLOR)
+        .mip_level(0)
+        .base_array_layer(0)
+        .layer_count(1)
+        .build();
+
+    let img_offset = vk::Offset3D { x: 0, y: 0, z: 0 };
+    let img_extent = vk::Extent3D { width, height, depth: 1 };
+
+    let region = vk::BufferImageCopy::builder()
+        .buffer_offset(0)
+        .buffer_row_length(0)
+        .buffer_image_height(0)
+        .image_subresource(img_subresource)
+        .image_offset(img_offset)
+        .image_extent(img_extent)
+        .build();
+
+    unsafe {
+        device.cmd_copy_buffer_to_image(cmd_buffer, buffer, img, vk::ImageLayout::TRANSFER_DST_OPTIMAL, &[region]);
+    }
+
+    core.transfer_cmd_pool.end_single_time_commands(device, cmd_buffer, core.device.queues.transfer.queue);
+}
+
 
 
 
@@ -229,13 +271,13 @@ fn copy_buffer(device: &ash::Device, cmd_pool: &CommandPool, queue: vk::Queue, s
 
 
 #[allow(dead_code)]
-pub struct UniformBufferObject {
+pub struct VulkanUniformBufferObject {
     model: glam::Mat4,
     view: glam::Mat4,
     proj: glam::Mat4,
 }
 
-impl UniformBufferObject {
+impl VulkanUniformBufferObject {
     pub fn device_size() -> vk::DeviceSize {
         std::mem::size_of::<Self>() as vk::DeviceSize
     }
@@ -244,17 +286,21 @@ impl UniformBufferObject {
 
 
 
-pub struct UniformData {
-    pub ubo: UniformBufferObject,
-    pub uniform_buffers_per_frame: Vec<Buffer>,
-    pub descriptor_pool: DescriptorPool
+pub struct VulkanUniformData {
+    pub ubo: VulkanUniformBufferObject,
+    pub uniform_buffers_per_frame: Vec<VulkanBuffer>,
+
+    pub texture: VulkanTextureImage,
+    pub sampler: VulkanSampler,
+
+    pub descriptor_pool: VulkanDescriptorPool
 }
 
-impl UniformData {
-    pub fn new(core: &Core, aspect_ratio: f32) -> Self {
+impl VulkanUniformData {
+    pub fn new(core: &VulkanCore, aspect_ratio: f32) -> Self {
         let device = &core.device.device;
 
-        let ubo = UniformBufferObject {
+        let ubo = VulkanUniformBufferObject {
             model: glam::Mat4::IDENTITY,
             view: glam::Mat4::look_at_rh(glam::vec3(2.0, 2.0, 2.0), glam::vec3(0.0, 0.0, 0.0), glam::vec3(0.0, 0.0, 1.0)),
             proj: {
@@ -267,43 +313,55 @@ impl UniformData {
 
         let uniform_buffers_per_frame: Vec<_> = (0..config::MAX_FRAMES_IN_FLIGHT)
             .into_iter()
-            .map(|_| Buffer::from_uniform(core))
+            .map(|_| VulkanBuffer::from_uniform(core))
             .collect();
 
-        let descriptor_pool = DescriptorPool::new(device, &uniform_buffers_per_frame).unwrap();
+        let texture = VulkanTextureImage::new(core, config::TEXTURE_PATH);
+        let sampler = VulkanSampler::new(core).unwrap();
+
+        let descriptor_pool = VulkanDescriptorPool::new(device, &uniform_buffers_per_frame, &texture, &sampler).unwrap();
 
         Self {
             ubo,
             uniform_buffers_per_frame,
+
+            texture,
+            sampler,
+
             descriptor_pool
         }
     }
 }
 
-impl UniformData {
+impl VulkanUniformData {
     pub fn drop_manual(&self, device: &ash::Device) {
         println!("> dropping UniformData...");
 
         self.uniform_buffers_per_frame.iter().for_each(|b| b.drop_manual(device));
+
+        self.texture.drop_manual(device);
+        self.sampler.drop_manual(device);
+
         self.descriptor_pool.drop_manual(device);
     }
 }
 
 
-impl UniformData {
+impl VulkanUniformData {
     // TODO: error handling
-    pub fn update_uniform_buffer(&mut self, core: &Core, img_idx: usize, delta_time: f32) {
+    pub fn update_uniform_buffer(&mut self, core: &VulkanCore, img_idx: usize, delta_time: f32) {
         let device = &core.device.device;
 
-        let angle = f32::to_radians(90.0) * (delta_time / 2.0);
-        self.ubo.model = glam::Mat4::from_rotation_y(angle);
+        let angle = f32::to_radians(90.0) * (delta_time / 20.0);
+        self.ubo.model = glam::Mat4::from_rotation_z(angle);
+        // self.ubo.model = glam::Mat4::IDENTITY;
 
-        let buff_size = std::mem::size_of::<UniformBufferObject>() as u64;
+        let buff_size = std::mem::size_of::<VulkanUniformBufferObject>() as u64;
         let uniform_buffer = &self.uniform_buffers_per_frame[img_idx];
 
 
         unsafe {
-            let data_ptr = device.map_memory(uniform_buffer.mem, 0, buff_size, vk::MemoryMapFlags::empty()).unwrap() as *mut UniformBufferObject;
+            let data_ptr = device.map_memory(uniform_buffer.mem, 0, buff_size, vk::MemoryMapFlags::empty()).unwrap() as *mut VulkanUniformBufferObject;
             data_ptr.copy_from_nonoverlapping(&self.ubo, 1);
             device.unmap_memory(uniform_buffer.mem);
         }

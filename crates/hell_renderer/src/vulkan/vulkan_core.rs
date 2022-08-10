@@ -1,13 +1,13 @@
 use ash::prelude::VkResult;
 use hell_common::window::{HellSurfaceInfo, HellWindowExtent};
 
-use super::command_buffer::CommandPool;
-use super::debugging::DebugData;
-use super::instance::Instance;
-use super::logic_device::LogicDevice;
-use super::phys_device::PhysDevice;
-use super::surface::Surface;
-use super::swapchain::Swapchain;
+use super::command_buffer::VulkanCommandPool;
+use super::debugging::VulkanDebugData;
+use super::instance::VulkanInstance;
+use super::logic_device::VulkanLogicDevice;
+use super::phys_device::VulkanPhysDevice;
+use super::surface::VulkanSurface;
+use super::swapchain::VulkanSwapchain;
 use super::config;
 
 use crate::vulkan;
@@ -16,36 +16,36 @@ use crate::vulkan;
 
 
 
-pub struct Core {
-    pub debug_data: DebugData,
+pub struct VulkanCore {
+    pub debug_data: VulkanDebugData,
 
-    pub surface: Surface,
+    pub surface: VulkanSurface,
 
-    pub phys_device: PhysDevice,
-    pub device: LogicDevice,
+    pub phys_device: VulkanPhysDevice,
+    pub device: VulkanLogicDevice,
 
-    pub swapchain: Swapchain,
+    pub swapchain: VulkanSwapchain,
 
-    pub graphics_cmd_pool: CommandPool,
-    pub transfer_cmd_pool: CommandPool,
+    pub graphics_cmd_pool: VulkanCommandPool,
+    pub transfer_cmd_pool: VulkanCommandPool,
 
-    pub instance: vulkan::Instance,
+    pub instance: vulkan::VulkanInstance,
 }
 
-impl Core {
+impl VulkanCore {
     pub fn new(surface_info: &HellSurfaceInfo, windwow_extent: &HellWindowExtent) -> VkResult<Self> {
-        let instance = Instance::new(config::APP_NAME);
+        let instance = VulkanInstance::new(config::APP_NAME);
 
-        let debug_data = DebugData::new(&instance.entry, &instance.instance);
+        let debug_data = VulkanDebugData::new(&instance.entry, &instance.instance);
 
-        let surface = Surface::new(&instance.entry, &instance.instance, surface_info);
-        let phys_device = PhysDevice::pick_phys_device(&instance.instance, &surface);
-        let device = LogicDevice::new(&instance.instance, &phys_device);
+        let surface = VulkanSurface::new(&instance.entry, &instance.instance, surface_info);
+        let phys_device = VulkanPhysDevice::pick_phys_device(&instance.instance, &surface);
+        let device = VulkanLogicDevice::new(&instance.instance, &phys_device);
 
-        let graphics_cmd_pool = CommandPool::default_for_graphics(&device);
-        let transfer_cmd_pool = CommandPool::default_for_transfer(&device);
+        let graphics_cmd_pool = VulkanCommandPool::default_for_graphics(&device);
+        let transfer_cmd_pool = VulkanCommandPool::default_for_transfer(&device);
 
-        let swapchain = Swapchain::new(&instance.instance, &phys_device, &device, &surface, windwow_extent.width, windwow_extent.height);
+        let swapchain = VulkanSwapchain::new(&instance.instance, &phys_device, &device, &surface, windwow_extent.width, windwow_extent.height);
 
 
         Ok(Self {
@@ -70,7 +70,7 @@ impl Core {
 
         self.swapchain.drop_manual(&self.device.device);
 
-        let swapchain = Swapchain::new(&self.instance.instance, &self.phys_device, &self.device, &self.surface, window_extent.width, window_extent.height);
+        let swapchain = VulkanSwapchain::new(&self.instance.instance, &self.phys_device, &self.device, &self.surface, window_extent.width, window_extent.height);
         self.swapchain = swapchain;
     }
 
@@ -80,12 +80,12 @@ impl Core {
         println!("> done waiting for the device to be idle...");
     }
 
-    pub fn phys_device(&self) -> &PhysDevice {
+    pub fn phys_device(&self) -> &VulkanPhysDevice {
         &self.phys_device
     }
 }
 
-impl Drop for Core {
+impl Drop for VulkanCore {
     fn drop(&mut self) {
         println!("> dropping Core");
         let device = &self.device.device;

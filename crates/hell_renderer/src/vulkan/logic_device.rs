@@ -3,20 +3,20 @@ use std::{ptr, ffi};
 use ash::vk;
 
 use super::config;
-use super::phys_device::PhysDevice;
-use super::queues::Queues;
+use super::phys_device::VulkanPhysDevice;
+use super::queues::VulkanQueues;
 
 
-pub struct LogicDevice {
+pub struct VulkanLogicDevice {
     pub device: ash::Device,
-    pub queues: Queues,
+    pub queues: VulkanQueues,
 }
 
 
-impl LogicDevice {
+impl VulkanLogicDevice {
     pub fn new(
         instance: &ash::Instance,
-        phys_device: &PhysDevice
+        phys_device: &VulkanPhysDevice
     ) -> Self {
 
         let queue_priorities = [1.0_f32];
@@ -81,7 +81,7 @@ impl LogicDevice {
                 .expect("failed to create logical device")
         };
 
-        let queues = Queues::from_support(&device, &phys_device.queue_support);
+        let queues = VulkanQueues::from_support(&device, &phys_device.queue_support);
 
         Self {
             device,
@@ -90,7 +90,7 @@ impl LogicDevice {
     }
 }
 
-impl Drop for LogicDevice {
+impl Drop for VulkanLogicDevice {
     fn drop(&mut self) {
         println!("> dropping LogicDevice...");
 
@@ -101,7 +101,7 @@ impl Drop for LogicDevice {
     }
 }
 
-impl LogicDevice {
+impl VulkanLogicDevice {
     // TODO: error handling
     pub fn wait_idle(&self) {
         unsafe {

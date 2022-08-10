@@ -4,7 +4,7 @@ use hell_renderer::vulkan;
 
 
 pub struct HellApp {
-    renderer_2d: vulkan::Renderer2D,
+    renderer_2d: vulkan::VulkanRenderer2D,
 }
 
 
@@ -13,8 +13,8 @@ impl HellApp {
     pub fn new(window: &dyn HellWindow) -> Self {
         let surface_info = window.create_surface_info();
         let window_extent = window.get_window_extent();
-        let core = vulkan::Core::new(&surface_info, &window_extent).unwrap();
-        let renderer_2d = vulkan::Renderer2D::new(core);
+        let core = vulkan::VulkanCore::new(&surface_info, &window_extent).unwrap();
+        let renderer_2d = vulkan::VulkanRenderer2D::new(core);
 
         Self {
             renderer_2d,
