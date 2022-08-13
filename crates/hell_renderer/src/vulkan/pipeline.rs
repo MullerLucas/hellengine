@@ -34,8 +34,7 @@ impl VulkanGraphicsPipeline {
 
         let rasterization_info = create_pipeline_rasterization_data();
         let multisample_state_info = create_multisample_state_date(sample_count);
-        let stencil_state = create_stencil_state_data();
-        let depth_stencil_info = create_pipeline_depth_stencil_data(stencil_state);
+        let depth_stencil_info = create_pipeline_depth_stencil_data();
 
         let color_blend_attachments = [create_color_blend_attachment()];
         let color_blend_info = create_pipeline_blend_data(&color_blend_attachments);
@@ -73,10 +72,6 @@ impl VulkanGraphicsPipeline {
             pipeline,
         }
     }
-
-    // pub fn recreate_framebuffer(&mut self, core: &VulkanCore) {
-    //     self.render_pass_data.recreate_framebuffer(core);
-    // }
 }
 
 impl VulkanGraphicsPipeline {
@@ -119,28 +114,18 @@ fn create_multisample_state_date(sample_count: vk::SampleCountFlags) -> vk::Pipe
         .build()
 }
 
-fn create_stencil_state_data() -> vk::StencilOpState {
-    vk::StencilOpState {
-        fail_op: vk::StencilOp::KEEP,
-        pass_op: vk::StencilOp::KEEP,
-        depth_fail_op: vk::StencilOp::KEEP,
-        compare_op: vk::CompareOp::ALWAYS,
-        compare_mask: 0,
-        write_mask: 0,
-        reference: 0,
-    }
-}
-
-fn create_pipeline_depth_stencil_data(stencil_state: vk::StencilOpState) -> vk::PipelineDepthStencilStateCreateInfo {
+fn create_pipeline_depth_stencil_data() -> vk::PipelineDepthStencilStateCreateInfo {
     vk::PipelineDepthStencilStateCreateInfo::builder()
-        .depth_test_enable(false)
-        .depth_write_enable(false)
+        .depth_test_enable(true)
+        .depth_write_enable(true)
+        .depth_compare_op(vk::CompareOp::LESS)
+        // only keep fragments that fall in a specific range
         .depth_bounds_test_enable(false)
-        .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL)
-        .front(stencil_state)
-        .back(stencil_state)
         .min_depth_bounds(0.0)
         .max_depth_bounds(1.0)
+        .stencil_test_enable(false)
+        .front(vk::StencilOpState::default())
+        .back(vk::StencilOpState::default())
         .build()
 }
 

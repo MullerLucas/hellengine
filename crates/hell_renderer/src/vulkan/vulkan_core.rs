@@ -79,10 +79,6 @@ impl VulkanCore {
         self.device.wait_idle();
         println!("> done waiting for the device to be idle...");
     }
-
-    pub fn phys_device(&self) -> &VulkanPhysDevice {
-        &self.phys_device
-    }
 }
 
 impl Drop for VulkanCore {

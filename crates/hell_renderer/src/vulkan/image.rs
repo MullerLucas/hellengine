@@ -2,6 +2,7 @@ use ash::vk;
 use std::{cmp, ptr};
 
 use super::buffer::copy_buffer_to_img;
+use super::phys_device::has_stencil_component;
 use super::vulkan_core::VulkanCore;
 use super::{buffer, VulkanBuffer, VulkanCommandPool, VulkanQueue};
 
@@ -193,11 +194,11 @@ pub fn create_img_view(
     }
 }
 
-fn transition_image_layout(device: &ash::Device, cmd_pool: &VulkanCommandPool, queue: &VulkanQueue, img: vk::Image, _format: vk::Format, old_layout: vk::ImageLayout, new_layout: vk::ImageLayout) {
+fn transition_image_layout(device: &ash::Device, cmd_pool: &VulkanCommandPool, queue: &VulkanQueue, img: vk::Image, format: vk::Format, old_layout: vk::ImageLayout, new_layout: vk::ImageLayout) {
     let cmd_buffer = cmd_pool.begin_single_time_commands(device);
 
     let subresource_range = vk::ImageSubresourceRange::builder()
-        .aspect_mask(vk::ImageAspectFlags::COLOR)
+        .aspect_mask(determine_aspect_mask(format, new_layout))
         .base_mip_level(0)
         .level_count(1)
         .base_array_layer(0)
@@ -251,6 +252,7 @@ fn transition_image_layout(device: &ash::Device, cmd_pool: &VulkanCommandPool, q
     };
 
 
+
     unsafe {
         device.cmd_pipeline_barrier(
             cmd_buffer,
@@ -266,6 +268,17 @@ fn transition_image_layout(device: &ash::Device, cmd_pool: &VulkanCommandPool, q
     cmd_pool.end_single_time_commands(device, cmd_buffer, queue.queue);
 }
 
+fn determine_aspect_mask(format: vk::Format, layout: vk::ImageLayout) -> vk::ImageAspectFlags {
+    if layout == vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL {
+        if has_stencil_component(format) {
+            vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL
+        } else {
+            vk::ImageAspectFlags::DEPTH
+        }
+    } else {
+        vk::ImageAspectFlags::COLOR
+    }
+}
 
 
 // ------------------------------------------------------------------------------------------------
@@ -361,6 +374,61 @@ impl VulkanTextureImage {
 impl VulkanTextureImage {
     pub fn drop_manual(&self, device: &ash::Device) {
         println!("> dropping VulkanTextureImage");
+
+        self.img.drop_manual(device);
+    }
+}
+
+
+
+// ------------------------------------------------------------------------------------------------
+// image
+// ------------------------------------------------------------------------------------------------
+
+pub struct DepthImage {
+    pub img: VulkanImage,
+}
+
+impl DepthImage {
+    pub fn new(core: &VulkanCore) -> Self {
+        let depth_format = core.phys_device.depth_format;
+
+        let extent = core.swapchain.extent;
+
+        let img = VulkanImage::new(
+            core,
+            extent.width,
+            extent.height,
+            Some(1),
+            vk::SampleCountFlags::TYPE_1,
+            depth_format,
+            vk::ImageTiling::OPTIMAL,
+            vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            vk::ImageAspectFlags::DEPTH
+        );
+
+        // Not required: Layout will be transitioned in the renderpass
+        transition_image_layout(
+            &core.device.device,
+            &core.graphics_cmd_pool,
+            &core.device.queues.graphics,
+            img.img,
+            depth_format,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        );
+
+
+        Self {
+            img
+        }
+    }
+}
+
+impl DepthImage {
+    pub fn drop_manual(&self, device: &ash::Device) {
+        println!("> dropping DepthImage...");
 
         self.img.drop_manual(device);
     }

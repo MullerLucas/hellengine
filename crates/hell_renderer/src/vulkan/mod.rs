@@ -26,6 +26,7 @@ mod render_pass;
 pub use render_pass::{VulkanRenderPass, VulkanRenderPassData};
 
 mod image;
+pub use crate::vulkan::image::DepthImage;
 
 mod buffer;
 pub use buffer::VulkanBuffer;

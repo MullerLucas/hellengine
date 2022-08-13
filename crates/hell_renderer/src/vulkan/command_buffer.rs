@@ -177,6 +177,10 @@ impl VulkanCommandPool {
             vk::ClearValue {
                 color: vk::ClearColorValue { float32: config::CLEAR_COLOR }
             },
+            vk::ClearValue {
+                // range of depth: [0, 1]
+                depth_stencil: vk::ClearDepthStencilValue{ depth: 1.0, stencil: 0 }
+            }
         ];
 
         let render_area = vk::Rect2D {

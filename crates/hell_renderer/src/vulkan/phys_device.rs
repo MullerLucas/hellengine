@@ -233,29 +233,6 @@ fn find_depth_format(instance: &ash::Instance, phys_device: vk::PhysicalDevice) 
     )
 }
 
-
-// pub fn _get_max_useable_sample_count(
-//     instance: &ash::Instance,
-//     phys_device: vk::PhysicalDevice,
-// ) -> vk::SampleCountFlags {
-//     let phys_device_props = unsafe { instance.get_physical_device_properties(phys_device) };
-//
-//     let counts = phys_device_props.limits.framebuffer_color_sample_counts
-//         & phys_device_props.limits.framebuffer_depth_sample_counts;
-//
-//     if counts.contains(vk::SampleCountFlags::TYPE_64) {
-//         vk::SampleCountFlags::TYPE_64
-//     } else if counts.contains(vk::SampleCountFlags::TYPE_32) {
-//         vk::SampleCountFlags::TYPE_32
-//     } else if counts.contains(vk::SampleCountFlags::TYPE_16) {
-//         vk::SampleCountFlags::TYPE_16
-//     } else if counts.contains(vk::SampleCountFlags::TYPE_8) {
-//         vk::SampleCountFlags::TYPE_8
-//     } else if counts.contains(vk::SampleCountFlags::TYPE_4) {
-//         vk::SampleCountFlags::TYPE_4
-//     } else if counts.contains(vk::SampleCountFlags::TYPE_2) {
-//         vk::SampleCountFlags::TYPE_2
-//     } else {
-//         vk::SampleCountFlags::TYPE_1
-//     }
-// }
+pub fn has_stencil_component(format: vk::Format) -> bool {
+    format == vk::Format::D32_SFLOAT_S8_UINT || format == vk::Format::D24_UNORM_S8_UINT
+}
