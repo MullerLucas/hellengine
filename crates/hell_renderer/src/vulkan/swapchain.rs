@@ -1,4 +1,3 @@
-use std::ptr;
 use ash::prelude::VkResult;
 use ash::vk;
 
@@ -122,8 +121,8 @@ pub struct VulkanSwapchain {
     pub swapchain_loader: ash::extensions::khr::Swapchain,
     pub swapchain_support: VulkanSwapchainSupport,
 
-    pub _imgs: Vec<vk::Image>,
-    pub img_views: Vec<vk::ImageView>,
+    pub imgs: Vec<vk::Image>,
+    pub views: Vec<vk::ImageView>,
 
     pub surface_format: vk::SurfaceFormatKHR,
     pub extent: vk::Extent2D,
@@ -131,6 +130,8 @@ pub struct VulkanSwapchain {
     pub viewport: [vk::Viewport; 1],
     pub sissor: [vk::Rect2D; 1],
 }
+
+
 
 
 impl VulkanSwapchain {
@@ -146,56 +147,46 @@ impl VulkanSwapchain {
         let queue_indices: Vec<_> = phys_device.queue_support.indices().into_iter().collect();
 
 
-        let create_info = vk::SwapchainCreateInfoKHR {
-            s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
-            p_next: ptr::null(),
-            flags: vk::SwapchainCreateFlagsKHR::empty(),
-            surface: surface.surface,
-            min_image_count: swap_img_count,
-            image_format: surface_format.format,
-            image_color_space: surface_format.color_space,
-            image_extent: extent,
-            image_array_layers: 1,  // always 1, unless for stereoscopic 3D applications
-            image_usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,     // directly render to the images in the swap-chain
-
-            image_sharing_mode: if is_single_queue { vk::SharingMode::EXCLUSIVE } else { vk::SharingMode::CONCURRENT },
-            queue_family_index_count: if is_single_queue { 0 } else { 2 },
-            p_queue_family_indices: if is_single_queue { ptr::null() } else { queue_indices.as_ptr() },
-
-            pre_transform: swapchain_support.capabilities.current_transform,
-            composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE, // blend with other windows in the window system?
-            present_mode: swap_present_mode,
-            clipped: vk::TRUE, // ignore color of pixels, that are obscured by other windows
-            old_swapchain: vk::SwapchainKHR::null(),
-        };
+        let create_info = vk::SwapchainCreateInfoKHR::builder()
+            .surface(surface.surface)
+            .min_image_count(swap_img_count)
+            .image_format(surface_format.format)
+            .image_color_space(surface_format.color_space)
+            .image_extent(extent)
+            .image_array_layers(1)  // always 1, unless for stereoscopic 3D application
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)     // directly render to the images in the swap-chain
+            .image_sharing_mode(if is_single_queue { vk::SharingMode::EXCLUSIVE } else { vk::SharingMode::CONCURRENT })
+            .queue_family_indices(if is_single_queue { &[] } else { &queue_indices })
+            .pre_transform(swapchain_support.capabilities.current_transform)
+            .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE) // blend with other windows in the window system?
+            .present_mode(swap_present_mode)
+            .clipped(true) // ignore color of pixels, that are obscured by other windows
+            .old_swapchain(vk::SwapchainKHR::null())
+            .build();
 
         let swapchain_loader = ash::extensions::khr::Swapchain::new(instance, &device.device);
-        let swapchain = unsafe {
-            swapchain_loader
-                .create_swapchain(&create_info, None)
-                .expect("failed to create swapchain")
-        };
+        let swapchain = unsafe { swapchain_loader .create_swapchain(&create_info, None) .expect("failed to create swapchain") };
 
         let imgs = unsafe { swapchain_loader.get_swapchain_images(swapchain).unwrap() };
-        let img_views = image::create_img_views(&device.device, &imgs, 1, surface_format.format, vk::ImageAspectFlags::COLOR);
+        let views = image::create_img_views(&device.device, &imgs, surface_format.format, vk::ImageAspectFlags::COLOR);
 
-        // panic!("TEST: {:?}", extent);
+        let viewport = [
+            vk::Viewport {
+                x: 0.0,
+                y: 0.0,
+                width: extent.width as f32,
+                height: extent.height as f32,
+                min_depth: 0.0,
+                max_depth: 1.0,
+            }
+        ];
 
-
-        let viewport = [vk::Viewport {
-            x: 0.0,
-            y: 0.0,
-            width: extent.width as f32,
-            height: extent.height as f32,
-            min_depth: 0.0,
-            max_depth: 1.0,
-        }];
-
-        let sissor = [vk::Rect2D {
-            offset: vk::Offset2D { x: 0, y: 0 },
-            extent
-        }];
-
+        let sissor = [
+            vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent
+            }
+        ];
 
         println!("swapchain created with {} images...", imgs.len());
 
@@ -203,8 +194,9 @@ impl VulkanSwapchain {
             vk_swapchain: swapchain,
             swapchain_loader,
             swapchain_support,
-            _imgs: imgs,
-            img_views,
+
+            imgs,
+            views,
 
             surface_format,
             extent,
@@ -221,7 +213,7 @@ impl VulkanSwapchain {
         println!("> dropping Swapchain...");
 
         unsafe {
-            self.img_views.iter().for_each(|&v| {
+            self.views.iter().for_each(|&v| {
                 device.destroy_image_view(v, None);
             });
             // cleans up all swapchain images

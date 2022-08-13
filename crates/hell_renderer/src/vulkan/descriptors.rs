@@ -2,8 +2,10 @@ use ash::prelude::VkResult;
 use ash::vk;
 
 use super::buffer::VulkanUniformBufferObject;
-use super::image::VulkanTextureImage;
+use super::image::TextureImage;
 use super::{config, VulkanBuffer, VulkanSampler};
+
+
 
 
 
@@ -69,7 +71,7 @@ pub struct VulkanDescriptorPool {
 }
 
 impl VulkanDescriptorPool {
-    pub fn new(device: &ash::Device, uniform_buffer: &[VulkanBuffer], texture: &VulkanTextureImage, sampler: &VulkanSampler) -> VkResult<Self> {
+    pub fn new(device: &ash::Device, uniform_buffer: &[VulkanBuffer], texture: &TextureImage, sampler: &VulkanSampler) -> VkResult<Self> {
         let layout = VulkanDescriptorSetLayout::new(device)?;
 
         let pool_sizes = [
@@ -115,7 +117,7 @@ impl VulkanDescriptorPool {
 
 
 
-fn create_descriptor_sets(device: &ash::Device, pool: vk::DescriptorPool, layout: vk::DescriptorSetLayout, uniform_buffers: &[VulkanBuffer], texture: &VulkanTextureImage, sampler: &VulkanSampler) -> VkResult<Vec<vk::DescriptorSet>> {
+fn create_descriptor_sets(device: &ash::Device, pool: vk::DescriptorPool, layout: vk::DescriptorSetLayout, uniform_buffers: &[VulkanBuffer], texture: &TextureImage, sampler: &VulkanSampler) -> VkResult<Vec<vk::DescriptorSet>> {
     let layouts = [layout; config::MAX_FRAMES_IN_FLIGHT as usize];
 
     let alloc_info = vk::DescriptorSetAllocateInfo::builder()

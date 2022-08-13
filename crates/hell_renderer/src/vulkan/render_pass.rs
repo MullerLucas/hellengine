@@ -1,7 +1,7 @@
 use ash::vk;
 use super::framebuffer::VulkanFramebuffer;
+use super::image::DepthImage;
 use super::vulkan_core::VulkanCore;
-use crate::vulkan;
 
 
 
@@ -110,19 +110,19 @@ impl VulkanRenderPass {
 
 
 pub struct VulkanRenderPassData {
-    pub depth_buffer: vulkan::DepthImage,
+    pub depth_img: DepthImage,
     pub render_pass: VulkanRenderPass,
     pub framebuffer: VulkanFramebuffer,
 }
 
 impl VulkanRenderPassData {
     pub fn new(core: &VulkanCore) -> Self {
-        let depth_buffer = vulkan::DepthImage::new(core);
+        let depth_img = DepthImage::new(core);
         let render_pass = VulkanRenderPass::new(core);
-        let framebuffer = VulkanFramebuffer::new(&core.device.device, &core.swapchain, &render_pass, &depth_buffer);
+        let framebuffer = VulkanFramebuffer::new(&core.device.device, &core.swapchain, &render_pass, &depth_img);
 
         Self {
-            depth_buffer,
+            depth_img,
             render_pass,
             framebuffer,
         }
@@ -131,8 +131,8 @@ impl VulkanRenderPassData {
     pub fn recreate_framebuffer(&mut self, core: &VulkanCore) {
         self.drop_before_recreate(&core.device.device);
 
-        self.depth_buffer = vulkan::DepthImage::new(core);
-        self.framebuffer = VulkanFramebuffer::new(&core.device.device, &core.swapchain, &self.render_pass, &self.depth_buffer);
+        self.depth_img = DepthImage::new(core);
+        self.framebuffer = VulkanFramebuffer::new(&core.device.device, &core.swapchain, &self.render_pass, &self.depth_img);
     }
 }
 
@@ -140,7 +140,7 @@ impl VulkanRenderPassData {
     pub fn drop_manual(&self, device: &ash::Device) {
         println!("> dropping RenderPassData...");
 
-        self.depth_buffer.drop_manual(device);
+        self.depth_img.drop_manual(device);
         self.framebuffer.drop_manual(device);
         self.render_pass.drop_manual(device);
     }
@@ -148,7 +148,7 @@ impl VulkanRenderPassData {
     pub fn drop_before_recreate(&self, device: &ash::Device) {
         println!("> dropping RenderPassData before recreate...");
 
-        self.depth_buffer.drop_manual(device);
+        self.depth_img.drop_manual(device);
         self.framebuffer.drop_manual(device);
     }
 }

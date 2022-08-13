@@ -4,7 +4,7 @@ use ash::vk;
 use super::command_buffer::VulkanCommandPool;
 use super::{config, VulkanSampler};
 use super::descriptors::VulkanDescriptorPool;
-use super::image::VulkanTextureImage;
+use super::image::TextureImage;
 use super::vertext::Vertex;
 use super::vulkan_core::VulkanCore;
 
@@ -290,7 +290,7 @@ pub struct VulkanUniformData {
     pub ubo: VulkanUniformBufferObject,
     pub uniform_buffers_per_frame: Vec<VulkanBuffer>,
 
-    pub texture: VulkanTextureImage,
+    pub texture: TextureImage,
     pub sampler: VulkanSampler,
 
     pub descriptor_pool: VulkanDescriptorPool
@@ -316,7 +316,7 @@ impl VulkanUniformData {
             .map(|_| VulkanBuffer::from_uniform(core))
             .collect();
 
-        let texture = VulkanTextureImage::new(core, config::TEXTURE_PATH);
+        let texture = TextureImage::new(core, config::TEXTURE_PATH);
         let sampler = VulkanSampler::new(core).unwrap();
 
         let descriptor_pool = VulkanDescriptorPool::new(device, &uniform_buffers_per_frame, &texture, &sampler).unwrap();

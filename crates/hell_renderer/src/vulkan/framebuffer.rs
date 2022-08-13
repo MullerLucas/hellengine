@@ -1,9 +1,9 @@
 use ash::vk;
 
 use super::config;
+use super::image::DepthImage;
 use super::render_pass::VulkanRenderPass;
 use super::swapchain::VulkanSwapchain;
-use crate::vulkan;
 
 
 
@@ -17,10 +17,10 @@ impl VulkanFramebuffer {
         device: &ash::Device,
         swapchain: &VulkanSwapchain,
         render_pass: &VulkanRenderPass,
-        depth_buffer: &vulkan::DepthImage,
+        depth_buffer: &DepthImage,
     ) -> Self {
 
-        let buffers = swapchain.img_views
+        let buffers = swapchain.views
             .iter()
             .map(|sv| {
                 // only a single subpass is running at the same time, so we can reuse the same depth-buffer for all frames in flight
