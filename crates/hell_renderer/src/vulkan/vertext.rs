@@ -1,20 +1,21 @@
 use std::mem;
 
 use ash::vk;
+use hell_math::{Vec4, Vec2};
 use memoffset::offset_of;
 
 pub struct Vertex {
-    pub pos: glam::Vec4,
-    pub color: glam::Vec4,
-    pub tex_coord: glam::Vec2,
+    pub pos: Vec4,
+    pub color: Vec4,
+    pub tex_coord: Vec2,
 }
 
 impl Vertex {
     pub const fn from_arrays(pos: [f32; 4], color: [f32; 4], tex_coord: [f32; 2]) -> Self {
         Self {
-            pos: glam::Vec4::from_array(pos),
-            color: glam::Vec4::from_array(color),
-            tex_coord: glam::Vec2::from_array(tex_coord)
+            pos: Vec4::from_array(pos),
+            color: Vec4::from_array(color),
+            tex_coord: Vec2::from_array(tex_coord)
         }
     }
 }

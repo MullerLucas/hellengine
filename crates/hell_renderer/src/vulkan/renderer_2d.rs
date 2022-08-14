@@ -16,19 +16,17 @@ static VERTICES: &[Vertex] = &[
     Vertex::from_arrays([ 1.0, -1.0,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0]),
     Vertex::from_arrays([ 1.0,  1.0,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 1.0]),
     Vertex::from_arrays([-1.0,  1.0,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
-
-    Vertex::from_arrays([-1.0, -1.0,  -0.5, 1.0], [1.0, 0.0, 0.0, 1.0], [1.0, 0.0]),
-    Vertex::from_arrays([ 1.0, -1.0,  -0.5, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0]),
-    Vertex::from_arrays([ 1.0,  1.0,  -0.5, 1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 1.0]),
-    Vertex::from_arrays([-1.0,  1.0,  -0.5, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
 ];
+// static VERTICES: &[Vertex] = &[
+//     Vertex::from_arrays([-100.0, -100.0,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [1.0, 0.0]),
+//     Vertex::from_arrays([ 100.0, -100.0,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0]),
+//     Vertex::from_arrays([ 100.0,  100.0,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 1.0]),
+//     Vertex::from_arrays([-100.0,  100.0,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
+// ];
 
 pub static INDICES: &[u32] = &[     // u16 is also possible
     0, 1, 2,
     2, 3, 0,
-
-    4, 5, 6,
-    6, 7, 4
 ];
 
 pub struct VulkanRenderer2D  {
@@ -53,8 +51,8 @@ impl VulkanRenderer2D {
         let vertex_buffer = VulkanBuffer::from_vertices(&core, VERTICES);
         let index_buffer = VulkanBuffer::from_indices(&core, INDICES);
 
-        let aspect_ratio = core.swapchain.aspect_ratio();
-        let uniform_data = VulkanUniformData::new(&core, aspect_ratio);
+        // let aspect_ratio = core.swapchain.aspect_ratio();
+        let uniform_data = VulkanUniformData::new(&core);
 
         let render_pass_data = VulkanRenderPassData::new(&core);
         let pipeline = VulkanGraphicsPipeline::new(&core, &render_pass_data, &uniform_data);
@@ -135,8 +133,6 @@ impl VulkanRenderer2D {
         frame_data.reset_in_flight_fence(device);
         frame_data.submit_queue(device, core.device.queues.graphics.queue, &[core.graphics_cmd_pool.get_buffer_for_frame(frame_idx)]);
 
-        // std::thread::sleep(std::time::Duration::from_secs(1));
-
         let present_result = frame_data.present_queue(core.device.queues.present.queue, &core.swapchain, &[swap_img_idx]);
 
         // TODO: check
@@ -146,8 +142,6 @@ impl VulkanRenderer2D {
             Err(vk::Result::ERROR_OUT_OF_DATE_KHR | vk::Result::SUBOPTIMAL_KHR)  => { true },
             _ => { panic!("failed to aquire next image") }
         };
-
-        // println!("RENDERED -FRAME: {} -- {}", self.curr_frame_idx, swap_img_idx);
 
         self.curr_frame_idx = (self.curr_frame_idx + 1) % config::MAX_FRAMES_IN_FLIGHT;
 

@@ -144,10 +144,7 @@ impl VulkanCommandPool {
     // TODO: error handling
     pub fn reset_cmd_buffer(&self, device: &ash::Device, curr_frame: usize) {
         unsafe {
-            device.reset_command_buffer(
-                self.cmd_buffers[curr_frame], vk::CommandBufferResetFlags::empty()
-            )
-            .unwrap()
+            device.reset_command_buffer(self.cmd_buffers[curr_frame], vk::CommandBufferResetFlags::empty()) .unwrap()
         }
     }
 

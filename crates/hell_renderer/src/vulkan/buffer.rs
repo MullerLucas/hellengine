@@ -1,5 +1,6 @@
 use std::{ptr, mem};
 use ash::vk;
+use hell_math::{Vec3, Mat4};
 
 use super::command_buffer::VulkanCommandPool;
 use super::{config, VulkanSampler};
@@ -272,9 +273,9 @@ pub fn copy_buffer_to_img(core: &VulkanCore, buffer: vk::Buffer, img: vk::Image,
 
 #[allow(dead_code)]
 pub struct VulkanUniformBufferObject {
-    model: glam::Mat4,
+    model: Mat4,
     view: glam::Mat4,
-    proj: glam::Mat4,
+    proj: Mat4,
 }
 
 impl VulkanUniformBufferObject {
@@ -297,18 +298,19 @@ pub struct VulkanUniformData {
 }
 
 impl VulkanUniformData {
-    pub fn new(core: &VulkanCore, aspect_ratio: f32) -> Self {
+    pub fn new(core: &VulkanCore) -> Self {
         let device = &core.device.device;
 
+        let aspect_ratio = core.swapchain.aspect_ratio();
+
         let ubo = VulkanUniformBufferObject {
-            model: glam::Mat4::IDENTITY,
-            view: glam::Mat4::look_at_rh(glam::vec3(2.0, 2.0, 2.0), glam::vec3(0.0, 0.0, 0.0), glam::vec3(0.0, 0.0, 1.0)),
-            proj: {
-                // opengl -> y coord of the clip coords is inverted -> flip sign of scaling factor of the y-axis in the proj-matrix
-                let mut proj = glam::Mat4::perspective_rh(f32::to_radians(90.0), aspect_ratio, 0.1, 10.0);
-                proj.y_axis.y *= -1.0;
-                proj
-            }
+            model: Mat4::IDENTITY
+                .scale(&[0.5, 0.5, 0.5])
+                .rotate(&Vec3::new(0.0, 0.0, -1.0), 45f32),
+            // model: glam::Mat4::from_scale(glam::Vec3::new(1.0, 1.0, 1.0)),
+            view: glam::Mat4::look_at_rh(glam::Vec3::new(0.0, 0.0, 2.0), glam::Vec3::new(0.0, 0.0, 0.0), glam::Vec3::new(0.0, 1.0, 0.0)),
+            // opengl -> y coord of the clip coords is inverted -> flip sign of scaling factor of the y-axis in the proj-matrix
+            proj: Mat4::from_perspective_rh(90.0, aspect_ratio, 0.1, 10.0),
         };
 
         let uniform_buffers_per_frame: Vec<_> = (0..config::MAX_FRAMES_IN_FLIGHT)
@@ -352,8 +354,8 @@ impl VulkanUniformData {
     pub fn update_uniform_buffer(&mut self, core: &VulkanCore, img_idx: usize, delta_time: f32) {
         let device = &core.device.device;
 
-        let angle = f32::to_radians(90.0) * (delta_time / 20.0);
-        self.ubo.model = glam::Mat4::from_rotation_z(angle);
+        // let angle = f32::to_radians(90.0) * (delta_time / 20.0);
+        // self.ubo.model = glam::Mat4::from_rotation_z(angle);
         // self.ubo.model = glam::Mat4::IDENTITY;
 
         let buff_size = std::mem::size_of::<VulkanUniformBufferObject>() as u64;
