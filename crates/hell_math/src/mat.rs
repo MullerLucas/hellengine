@@ -1,8 +1,7 @@
-use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Neg, Rem, RemAssign, Index, IndexMut};
-use std::convert::{AsRef, AsMut};
+use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Neg, Index, IndexMut};
 
 use crate::vec::Vec3;
-use crate::{Vec4};
+use crate::Vec4;
 
 
 
@@ -168,7 +167,78 @@ impl_matrix_common!(Mat4: Vec4: f32 => 2: { 0:x, 1:y, 2:z, 3:w });
 impl_matrix_signed!(Mat4: Vec4: f32 => 2: { 0:x, 1:y, 2:z, 3:w });
 
 
+impl Mat4 {
+    pub fn inverse(self) -> Self {
+         let (m00, m01, m02, m03) = self.x.into();
+        let (m10, m11, m12, m13) = self.y.into();
+        let (m20, m21, m22, m23) = self.z.into();
+        let (m30, m31, m32, m33) = self.w.into();
 
+        let coef00 = m22 * m33 - m32 * m23;
+        let coef02 = m12 * m33 - m32 * m13;
+        let coef03 = m12 * m23 - m22 * m13;
+
+        let coef04 = m21 * m33 - m31 * m23;
+        let coef06 = m11 * m33 - m31 * m13;
+        let coef07 = m11 * m23 - m21 * m13;
+
+        let coef08 = m21 * m32 - m31 * m22;
+        let coef10 = m11 * m32 - m31 * m12;
+        let coef11 = m11 * m22 - m21 * m12;
+
+        let coef12 = m20 * m33 - m30 * m23;
+        let coef14 = m10 * m33 - m30 * m13;
+        let coef15 = m10 * m23 - m20 * m13;
+
+        let coef16 = m20 * m32 - m30 * m22;
+        let coef18 = m10 * m32 - m30 * m12;
+        let coef19 = m10 * m22 - m20 * m12;
+
+        let coef20 = m20 * m31 - m30 * m21;
+        let coef22 = m10 * m31 - m30 * m11;
+        let coef23 = m10 * m21 - m20 * m11;
+
+        let fac0 = Vec4::new(coef00, coef00, coef02, coef03);
+        let fac1 = Vec4::new(coef04, coef04, coef06, coef07);
+        let fac2 = Vec4::new(coef08, coef08, coef10, coef11);
+        let fac3 = Vec4::new(coef12, coef12, coef14, coef15);
+        let fac4 = Vec4::new(coef16, coef16, coef18, coef19);
+        let fac5 = Vec4::new(coef20, coef20, coef22, coef23);
+
+        let vec0 = Vec4::new(m10, m00, m00, m00);
+        let vec1 = Vec4::new(m11, m01, m01, m01);
+        let vec2 = Vec4::new(m12, m02, m02, m02);
+        let vec3 = Vec4::new(m13, m03, m03, m03);
+
+        let inv0 = vec1.mul(fac0).sub(vec2.mul(fac1)).add(vec3.mul(fac2));
+        let inv1 = vec0.mul(fac0).sub(vec2.mul(fac3)).add(vec3.mul(fac4));
+        let inv2 = vec0.mul(fac1).sub(vec1.mul(fac3)).add(vec3.mul(fac5));
+        let inv3 = vec0.mul(fac2).sub(vec1.mul(fac4)).add(vec2.mul(fac5));
+
+        let sign_a = Vec4::new(1.0, -1.0, 1.0, -1.0);
+        let sign_b = Vec4::new(-1.0, 1.0, -1.0, 1.0);
+
+        let inverse = Self::from_cols(
+            inv0.mul(sign_a),
+            inv1.mul(sign_b),
+            inv2.mul(sign_a),
+            inv3.mul(sign_b),
+        );
+
+        let col0 = Vec4::new(
+            inverse.x.x,
+            inverse.y.x,
+            inverse.z.x,
+            inverse.w.x,
+        );
+
+        let dot0 = self.x.mul(col0);
+        let dot1 = dot0.x + dot0.y + dot0.z + dot0.w;
+
+        let rcp_det = dot1.recip();
+        inverse.mul(rcp_det)
+    }
+}
 
 // oder: Mt * Mr * Ms * V
 impl Mat4 {
@@ -186,7 +256,7 @@ impl Mat4 {
         self
     }
 
-    pub fn rotate(mut self, axis: &Vec3, angle: f32) -> Self {
+    pub fn rotate(self, axis: &Vec3, angle: f32) -> Self {
         let cos = angle.cos();
         let one_minus_cos = 1.0 - cos;
         let sin = angle.sin();
@@ -218,7 +288,7 @@ impl Mat4 {
         self * scale_mat
     }
 
-    pub fn translate(mut self, val: Vec3) -> Self {
+    pub fn translate(mut self, val: &Vec3) -> Self {
         let val = Vec4::new(val.x, val.y, val.z, 0.0);
         self.w += val;
         self
@@ -232,7 +302,7 @@ impl Mat4 {
         Self::IDENTITY.rotate(axis, angle)
     }
 
-    pub fn from_translate(val: Vec3) -> Self {
+    pub fn from_translate(val: &Vec3) -> Self {
         Self::IDENTITY.translate(val)
     }
 }
@@ -312,5 +382,25 @@ impl Mat4 {
         );
 
         Self::from_cols(x, y, z, w)
+    }
+}
+
+impl Mat4 {
+    pub fn look_at_rh(pos: &Vec3, direction: &Vec3, up: &Vec3) -> Self {
+        let cam_right = direction.cross(up).unit();
+        let cam_up = cam_right.cross(direction);
+
+        let cam_dir = direction.neg();
+
+        let rotation = Self::from_cols(
+            Vec4::new(cam_right.x, cam_right.y, cam_right.z, 0.0),
+            Vec4::new(cam_up.x, cam_up.y, cam_up.z, 0.0),
+            Vec4::new(cam_dir.x, cam_dir.y, cam_dir.z, 0.0),
+            Vec4::new(0.0, 0.0, 0.0, 1.0)
+        );
+
+        let translation = Self::from_translate(pos);
+
+        (translation * rotation).inverse()
     }
 }

@@ -8,6 +8,7 @@
       <sourceFolder url="file://$MODULE_DIR$/crates/hell_renderer/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/hell_utils/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/hell_winit/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/hell_math/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

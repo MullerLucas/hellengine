@@ -11,5 +11,4 @@ void main() {
     // out_color = in_color;
     // out_color = vec4(in_tex_coord, 0.0, 1.0);
     out_color = texture(texture_sampler, in_tex_coord * 2.0);
-    out_color = vec4(1.0);
 }

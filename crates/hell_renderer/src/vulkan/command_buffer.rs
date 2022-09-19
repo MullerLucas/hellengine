@@ -148,28 +148,13 @@ impl VulkanCommandPool {
         }
     }
 
-    // TODO: error handling
-    #[allow(clippy::too_many_arguments)]
-    pub fn record_cmd_buffer(
-        &self,
-        core: &VulkanCore,
-        pipeline: &VulkanGraphicsPipeline,
-        render_pass_data: &VulkanRenderPassData,
-        frame_idx: usize,
-        swqp_img_idx: usize,
-        index_count: u32,
-        vertex_buffer: &VulkanBuffer,
-        index_buffer: &VulkanBuffer,
-        uniform_data: &VulkanUniformData,
-    ) {
-
+    pub fn begin_frame_cmd_buffer(&self, core: &VulkanCore, render_pass_data: &VulkanRenderPassData ,frame_idx: usize, swap_img_idx: usize) -> vk::CommandBuffer {
         let begin_info = vk::CommandBufferBeginInfo::default();
         let cmd_buffer = self.cmd_buffers[frame_idx];
         let device = &core.device.device;
 
         unsafe { device.begin_command_buffer(cmd_buffer, &begin_info).unwrap(); }
 
-        // one clear-color per attachment with load-op-clear - order should be identical
         let clear_values = [
             vk::ClearValue {
                 color: vk::ClearColorValue { float32: config::CLEAR_COLOR }
@@ -187,15 +172,64 @@ impl VulkanCommandPool {
 
         let render_pass_info = vk::RenderPassBeginInfo::builder()
             .render_pass(render_pass_data.render_pass.render_pass)
-            .framebuffer(render_pass_data.framebuffer.buffer_at(swqp_img_idx))
+            .framebuffer(render_pass_data.framebuffer.buffer_at(swap_img_idx))
             .clear_values(&clear_values)
             .render_area(render_area)
             .build();
 
+        unsafe { device.cmd_begin_render_pass(cmd_buffer, &render_pass_info, vk::SubpassContents::INLINE); }
 
-        // recorrd commands
+        cmd_buffer
+    }
+
+    // TODO: error handling
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_cmd_buffer(
+        &self,
+        core: &VulkanCore,
+        pipeline: &VulkanGraphicsPipeline,
+        render_pass_data: &VulkanRenderPassData,
+        frame_idx: usize,
+        swqp_img_idx: usize,
+        cmd_buffer: vk::CommandBuffer,
+        vert_index_count: u32,
+        vertex_buffer: &VulkanBuffer,
+        index_buffer: &VulkanBuffer,
+        uniform_data: &VulkanUniformData,
+    ) {
+
+        // let begin_info = vk::CommandBufferBeginInfo::default();
+        // let cmd_buffer = self.cmd_buffers[frame_idx];
+        let device = &core.device.device;
+
+        // unsafe { device.begin_command_buffer(cmd_buffer, &begin_info).unwrap(); }
+
+        // one clear-color per attachment with load-op-clear - order should be identical
+        // let clear_values = [
+        //     vk::ClearValue {
+        //         color: vk::ClearColorValue { float32: config::CLEAR_COLOR }
+        //     },
+        //     vk::ClearValue {
+        //         // range of depth: [0, 1]
+        //         depth_stencil: vk::ClearDepthStencilValue{ depth: 1.0, stencil: 0 }
+        //     }
+        // ];
+        //
+        // let render_area = vk::Rect2D {
+        //     offset: vk::Offset2D::default(),
+        //     extent: core.swapchain.extent
+        // };
+        //
+        // let render_pass_info = vk::RenderPassBeginInfo::builder()
+        //     .render_pass(render_pass_data.render_pass.render_pass)
+        //     .framebuffer(render_pass_data.framebuffer.buffer_at(swqp_img_idx))
+        //     .clear_values(&clear_values)
+        //     .render_area(render_area)
+        //     .build();
+
+
+        // record commands
         unsafe {
-            device.cmd_begin_render_pass(cmd_buffer, &render_pass_info, vk::SubpassContents::INLINE);
 
             device.cmd_bind_pipeline(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
             let vertex_buffers = [vertex_buffer.buffer];
@@ -205,12 +239,23 @@ impl VulkanCommandPool {
             let descriptor_set = [uniform_data.descriptor_pool.sets[frame_idx]];
             device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline_layout, 0, &descriptor_set, &[]);
 
-            device.cmd_draw_indexed(cmd_buffer, index_count, 1, 0, 0, 0);
+            device.cmd_draw_indexed(cmd_buffer, vert_index_count, 1, 0, 0, 0);
 
-            device.cmd_end_render_pass(cmd_buffer);
+            // device.cmd_end_render_pass(cmd_buffer);
         }
 
+        // unsafe {
+        //     device.end_command_buffer(cmd_buffer).unwrap();
+        // }
+    }
+
+    pub fn end_frame_cmd_buffer(&self, core: &VulkanCore, frame_idx: usize) {
+        let cmd_buffer = self.cmd_buffers[frame_idx];
+        let device = &core.device.device;
+
         unsafe {
+            device.cmd_end_render_pass(cmd_buffer);
+
             device.end_command_buffer(cmd_buffer).unwrap();
         }
     }

@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 hell_common = { path = "../hell_common" }
-hell_math = { path = "../hell_math" }
+# hell_math = { path = "../hell_math" }
 hell_utils = { path = "../hell_utils" }
 
 num = "0.4.0"

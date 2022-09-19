@@ -1,6 +1,5 @@
-use std::{ptr, mem};
 use ash::vk;
-use hell_math::{Vec3, Mat4};
+use hell_common::transform::Transform;
 
 use super::command_buffer::VulkanCommandPool;
 use super::{config, VulkanSampler};
@@ -30,13 +29,13 @@ impl VulkanBuffer {
 
         let mut buffer_info = vk::BufferCreateInfo {
             s_type: vk::StructureType::BUFFER_CREATE_INFO,
-            p_next: ptr::null(),
+            p_next: std::ptr::null(),
             flags: Default::default(),
             size,
             usage,
             sharing_mode,
             queue_family_index_count: 0,
-            p_queue_family_indices: ptr::null(),
+            p_queue_family_indices: std::ptr::null(),
         };
 
         if let Some(indices) = queue_family_indices {
@@ -59,7 +58,7 @@ impl VulkanBuffer {
 
         let alloc_info = vk::MemoryAllocateInfo {
             s_type: vk::StructureType::MEMORY_ALLOCATE_INFO,
-            p_next: ptr::null(),
+            p_next: std::ptr::null(),
             allocation_size: mem_requirements.size,
             memory_type_index: mem_type_idx
         };
@@ -129,7 +128,7 @@ impl VulkanBuffer {
     pub fn from_indices(core: &VulkanCore, indices: &[u32]) -> Self {
         let device = &core.device.device;
 
-        let buffer_size = mem::size_of_val(indices) as vk::DeviceSize;
+        let buffer_size = std::mem::size_of_val(indices) as vk::DeviceSize;
 
         let staging_buffer = VulkanBuffer::new(
             core,
@@ -273,9 +272,9 @@ pub fn copy_buffer_to_img(core: &VulkanCore, buffer: vk::Buffer, img: vk::Image,
 
 #[allow(dead_code)]
 pub struct VulkanUniformBufferObject {
-    model: Mat4,
+    model: glam::Mat4,
     view: glam::Mat4,
-    proj: Mat4,
+    proj: glam::Mat4,
 }
 
 impl VulkanUniformBufferObject {
@@ -304,13 +303,13 @@ impl VulkanUniformData {
         let aspect_ratio = core.swapchain.aspect_ratio();
 
         let ubo = VulkanUniformBufferObject {
-            model: Mat4::IDENTITY
-                .scale(&[0.5, 0.5, 0.5])
-                .rotate(&Vec3::new(0.0, 0.0, -1.0), 45f32),
-            // model: glam::Mat4::from_scale(glam::Vec3::new(1.0, 1.0, 1.0)),
+            model: glam::Mat4::from_scale_rotation_translation(
+               glam::Vec3::new(1.0, 1.0, 1.0),
+               glam::Quat::from_rotation_z(45f32.to_radians()),
+               glam::Vec3::new(0.0, 0.0, 0.0),
+           ),
             view: glam::Mat4::look_at_rh(glam::Vec3::new(0.0, 0.0, 2.0), glam::Vec3::new(0.0, 0.0, 0.0), glam::Vec3::new(0.0, 1.0, 0.0)),
-            // opengl -> y coord of the clip coords is inverted -> flip sign of scaling factor of the y-axis in the proj-matrix
-            proj: Mat4::from_perspective_rh(90.0, aspect_ratio, 0.1, 10.0),
+            proj: glam::Mat4::perspective_rh(90.0, aspect_ratio, 0.1, 10.0),
         };
 
         let uniform_buffers_per_frame: Vec<_> = (0..config::MAX_FRAMES_IN_FLIGHT)
@@ -351,19 +350,23 @@ impl VulkanUniformData {
 
 impl VulkanUniformData {
     // TODO: error handling
-    pub fn update_uniform_buffer(&mut self, core: &VulkanCore, img_idx: usize, delta_time: f32) {
+    pub fn update_uniform_buffer(&mut self, core: &VulkanCore, img_idx: usize, delta_time: f32, transform: &Transform) {
         let device = &core.device.device;
 
-        // let angle = f32::to_radians(90.0) * (delta_time / 20.0);
-        // self.ubo.model = glam::Mat4::from_rotation_z(angle);
-        // self.ubo.model = glam::Mat4::IDENTITY;
+        static mut POS: glam::Vec3 = glam::Vec3::new(0.0, 0.0, 0.0);
+        unsafe {
+            POS.x += delta_time * 10.0;
+        }
+
+        self.ubo.model = transform.create_model_mat();
 
         let buff_size = std::mem::size_of::<VulkanUniformBufferObject>() as u64;
         let uniform_buffer = &self.uniform_buffers_per_frame[img_idx];
 
 
         unsafe {
-            let data_ptr = device.map_memory(uniform_buffer.mem, 0, buff_size, vk::MemoryMapFlags::empty()).unwrap() as *mut VulkanUniformBufferObject;
+            let data_ptr = device.map_memory(uniform_buffer.mem, 0, buff_size, vk::MemoryMapFlags::empty())
+                .unwrap() as *mut VulkanUniformBufferObject;
             data_ptr.copy_from_nonoverlapping(&self.ubo, 1);
             device.unmap_memory(uniform_buffer.mem);
         }

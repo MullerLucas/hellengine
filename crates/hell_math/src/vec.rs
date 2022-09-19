@@ -6,6 +6,7 @@ use std::convert::{AsRef, AsMut};
 #[macro_export]
 macro_rules! impl_vector_common {
     ($vec:ident : $scalar:ident => $vec_size:literal : { $($field_idx:literal : $field:ident),+ }) => {
+        #[derive(Clone, Copy)]
         pub struct $vec {
             $(pub $field: $scalar),+
         }
@@ -408,3 +409,25 @@ impl_vector_common!(UVec4: u32 => 4: { 0:x, 1:y, 2:z, 3:w });
 
 
 
+
+impl From<(f32, f32, f32, f32)> for Vec4 {
+    fn from(val: (f32, f32, f32, f32)) -> Self {
+        Self::new(val.0, val.1, val.2, val.3)
+    }
+}
+
+impl From<Vec4> for (f32, f32, f32, f32) {
+    fn from(val: Vec4) -> Self {
+        (val.x, val.y, val.z, val.w)
+    }
+}
+
+impl Vec3 {
+    pub fn cross(&self, rhs: &Self) -> Self {
+        Self::new(
+            (self.y * rhs.z) - (self.z - rhs.y),
+            (self.z * rhs.x) - (self.x - rhs.z),
+            (self.x * rhs.y) - (self.y - rhs.x)
+        )
+    }
+}
