@@ -52,22 +52,20 @@ impl HellApp {
     }
 
     pub fn draw_frame(&mut self, delta_time: f32) -> bool {
-        self.renderer_2d.prepare_draw_frame();
+        // TODO: remove
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+        let delta_time = 0.1;
 
         self.trans_1.scale_uniform(1f32 + delta_time / 5f32);
         self.trans_1.rotate_around_z((delta_time * 30f32).to_radians());
         self.trans_1.translate_x(delta_time);
-
-        self.renderer_2d.uniform_data.update_uniform_buffer(&self.renderer_2d.core, self.renderer_2d.curr_frame_idx as usize, delta_time, &self.trans_1);
-        self.renderer_2d.draw_frame(delta_time);
+        self.renderer_2d.uniform_data.update_uniform_buffer(&self.renderer_2d.core, self.renderer_2d.curr_frame_idx as usize, delta_time, &self.trans_1, 0);
 
         self.trans_2.scale_uniform(1f32 - delta_time / 5f32);
         self.trans_2.rotate_around_z((delta_time * -30f32).to_radians());
         self.trans_2.translate_x(-delta_time);
+        self.renderer_2d.uniform_data.update_uniform_buffer(&self.renderer_2d.core, self.renderer_2d.curr_frame_idx as usize, delta_time, &self.trans_2, 1);
 
-        self.renderer_2d.uniform_data.update_uniform_buffer(&self.renderer_2d.core, self.renderer_2d.curr_frame_idx as usize, delta_time, &self.trans_2);
-        self.renderer_2d.draw_frame(delta_time);
-
-        self.renderer_2d.finish_draw_frame()
+        self.renderer_2d.draw_frame(delta_time)
     }
 }

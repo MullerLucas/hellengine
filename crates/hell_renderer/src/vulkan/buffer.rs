@@ -266,15 +266,25 @@ pub fn copy_buffer_to_img(core: &VulkanCore, buffer: vk::Buffer, img: vk::Image,
 
 
 // ----------------------------------------------------------------------------
+// push-constants
+// ----------------------------------------------------------------------------
+
+#[derive(Debug)]
+pub struct MeshPushConstants {
+    pub data: glam::Vec4,
+    pub render_mat: glam::Mat4,
+}
+
+// ----------------------------------------------------------------------------
 // uniform-buffer
 // ----------------------------------------------------------------------------
 
 
-#[allow(dead_code)]
+#[derive(Clone)]
 pub struct VulkanUniformBufferObject {
-    model: glam::Mat4,
-    view: glam::Mat4,
-    proj: glam::Mat4,
+    pub model: glam::Mat4,
+    pub view: glam::Mat4,
+    pub proj: glam::Mat4,
 }
 
 impl VulkanUniformBufferObject {
@@ -287,7 +297,7 @@ impl VulkanUniformBufferObject {
 
 
 pub struct VulkanUniformData {
-    pub ubo: VulkanUniformBufferObject,
+    pub ubos: Vec<VulkanUniformBufferObject>,
     pub uniform_buffers_per_frame: Vec<VulkanBuffer>,
 
     pub texture: TextureImage,
@@ -322,8 +332,9 @@ impl VulkanUniformData {
 
         let descriptor_pool = VulkanDescriptorPool::new(device, &uniform_buffers_per_frame, &texture, &sampler).unwrap();
 
+        let ubos = vec![ubo.clone(), ubo];
         Self {
-            ubo,
+            ubos,
             uniform_buffers_per_frame,
 
             texture,
@@ -350,7 +361,7 @@ impl VulkanUniformData {
 
 impl VulkanUniformData {
     // TODO: error handling
-    pub fn update_uniform_buffer(&mut self, core: &VulkanCore, img_idx: usize, delta_time: f32, transform: &Transform) {
+    pub fn update_uniform_buffer(&mut self, core: &VulkanCore, img_idx: usize, delta_time: f32, transform: &Transform, ubo_idx: usize) {
         let device = &core.device.device;
 
         static mut POS: glam::Vec3 = glam::Vec3::new(0.0, 0.0, 0.0);
@@ -358,17 +369,18 @@ impl VulkanUniformData {
             POS.x += delta_time * 10.0;
         }
 
-        self.ubo.model = transform.create_model_mat();
+        let mut ubo = self.ubos.get_mut(ubo_idx).unwrap();
+        ubo.model = transform.create_model_mat();
 
-        let buff_size = std::mem::size_of::<VulkanUniformBufferObject>() as u64;
-        let uniform_buffer = &self.uniform_buffers_per_frame[img_idx];
-
-
-        unsafe {
-            let data_ptr = device.map_memory(uniform_buffer.mem, 0, buff_size, vk::MemoryMapFlags::empty())
-                .unwrap() as *mut VulkanUniformBufferObject;
-            data_ptr.copy_from_nonoverlapping(&self.ubo, 1);
-            device.unmap_memory(uniform_buffer.mem);
-        }
+        // let buff_size = std::mem::size_of::<VulkanUniformBufferObject>() as u64;
+        // let uniform_buffer = &self.uniform_buffers_per_frame[img_idx];
+        //
+        //
+        // unsafe {
+        //     let data_ptr = device.map_memory(uniform_buffer.mem, 0, buff_size, vk::MemoryMapFlags::empty())
+        //         .unwrap() as *mut VulkanUniformBufferObject;
+        //     data_ptr.copy_from_nonoverlapping(ubo, 1);
+        //     device.unmap_memory(uniform_buffer.mem);
+        // }
     }
 }

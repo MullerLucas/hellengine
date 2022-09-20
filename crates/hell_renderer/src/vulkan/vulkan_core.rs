@@ -29,7 +29,7 @@ pub struct VulkanCore {
     pub graphics_cmd_pool: VulkanCommandPool,
     pub transfer_cmd_pool: VulkanCommandPool,
 
-    pub instance: vulkan::VulkanInstance,
+    pub instance: VulkanInstance,
 }
 
 impl VulkanCore {

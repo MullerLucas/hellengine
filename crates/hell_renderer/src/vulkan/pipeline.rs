@@ -1,4 +1,5 @@
 use ash::vk;
+use crate::vulkan::buffer::MeshPushConstants;
 
 use super::buffer::VulkanUniformData;
 use super::config;
@@ -40,9 +41,18 @@ impl VulkanGraphicsPipeline {
         let color_blend_info = create_pipeline_blend_data(&color_blend_attachments);
 
         let descriptor_layouts = &[unfirom_data.descriptor_pool.layout.layout];
+
+        let push_constants = [
+            vk::PushConstantRange::builder()
+                .offset(0)
+                .size(std::mem::size_of::<MeshPushConstants>() as u32)
+                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .build()
+        ];
+
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder()
             .set_layouts(descriptor_layouts)
-            .push_constant_ranges(&[])
+            .push_constant_ranges(&push_constants)
             .build();
 
         let pipeline_layout = create_pipeline_layout_data(device, &pipeline_layout_info);
