@@ -59,13 +59,13 @@ impl HellApp {
         self.trans_1.scale_uniform(1f32 + delta_time / 5f32);
         self.trans_1.rotate_around_z((delta_time * 30f32).to_radians());
         self.trans_1.translate_x(delta_time);
-        self.renderer_2d.uniform_data.update_uniform_buffer(&self.renderer_2d.core, self.renderer_2d.curr_frame_idx as usize, delta_time, &self.trans_1, 0);
 
         self.trans_2.scale_uniform(1f32 - delta_time / 5f32);
         self.trans_2.rotate_around_z((delta_time * -30f32).to_radians());
         self.trans_2.translate_x(-delta_time);
-        self.renderer_2d.uniform_data.update_uniform_buffer(&self.renderer_2d.core, self.renderer_2d.curr_frame_idx as usize, delta_time, &self.trans_2, 1);
 
-        self.renderer_2d.draw_frame(delta_time)
+        self.renderer_2d.uniform_data.update_uniform_buffer(&self.renderer_2d.core, self.renderer_2d.curr_frame_idx as usize, delta_time);
+
+        self.renderer_2d.draw_frame(delta_time, &[&self.trans_1, &self.trans_2])
     }
 }

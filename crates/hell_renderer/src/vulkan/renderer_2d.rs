@@ -1,4 +1,5 @@
 use ash::vk;
+use hell_common::transform::Transform;
 use hell_common::window::HellWindowExtent;
 
 use super::buffer::{VulkanBuffer, VulkanUniformData};
@@ -109,7 +110,7 @@ impl VulkanRenderer2D {
         self.render_pass_data.recreate_framebuffer(&self.core);
     }
 
-    pub fn draw_frame(&mut self, _delta_time: f32) -> bool {
+    pub fn draw_frame(&mut self, _delta_time: f32, transforms: &[&Transform]) -> bool {
         let core = &self.core;
         let device = &core.device.device;
         let pipeline = &self.pipeline;
@@ -137,7 +138,8 @@ impl VulkanRenderer2D {
             INDICES.len() as u32,
             &self.vertex_buffer,
             &self.vertex_index_buffer,
-            &self.uniform_data
+            &self.uniform_data,
+            transforms
         );
 
         // delay resetting the fence until we know for sure we will be submitting work with it (not return early)

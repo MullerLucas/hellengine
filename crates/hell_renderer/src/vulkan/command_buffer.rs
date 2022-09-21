@@ -1,7 +1,8 @@
 use std::ptr;
 
 use ash::vk;
-use crate::vulkan::buffer::{MeshPushConstants, VulkanUniformBufferObject};
+use hell_common::transform::Transform;
+use crate::vulkan::buffer::{MeshPushConstants, VulkanUBOCamera};
 
 use super::buffer::{VulkanBuffer, VulkanUniformData};
 use super::config;
@@ -162,6 +163,7 @@ impl VulkanCommandPool {
         vertex_buffer: &VulkanBuffer,
         index_buffer: &VulkanBuffer,
         uniform_data: &VulkanUniformData,
+        transforms: &[&Transform],
     ) {
 
         let begin_info = vk::CommandBufferBeginInfo::default();
@@ -209,11 +211,11 @@ impl VulkanCommandPool {
 
 
             // draw each object
-            for (_, ubo) in uniform_data.ubos.iter().enumerate() {
+            for (_, trans) in transforms.iter().enumerate() {
                 let push_constants = [
                     MeshPushConstants {
                         data: Default::default(),
-                        render_mat: ubo.proj * ubo.view * ubo.model
+                        model_mat: trans.create_model_mat()
                     }
                 ];
 

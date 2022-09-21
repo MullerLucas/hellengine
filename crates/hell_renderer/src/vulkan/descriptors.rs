@@ -1,7 +1,7 @@
 use ash::prelude::VkResult;
 use ash::vk;
 
-use super::buffer::VulkanUniformBufferObject;
+use super::buffer::VulkanUBOCamera;
 use super::image::TextureImage;
 use super::{config, VulkanBuffer, VulkanSampler};
 
@@ -132,7 +132,7 @@ fn create_descriptor_sets(device: &ash::Device, pool: vk::DescriptorPool, layout
             vk::DescriptorBufferInfo::builder()
                 .buffer(uniform_buffers[idx].buffer)
                 .offset(0)
-                .range(std::mem::size_of::<VulkanUniformBufferObject>() as vk::DeviceSize)
+                .range(std::mem::size_of::<VulkanUBOCamera>() as vk::DeviceSize)
                 .build()
         ];
 
