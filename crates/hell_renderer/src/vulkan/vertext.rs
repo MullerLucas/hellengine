@@ -3,6 +3,7 @@ use std::mem;
 use ash::vk;
 use memoffset::offset_of;
 
+#[derive(Clone)]
 pub struct Vertex {
     pub pos: glam::Vec4,
     pub color: glam::Vec4,
@@ -69,14 +70,4 @@ impl Default for VertexInfo {
     fn default() -> Self {
         Self::new()
     }
-}
-
-
-// ------------------------------------------------------------------------------
-// Mesh
-// ------------------------------------------------------------------------------
-
-
-pub struct Mesh {
-    pub vertices: Vec<Vertex>,
 }

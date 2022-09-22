@@ -23,7 +23,8 @@ pub const FRAG_SHADER_PATH: &str = "shaders/sprite.frag.spv";
 
 pub const MAX_FRAMES_IN_FLIGHT: u32 = 2;
 
-pub const INDEX_TYPE: vk::IndexType = vk::IndexType::UINT32;
+pub const TEXTURE_DESCRIPTOR_COUNT: u32 = 10;
+pub const MAX_DESCRIPTOR_SET_COUNT: u32 = 10;
 
 pub const ENABLE_SAMPLE_SHADING: bool = true;
 
@@ -32,4 +33,6 @@ pub const FRAME_BUFFER_LAYER_COUNT: u32 = 1;
 
 pub const CLEAR_COLOR: [f32; 4] = [0.1, 0.1, 0.1, 1.0];
 
-pub const TEXTURE_PATH: &str = "assets/example_1/texture.jpg";
+pub const TEXTURE_0_PATH: &str = "assets/example_1/texture_0.jpg";
+pub const TEXTURE_2_PATH: &str = "assets/example_1/texture_1.jpg";
+pub const TEXTURE_1_PATH: &str = "assets/example_1/texture_2.jpg";

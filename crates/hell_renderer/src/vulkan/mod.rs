@@ -40,7 +40,7 @@ mod frame;
 pub use frame::VulkanFrameData;
 
 mod pipeline;
-pub use pipeline::VulkanGraphicsPipeline;
+pub use pipeline::VulkanPipeline;
 
 mod shader;
 pub use shader::VulkanShader;
@@ -49,13 +49,15 @@ mod vertext;
 pub use vertext::{Vertex, VertexInfo};
 
 mod renderer_2d;
-pub use renderer_2d::VulkanRenderer2D;
+pub use renderer_2d::{VulkanRenderer2D, RenderData};
 
 mod instance;
 pub use instance::VulkanInstance;
 
 mod descriptors;
-pub use descriptors::VulkanDescriptorSetLayout;
 
 mod sampler;
+mod camera;
+pub use camera::VulkanCamera;
+
 pub use sampler::VulkanSampler;

@@ -1,13 +1,16 @@
-use hell_common::transform::Transform;
 use hell_common::window::{HellWindow, HellWindowExtent};
 use hell_renderer::vulkan;
+use hell_renderer::vulkan::VulkanCamera;
+use crate::scene::Scene;
+
+mod scene;
 
 
 
 pub struct HellApp {
+    scene: Scene,
+    camera: VulkanCamera,
     renderer_2d: vulkan::VulkanRenderer2D,
-    trans_1: Transform,
-    trans_2: Transform,
 }
 
 
@@ -17,12 +20,13 @@ impl HellApp {
         let surface_info = window.create_surface_info();
         let window_extent = window.get_window_extent();
         let core = vulkan::VulkanCore::new(&surface_info, &window_extent).unwrap();
+        let camera = VulkanCamera::new(&core);
         let renderer_2d = vulkan::VulkanRenderer2D::new(core);
 
         Self {
+            scene: Scene::default(),
+            camera,
             renderer_2d,
-            trans_1: Transform::default(),
-            trans_2: Transform::default(),
         }
     }
 }
@@ -53,19 +57,15 @@ impl HellApp {
 
     pub fn draw_frame(&mut self, delta_time: f32) -> bool {
         // TODO: remove
-        std::thread::sleep(std::time::Duration::from_millis(1000));
-        let delta_time = 0.1;
+        // std::thread::sleep(std::time::Duration::from_millis(250));
+        // let delta_time = 0.1;
 
-        self.trans_1.scale_uniform(1f32 + delta_time / 5f32);
-        self.trans_1.rotate_around_z((delta_time * 30f32).to_radians());
-        self.trans_1.translate_x(delta_time);
+        self.scene.update(delta_time);
 
-        self.trans_2.scale_uniform(1f32 - delta_time / 5f32);
-        self.trans_2.rotate_around_z((delta_time * -30f32).to_radians());
-        self.trans_2.translate_x(-delta_time);
+        let frame_data = &self.renderer_2d.frame_data;
+        let camera_buffer = &frame_data.camera_ubos.get(self.renderer_2d.curr_frame_idx).unwrap();
+        self.camera.update_uniform_buffer(&self.renderer_2d.core, delta_time, camera_buffer);
 
-        self.renderer_2d.uniform_data.update_uniform_buffer(&self.renderer_2d.core, self.renderer_2d.curr_frame_idx as usize, delta_time);
-
-        self.renderer_2d.draw_frame(delta_time, &[&self.trans_1, &self.trans_2])
+        self.renderer_2d.draw_frame(delta_time, self.scene.get_render_data())
     }
 }

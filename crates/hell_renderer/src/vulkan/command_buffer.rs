@@ -1,15 +1,9 @@
 use std::ptr;
 
 use ash::vk;
-use hell_common::transform::Transform;
-use crate::vulkan::buffer::{MeshPushConstants, VulkanUBOCamera};
 
-use super::buffer::{VulkanBuffer, VulkanUniformData};
 use super::config;
 use super::logic_device::VulkanLogicDevice;
-use super::pipeline::VulkanGraphicsPipeline;
-use super::render_pass::VulkanRenderPassData;
-use super::vulkan_core::VulkanCore;
 
 
 
@@ -38,14 +32,14 @@ impl VulkanCommandPool {
         VulkanCommandPool::new(&device.device, device.queues.transfer.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER | vk::CommandPoolCreateFlags::TRANSIENT)
     }
 
-    pub fn get_buffer_for_frame(&self, frame_idx: usize) -> vk::CommandBuffer {
-        self.cmd_buffers[frame_idx]
+    pub fn get_buffer(&self, idx: usize) -> vk::CommandBuffer {
+        self.cmd_buffers[idx]
     }
 }
 
 impl VulkanCommandPool {
     // TODO: impl Drop
-    pub fn drop_manual(&mut self, device: &ash::Device) {
+    pub fn drop_manual(&self, device: &ash::Device) {
         println!("> dropping CommandPool...");
 
         unsafe {
@@ -144,92 +138,10 @@ impl VulkanCommandPool {
 
 impl VulkanCommandPool {
     // TODO: error handling
-    pub fn reset_cmd_buffer(&self, device: &ash::Device, curr_frame: usize) {
+    pub fn reset_cmd_buffer(&self, device: &ash::Device, idx: usize) {
         unsafe {
-            device.reset_command_buffer(self.cmd_buffers[curr_frame], vk::CommandBufferResetFlags::empty()) .unwrap()
+            device.reset_command_buffer(self.cmd_buffers[idx], vk::CommandBufferResetFlags::empty()) .unwrap()
         }
     }
 
-    // TODO: error handling
-    #[allow(clippy::too_many_arguments)]
-    pub fn record_cmd_buffer(
-        &self,
-        core: &VulkanCore,
-        pipeline: &VulkanGraphicsPipeline,
-        render_pass_data: &VulkanRenderPassData,
-        frame_idx: usize,
-        swqp_img_idx: usize,
-        vert_index_count: u32,
-        vertex_buffer: &VulkanBuffer,
-        index_buffer: &VulkanBuffer,
-        uniform_data: &VulkanUniformData,
-        transforms: &[&Transform],
-    ) {
-
-        let begin_info = vk::CommandBufferBeginInfo::default();
-        let cmd_buffer = self.cmd_buffers[frame_idx];
-        let device = &core.device.device;
-
-        unsafe { device.begin_command_buffer(cmd_buffer, &begin_info).unwrap(); }
-
-        // one clear-color per attachment with load-op-clear - order should be identical
-        let clear_values = [
-            vk::ClearValue {
-                color: vk::ClearColorValue { float32: config::CLEAR_COLOR }
-            },
-            vk::ClearValue {
-                // range of depth: [0, 1]
-                depth_stencil: vk::ClearDepthStencilValue{ depth: 1.0, stencil: 0 }
-            }
-        ];
-
-        let render_area = vk::Rect2D {
-            offset: vk::Offset2D::default(),
-            extent: core.swapchain.extent
-        };
-
-        let render_pass_info = vk::RenderPassBeginInfo::builder()
-            .render_pass(render_pass_data.render_pass.render_pass)
-            .framebuffer(render_pass_data.framebuffer.buffer_at(swqp_img_idx))
-            .clear_values(&clear_values)
-            .render_area(render_area)
-            .build();
-
-        unsafe { device.cmd_begin_render_pass(cmd_buffer, &render_pass_info, vk::SubpassContents::INLINE); }
-
-        // record commands
-        unsafe {
-
-            device.cmd_bind_pipeline(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
-
-            let descriptor_set = [uniform_data.descriptor_pool.sets[frame_idx]];
-            device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline_layout, 0, &descriptor_set, &[]);
-
-            let vertex_buffers = [vertex_buffer.buffer];
-            device.cmd_bind_vertex_buffers(cmd_buffer, 0, &vertex_buffers, &[0]);
-            device.cmd_bind_index_buffer(cmd_buffer, index_buffer.buffer, 0, config::INDEX_TYPE);
-
-
-            // draw each object
-            for (_, trans) in transforms.iter().enumerate() {
-                let push_constants = [
-                    MeshPushConstants {
-                        data: Default::default(),
-                        model_mat: trans.create_model_mat()
-                    }
-                ];
-
-                let push_const_bytes = std::slice::from_raw_parts(push_constants.as_ptr() as *const u8, std::mem::size_of_val(&push_constants));
-                device.cmd_push_constants(cmd_buffer, pipeline.pipeline_layout, vk::ShaderStageFlags::VERTEX, 0, push_const_bytes);
-
-                device.cmd_draw_indexed(cmd_buffer, vert_index_count, 1, 0, 0, 0);
-            }
-
-            device.cmd_end_render_pass(cmd_buffer);
-        }
-
-        unsafe {
-            device.end_command_buffer(cmd_buffer).unwrap();
-        }
-    }
 }

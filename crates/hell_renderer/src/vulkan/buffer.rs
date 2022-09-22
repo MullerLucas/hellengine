@@ -1,10 +1,7 @@
 use ash::vk;
-use hell_common::transform::Transform;
+use crate::vulkan::camera::VulkanCamera;
 
 use super::command_buffer::VulkanCommandPool;
-use super::{config, VulkanSampler};
-use super::descriptors::VulkanDescriptorPool;
-use super::image::TextureImage;
 use super::vertext::Vertex;
 use super::vulkan_core::VulkanCore;
 
@@ -170,7 +167,7 @@ impl VulkanBuffer {
     pub fn from_uniform(core: &VulkanCore) -> Self {
         VulkanBuffer::new(
             core,
-            VulkanUBOCamera::device_size(),
+            VulkanCamera::device_size(),
             vk::BufferUsageFlags::UNIFORM_BUFFER,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             vk::SharingMode::EXCLUSIVE,
@@ -260,125 +257,4 @@ pub fn copy_buffer_to_img(core: &VulkanCore, buffer: vk::Buffer, img: vk::Image,
     }
 
     core.transfer_cmd_pool.end_single_time_commands(device, cmd_buffer, core.device.queues.transfer.queue);
-}
-
-
-
-
-// ----------------------------------------------------------------------------
-// push-constants
-// ----------------------------------------------------------------------------
-
-#[derive(Debug)]
-pub struct MeshPushConstants {
-    pub data: glam::Vec4,
-    pub model_mat: glam::Mat4,
-}
-
-// ----------------------------------------------------------------------------
-// uniform-buffer
-// ----------------------------------------------------------------------------
-
-
-#[derive(Clone)]
-pub struct VulkanUBOCamera {
-    pub view: glam::Mat4,
-    pub proj: glam::Mat4,
-    pub view_proj: glam::Mat4,
-}
-
-impl VulkanUBOCamera {
-    pub fn device_size() -> vk::DeviceSize {
-        std::mem::size_of::<Self>() as vk::DeviceSize
-    }
-
-    pub fn update_view_proj(&mut self) {
-        self.view_proj = self.proj * self.view;
-    }
-}
-
-
-
-
-pub struct VulkanUniformData {
-    pub ubo: VulkanUBOCamera,
-    pub uniform_buffers_per_frame: Vec<VulkanBuffer>,
-
-    pub texture: TextureImage,
-    pub sampler: VulkanSampler,
-
-    pub descriptor_pool: VulkanDescriptorPool
-}
-
-impl VulkanUniformData {
-    pub fn new(core: &VulkanCore) -> Self {
-        let device = &core.device.device;
-
-        let aspect_ratio = core.swapchain.aspect_ratio();
-
-        let view = glam::Mat4::look_at_rh(glam::Vec3::new(0.0, 0.0, 2.0), glam::Vec3::new(0.0, 0.0, 0.0), glam::Vec3::new(0.0, 1.0, 0.0));
-        let proj = glam::Mat4::perspective_rh(90.0, aspect_ratio, 0.1, 10.0);
-        let view_proj = view * proj;
-
-        let ubo = VulkanUBOCamera { view, proj, view_proj };
-
-        let uniform_buffers_per_frame: Vec<_> = (0..config::MAX_FRAMES_IN_FLIGHT)
-            .into_iter()
-            .map(|_| VulkanBuffer::from_uniform(core))
-            .collect();
-
-        let texture = TextureImage::new(core, config::TEXTURE_PATH);
-        let sampler = VulkanSampler::new(core).unwrap();
-
-        let descriptor_pool = VulkanDescriptorPool::new(device, &uniform_buffers_per_frame, &texture, &sampler).unwrap();
-
-        Self {
-            ubo,
-            uniform_buffers_per_frame,
-
-            texture,
-            sampler,
-
-            descriptor_pool
-        }
-    }
-}
-
-impl VulkanUniformData {
-    pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> dropping UniformData...");
-
-        self.uniform_buffers_per_frame.iter().for_each(|b| b.drop_manual(device));
-
-        self.texture.drop_manual(device);
-        self.sampler.drop_manual(device);
-
-        self.descriptor_pool.drop_manual(device);
-    }
-}
-
-
-impl VulkanUniformData {
-    // TODO: error handling
-    pub fn update_uniform_buffer(&mut self, core: &VulkanCore, img_idx: usize, delta_time: f32) {
-        let device = &core.device.device;
-
-        static mut POS: glam::Vec3 = glam::Vec3::new(0.0, 0.0, 0.0);
-        unsafe {
-            POS.x += delta_time * 10.0;
-        }
-
-        self.ubo.update_view_proj();
-
-        let buff_size = std::mem::size_of::<VulkanUBOCamera>() as u64;
-        let uniform_buffer = &self.uniform_buffers_per_frame[img_idx];
-
-
-        unsafe {
-            let data_ptr = device.map_memory(uniform_buffer.mem, 0, buff_size, vk::MemoryMapFlags::empty())
-                .unwrap() as *mut VulkanUBOCamera;
-            data_ptr.copy_from_nonoverlapping(&self.ubo, 1);
-            device.unmap_memory(uniform_buffer.mem);
-        }
-    }
 }

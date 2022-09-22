@@ -1,7 +1,6 @@
 use ash::vk;
-use crate::vulkan::buffer::MeshPushConstants;
+use crate::vulkan::renderer_2d::MeshPushConstants;
 
-use super::buffer::VulkanUniformData;
 use super::config;
 use super::render_pass::VulkanRenderPassData;
 use super::shader::VulkanShader;
@@ -9,15 +8,14 @@ use super::vertext::VertexInfo;
 use super::vulkan_core::VulkanCore;
 
 
-
-pub struct VulkanGraphicsPipeline {
+pub struct VulkanPipeline {
     pub pipeline_layout: vk::PipelineLayout,
     pub pipeline: vk::Pipeline,
 }
 
-impl VulkanGraphicsPipeline {
+impl VulkanPipeline {
     // TODO: error handling
-    pub fn new(core: &VulkanCore, render_pass_data: &VulkanRenderPassData, unfirom_data: &VulkanUniformData) -> Self {
+    pub fn new(core: &VulkanCore, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout]) -> Self {
         let device = &core.device.device;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 
@@ -40,8 +38,6 @@ impl VulkanGraphicsPipeline {
         let color_blend_attachments = [create_color_blend_attachment()];
         let color_blend_info = create_pipeline_blend_data(&color_blend_attachments);
 
-        let descriptor_layouts = &[unfirom_data.descriptor_pool.layout.layout];
-
         let push_constants = [
             vk::PushConstantRange::builder()
                 .offset(0)
@@ -51,7 +47,7 @@ impl VulkanGraphicsPipeline {
         ];
 
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder()
-            .set_layouts(descriptor_layouts)
+            .set_layouts(descriptor_set_layouts)
             .push_constant_ranges(&push_constants)
             .build();
 
@@ -84,7 +80,7 @@ impl VulkanGraphicsPipeline {
     }
 }
 
-impl VulkanGraphicsPipeline {
+impl VulkanPipeline {
     pub fn drop_manual(&self, device: &ash::Device) {
         println!("> dropping GraphicsPipeline...");
 
