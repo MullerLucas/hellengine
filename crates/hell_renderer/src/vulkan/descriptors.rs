@@ -1,11 +1,9 @@
 use ash::prelude::VkResult;
 use ash::vk;
-use crate::vulkan::camera::VulkanCamera;
+use crate::vulkan::shader_data::CameraData;
 
 use super::image::TextureImage;
-use super::{config, VulkanBuffer, VulkanSampler};
-
-
+use super::{config, VulkanBuffer, VulkanSampler, SceneData, VulkanUboData, VulkanPhysDevice};
 
 
 
@@ -53,9 +51,9 @@ impl VulkanDescriptorSetGroup {
                 .build(),
             vk::DescriptorSetLayoutBinding::builder()
                 .binding(1)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
                 .descriptor_count(1)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
                 .build()
         ];
 
@@ -63,9 +61,9 @@ impl VulkanDescriptorSetGroup {
             .bindings(&layout_bindings)
             .build();
 
-        let layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
-
-        Ok(layout)
+        Ok(unsafe {
+            device.create_descriptor_set_layout(&layout_info, None)?
+        })
     }
 
     fn create_per_material_set_layout(device: &ash::Device) -> VkResult<vk::DescriptorSetLayout> {
@@ -82,9 +80,9 @@ impl VulkanDescriptorSetGroup {
             .bindings(&layout_bindings)
             .build();
 
-        let layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
-
-        Ok(layout)
+        Ok(unsafe {
+            device.create_descriptor_set_layout(&layout_info, None)?
+        })
     }
 }
 
@@ -193,38 +191,37 @@ impl VulkanDescriptorManager {
 }
 
 impl VulkanDescriptorManager {
-    pub fn add_per_frame_descriptor_sets(
-        &mut self,
-        device: &ash::Device,
-        uniform_buffers: &[VulkanBuffer],
-        texture: &TextureImage,
-        sampler: &VulkanSampler,
-        descriptor_count: usize
-    ) -> VkResult<usize> {
+    pub fn add_per_frame_descriptor_sets(&mut self, device: &ash::Device, phys_device: &VulkanPhysDevice, camera_ubos: &[VulkanBuffer], scene_ubo: &VulkanBuffer, descriptor_count: usize) -> VkResult<usize> {
         let group = &mut self.per_frame_group;
         let layouts = vec![group.layout; descriptor_count];
 
+        // create sets
+        // -----------
         let alloc_info = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(self.pool)
             .set_layouts(&layouts)
             .build();
 
         let sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
+        let min_ubo_alignment = phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
 
+        // write sets
+        // ----------
         for (idx, s) in sets.iter().enumerate() {
-            let buffer_infos = [
+            let camera_buffer_infos = [
                 vk::DescriptorBufferInfo::builder()
-                    .buffer(uniform_buffers[idx].buffer)
+                    .buffer(camera_ubos[idx].buffer)
                     .offset(0)
-                    .range(std::mem::size_of::<VulkanCamera>() as vk::DeviceSize)
+                    .range(CameraData::device_size())
                     .build()
             ];
 
-            let image_infos = [
-                vk::DescriptorImageInfo::builder()
-                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .image_view(texture.img.view)
-                    .sampler(sampler.sampler)
+            // one buffer contains one set of data per frame -> use offset to index correct buffer
+            let scene_buffer_infos = [
+                vk::DescriptorBufferInfo::builder()
+                    .buffer(scene_ubo.buffer)
+                    .offset(SceneData::padded_device_size(min_ubo_alignment) * idx as u64)
+                    .range(SceneData::device_size())
                     .build()
             ];
 
@@ -234,14 +231,14 @@ impl VulkanDescriptorManager {
                     .dst_binding(0) // corresponds to shader binding
                     .dst_array_element(0)
                     .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .buffer_info(&buffer_infos)
+                    .buffer_info(&camera_buffer_infos)
                     .build(),
                 vk::WriteDescriptorSet::builder()
                     .dst_set(*s)
                     .dst_binding(1)
                     .dst_array_element(0)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .image_info(&image_infos)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .buffer_info(&scene_buffer_infos)
                     .build()
             ];
 

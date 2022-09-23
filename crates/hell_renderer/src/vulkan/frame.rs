@@ -2,7 +2,7 @@ use ash::prelude::VkResult;
 pub use ash::vk;
 use crate::vulkan::{VulkanBuffer, VulkanCommandPool};
 
-use super::{config, VulkanCore};
+use super::{config, VulkanCore, CameraData, VulkanUboData, SceneData};
 use super::swapchain::VulkanSwapchain;
 
 
@@ -14,6 +14,7 @@ pub struct VulkanFrameData {
     pub wait_stages: [vk::PipelineStageFlags; 1], // same for each frame
     pub graphics_cmd_pools: Vec<VulkanCommandPool>,
     pub camera_ubos: Vec<VulkanBuffer>,
+    pub scene_ubo: VulkanBuffer,
 }
 
 impl VulkanFrameData {
@@ -42,9 +43,14 @@ impl VulkanFrameData {
             .map(|_| VulkanCommandPool::default_for_graphics(&core.device))
             .collect();
 
+        let camera_ubo_size = CameraData::device_size();
         let camera_ubo: Vec<_> = (0..config::MAX_FRAMES_IN_FLIGHT).into_iter()
-            .map(|_| VulkanBuffer::from_uniform(core))
+            .map(|_| VulkanBuffer::from_uniform(core, camera_ubo_size))
             .collect();
+
+        let scene_ubo_size = SceneData::total_size(core.phys_device.device_props.limits.min_uniform_buffer_offset_alignment, config::MAX_FRAMES_IN_FLIGHT as u64);
+        let scene_ubo = VulkanBuffer::from_uniform(core, scene_ubo_size);
+
 
         Self {
             img_available_semaphors: img_available_sem,
@@ -52,7 +58,8 @@ impl VulkanFrameData {
             in_flight_fences: in_flight_fence,
             wait_stages: [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
             graphics_cmd_pools: graphics_cmd_pool,
-            camera_ubos: camera_ubo
+            camera_ubos: camera_ubo,
+            scene_ubo,
         }
     }
 }
@@ -64,6 +71,7 @@ impl VulkanFrameData {
 
         self.graphics_cmd_pools.iter().for_each(|p| p.drop_manual(device));
         self.camera_ubos.iter().for_each(|p| p.drop_manual(device));
+        self.scene_ubo.drop_manual(device);
 
         unsafe {
             self.img_available_semaphors.iter().for_each(|s| device.destroy_semaphore(s[0], None));

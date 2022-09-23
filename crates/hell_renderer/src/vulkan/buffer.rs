@@ -1,6 +1,6 @@
+use ash::prelude::VkResult;
 use ash::vk;
-use crate::vulkan::camera::VulkanCamera;
-
+use super::VulkanUboData;
 use super::command_buffer::VulkanCommandPool;
 use super::vertext::Vertex;
 use super::vulkan_core::VulkanCore;
@@ -19,9 +19,7 @@ pub struct VulkanBuffer {
 
 impl VulkanBuffer {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        core: &VulkanCore, size: vk::DeviceSize, usage: vk::BufferUsageFlags, properties: vk::MemoryPropertyFlags, sharing_mode: vk::SharingMode, queue_family_indices: Option<&[u32]>
-    ) -> Self {
+    pub fn new(core: &VulkanCore, size: vk::DeviceSize, usage: vk::BufferUsageFlags, properties: vk::MemoryPropertyFlags, sharing_mode: vk::SharingMode, queue_family_indices: Option<&[u32]>) -> Self {
         let device = &core.device.device;
 
         let mut buffer_info = vk::BufferCreateInfo {
@@ -45,7 +43,6 @@ impl VulkanBuffer {
 
         let mem_requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
 
-
         let mem_type_idx = find_memory_type(
             &core.instance.instance,
             core.phys_device.phys_device,
@@ -60,13 +57,8 @@ impl VulkanBuffer {
             memory_type_index: mem_type_idx
         };
 
-        let mem = unsafe { device.allocate_memory(&alloc_info, None) }
-            .expect("failed to allocate vertex memory");
-
-        unsafe { device.bind_buffer_memory(buffer, mem, 0) }
-            .expect("failed to bind vertex-buffer");
-
-
+        let mem = unsafe { device.allocate_memory(&alloc_info, None) }.expect("failed to allocate vertex memory");
+        unsafe { device.bind_buffer_memory(buffer, mem, 0) }.expect("failed to bind vertex-buffer");
 
         Self {
             buffer,
@@ -164,10 +156,10 @@ impl VulkanBuffer {
         device_buffer
     }
 
-    pub fn from_uniform(core: &VulkanCore) -> Self {
+    pub fn from_uniform(core: &VulkanCore, size: vk::DeviceSize) -> Self {
         VulkanBuffer::new(
             core,
-            VulkanCamera::device_size(),
+            size,
             vk::BufferUsageFlags::UNIFORM_BUFFER,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             vk::SharingMode::EXCLUSIVE,
@@ -199,6 +191,33 @@ impl VulkanBuffer {
     }
 }
 
+impl VulkanBuffer {
+    // TODO: error handling
+    pub fn upload_data_buffer<T: VulkanUboData>(&self, device: &ash::Device, data: &T) -> VkResult<()> {
+        let buff_size = T::device_size();
+
+        unsafe {
+            let data_ptr = device.map_memory(self.mem, 0, buff_size, vk::MemoryMapFlags::empty())? as *mut T;
+            data_ptr.copy_from_nonoverlapping(data, 1);
+            device.unmap_memory(self.mem);
+        }
+
+        Ok(())
+    }
+
+    pub fn upload_data_buffer_array<T: VulkanUboData>(&self, device: &ash::Device, min_ubo_alignment: u64, data: &T, idx: u64) -> VkResult<()> {
+        let offset = T::padded_device_size(min_ubo_alignment) * idx;
+        let buff_size = T::device_size();
+
+        unsafe {
+            let data_ptr = device.map_memory(self.mem, offset, buff_size, vk::MemoryMapFlags::empty())? as *mut T;
+            data_ptr.copy_from_nonoverlapping(data, 1);
+            device.unmap_memory(self.mem);
+        }
+
+        Ok(())
+    }
+}
 
 
 pub fn find_memory_type(instance: &ash::Instance, phys_device: vk::PhysicalDevice, type_filter: u32, properties: vk::MemoryPropertyFlags) -> u32 {

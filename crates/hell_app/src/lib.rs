@@ -1,6 +1,6 @@
 use hell_common::window::{HellWindow, HellWindowExtent};
 use hell_renderer::vulkan;
-use hell_renderer::vulkan::VulkanCamera;
+use hell_renderer::vulkan::CameraData;
 use crate::scene::Scene;
 
 mod scene;
@@ -9,7 +9,7 @@ mod scene;
 
 pub struct HellApp {
     scene: Scene,
-    camera: VulkanCamera,
+    camera_data: CameraData,
     renderer_2d: vulkan::VulkanRenderer2D,
 }
 
@@ -20,12 +20,12 @@ impl HellApp {
         let surface_info = window.create_surface_info();
         let window_extent = window.get_window_extent();
         let core = vulkan::VulkanCore::new(&surface_info, &window_extent).unwrap();
-        let camera = VulkanCamera::new(&core);
+        let camera = CameraData::new(&core);
         let renderer_2d = vulkan::VulkanRenderer2D::new(core);
 
         Self {
             scene: Scene::default(),
-            camera,
+            camera_data: camera,
             renderer_2d,
         }
     }
@@ -63,8 +63,13 @@ impl HellApp {
         self.scene.update(delta_time);
 
         let frame_data = &self.renderer_2d.frame_data;
+
         let camera_buffer = &frame_data.camera_ubos.get(self.renderer_2d.curr_frame_idx).unwrap();
-        self.camera.update_uniform_buffer(&self.renderer_2d.core, delta_time, camera_buffer);
+        self.camera_data.update_uniform_buffer(&self.renderer_2d.core, delta_time, camera_buffer).unwrap();
+
+        let scene_ubo = &frame_data.scene_ubo;
+        let scene_data = self.scene.get_scene_data_mut();
+        scene_data.update_uniform_buffer(&self.renderer_2d.core, scene_ubo, self.renderer_2d.curr_frame_idx as u64).unwrap();
 
         self.renderer_2d.draw_frame(delta_time, self.scene.get_render_data())
     }

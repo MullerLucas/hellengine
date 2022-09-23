@@ -49,8 +49,8 @@ impl VulkanMesh {
             vertices: QUAD_VERTS.to_vec(),
             indices: QUAD_INDICES.to_vec(),
 
-            vertex_buffer: VulkanBuffer::from_vertices(&core, QUAD_VERTS),
-            index_buffer: VulkanBuffer::from_indices(&core, QUAD_INDICES),
+            vertex_buffer: VulkanBuffer::from_vertices(core, QUAD_VERTS),
+            index_buffer: VulkanBuffer::from_indices(core, QUAD_INDICES),
         }
     }
 
@@ -137,7 +137,7 @@ impl<'a> IntoIterator for &'a RenderData {
     type IntoIter = RenderDataIter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        RenderDataIter::new(&self)
+        RenderDataIter::new(self)
     }
 }
 
@@ -216,7 +216,7 @@ impl VulkanRenderer2D {
 
         let device = &core.device.device;
         let mut descriptor_manager = VulkanDescriptorManager::new(device).unwrap();
-        let _ = descriptor_manager.add_per_frame_descriptor_sets(device, &frame_data.camera_ubos, &texture[0], &sampler[0], config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
+        let _ = descriptor_manager.add_per_frame_descriptor_sets(device, &core.phys_device, &frame_data.camera_ubos, &frame_data.scene_ubo, config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
         let _ = descriptor_manager.add_per_material_descriptor_sets(device, &texture[0], &sampler[0]);
         let _ = descriptor_manager.add_per_material_descriptor_sets(device, &texture[1], &sampler[0]);
         let _ = descriptor_manager.add_per_material_descriptor_sets(device, &texture[2], &sampler[0]);

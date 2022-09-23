@@ -1,20 +1,22 @@
 use hell_common::transform::Transform;
-use hell_renderer::vulkan::RenderData;
+use hell_renderer::vulkan::{RenderData, SceneData};
 
 pub struct Scene {
-    render_data: RenderData
+    scene_data: SceneData,
+    render_data: RenderData,
 }
 
 impl Scene {
     pub fn new() -> Self {
         let mut render_data = RenderData::default();
-
         render_data.add_data(0, 0, Transform::default());
         render_data.add_data(0, 1, Transform::default());
         render_data.add_data(0, 2, Transform::default());
 
+        let scene_data = SceneData::default();
 
         Self {
+            scene_data,
             render_data
         }
     }
@@ -27,6 +29,10 @@ impl Default for Scene {
 }
 
 impl Scene {
+    pub fn get_scene_data_mut(&mut self) -> &mut SceneData {
+        &mut self.scene_data
+    }
+
     pub fn get_render_data(&self) -> &RenderData {
         &self.render_data
     }

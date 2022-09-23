@@ -57,7 +57,7 @@ pub use instance::VulkanInstance;
 mod descriptors;
 
 mod sampler;
-mod camera;
-pub use camera::VulkanCamera;
+mod shader_data;
+pub use shader_data::*;
 
 pub use sampler::VulkanSampler;
