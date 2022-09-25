@@ -380,18 +380,45 @@ impl VulkanRenderer2D {
     fn record_scene_cmd_buffer(&self, device: &ash::Device, cmd_buffer: vk::CommandBuffer, render_data: &RenderData) {
         unsafe {
             let mut curr_pipeline_idx = usize::MAX;
+            let mut curr_mat_idx = usize::MAX;
             let mut curr_mesh_idx = usize::MAX;
 
+            let mut curr_mat = &self.materials[0];
             let mut curr_pipeline = &self.pipelines[0];
             let mut curr_mesh = &self.meshes[0];
 
 
+
+            // bind static descriptor sets once
+            let descriptor_set = [
+                self.descriptor_manager.get_global_set(0, self.curr_frame_idx),
+                self.descriptor_manager.get_object_set(0, self.curr_frame_idx),
+            ];
+
+            let min_ubo_alignment = self.core.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
+            let dynamic_descriptor_offsets = [
+                SceneData::padded_device_size(min_ubo_alignment) as u32 * self.curr_frame_idx as u32,
+            ];
+
+            device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline_layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
+
+
+
+            // draw each object
             for (idx, rd) in render_data.iter().enumerate() {
-                let mat = &self.materials[rd.material_idx];
+
+                if curr_mat_idx != rd.material_idx {
+                    curr_mat_idx = rd.material_idx;
+                    curr_mat = &self.materials[curr_mat_idx];
+
+                    // bind material descriptors
+                    let descriptor_set = [ self.descriptor_manager.get_material_set(rd.material_idx) ];
+                    device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline_layout, 2, &descriptor_set, &[]);
+                }
 
                 // bind pipeline
-                if curr_pipeline_idx != mat.pipeline_idx {
-                    curr_pipeline_idx = mat.pipeline_idx;
+                if curr_pipeline_idx != curr_mat.pipeline_idx {
+                    curr_pipeline_idx = curr_mat.pipeline_idx;
                     curr_pipeline = &self.pipelines[curr_pipeline_idx];
                     device.cmd_bind_pipeline(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline);
                 }
@@ -405,21 +432,6 @@ impl VulkanRenderer2D {
                     device.cmd_bind_vertex_buffers(cmd_buffer, 0, &vertex_buffers, &[0]);
                     device.cmd_bind_index_buffer(cmd_buffer, curr_mesh.index_buffer.buffer, 0, VulkanMesh::INDEX_TYPE);
                 }
-
-                // bind descriptors
-                // let descriptor_set = [self.descriptor_manager.per_frame_group[self.curr_frame_idx]];
-                let descriptor_set = [
-                    self.descriptor_manager.get_global_set(0, self.curr_frame_idx),
-                    self.descriptor_manager.get_object_set(0, self.curr_frame_idx),
-                    self.descriptor_manager.get_material_set(rd.material_idx),
-                ];
-
-                let min_ubo_alignment = self.core.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
-
-                let dynamic_descriptor_offsets = [
-                    SceneData::padded_device_size(min_ubo_alignment) as u32 * idx as u32,
-                ];
-                device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline_layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
 
                 // bind push constants
                 let push_constants = [
