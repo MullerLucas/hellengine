@@ -183,8 +183,7 @@ impl<'a> Iterator for RenderDataIter<'a> {
 
 #[derive(Debug)]
 pub struct MeshPushConstants {
-    pub data: glam::Vec4,
-    pub model_mat: glam::Mat4,
+    pub model: glam::Mat4,
 }
 
 // ----------------------------------------------------------------------------
@@ -425,8 +424,7 @@ impl VulkanRenderer2D {
                 // bind push constants
                 let push_constants = [
                     MeshPushConstants {
-                        data: Default::default(),
-                        model_mat: rd.transform.create_model_mat()
+                        model: rd.transform.create_model_mat()
                     }
                 ];
 

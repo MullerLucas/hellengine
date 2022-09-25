@@ -8,12 +8,11 @@ layout(set = 0, binding = 0) uniform UBOCamera {
 } camera_data;
 
 layout(push_constant) uniform constants {
-    vec4 data;
-    mat4 model_mat;
+    mat4 model;
 } push_constants;
 
 struct ObjectData {
-    mat4 model_mat;
+    mat4 model;
 };
 
 // std140 enforces cpp memory layout
@@ -32,9 +31,9 @@ layout(location = 1) out vec2 out_tex_coord;
 
 void main() {
     // 'gl_BaseInstance' corresponds to 'first_instance' paramterer
-    mat4 model_mat = object_buffer.objects[gl_BaseInstance].model_mat;
-    // mat4 transform_mat = (camera_data.view_proj * push_constants.model_mat);
-    mat4 transform_mat = (camera_data.view_proj * model_mat);
+    mat4 model = object_buffer.objects[gl_BaseInstance].model;
+    // mat4 transform_mat = (camera_data.view_proj * push_constants.model);
+    mat4 transform_mat = (camera_data.view_proj * model);
     gl_Position = transform_mat * in_pos;
 
     out_color = in_color;

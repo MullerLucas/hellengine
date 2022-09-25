@@ -129,7 +129,7 @@ impl SceneData {
 
 #[repr(C)]
 pub struct ObjectData {
-    pub model_mat: glam::Mat4,
+    pub model: glam::Mat4,
 }
 
 impl VulkanUboData for ObjectData {
@@ -148,7 +148,7 @@ impl ObjectData {
     pub fn update_storage_buffer(core: &VulkanCore, buffer: &VulkanBuffer, render_data: &RenderData) -> VkResult<()>{
         let object_data: Vec<_> = render_data.iter()
             .map(|r| ObjectData {
-                model_mat: r.transform.create_model_mat()
+                model: r.transform.create_model_mat()
             })
             .collect();
 
@@ -160,6 +160,18 @@ impl ObjectData {
         Ok(())
     }
 }
+
+
+
+// ----------------------------------------------------------------------------
+// push-constants
+// ----------------------------------------------------------------------------
+
+#[derive(Debug)]
+pub struct MeshPushConstants {
+    pub model: glam::Mat4,
+}
+
 
 
 // ----------------------------------------------------------------------------
