@@ -1,6 +1,7 @@
 use std::{ptr, ffi};
 
 use ash::vk;
+use hell_utils::conversion;
 
 use super::config;
 use super::phys_device::VulkanPhysDevice;
@@ -38,28 +39,19 @@ impl VulkanLogicDevice {
             .sampler_anisotropy(true)
             .sample_rate_shading(config::ENABLE_SAMPLE_SHADING)   // Sample-Shading
             .build();
+        let mut phys_device_feature_11 = vk::PhysicalDeviceVulkan11Features::builder()
+            .shader_draw_parameters(true)
+            .build();
 
-        let extension_names: Vec<_> = config::DEVICE_EXTENSION_NAMES
-            .iter()
-            .map(|n| ffi::CString::new(*n).unwrap())
-            .collect();
+        let raw_extension_names = conversion::c_char_from_str_slice(config::DEVICE_EXTENSION_NAMES);
 
-        let extension_names_input: Vec<_> = extension_names.iter().map(|n| n.as_ptr()).collect();
-
-        let mut logic_device_create_info = vk::DeviceCreateInfo {
-            s_type: vk::StructureType::DEVICE_CREATE_INFO,
-            p_next: ptr::null(),
-            flags: vk::DeviceCreateFlags::empty(),
-            queue_create_info_count: queue_create_infos.len() as u32,
-            p_queue_create_infos: queue_create_infos.as_ptr(),
-            // layers: ignored by modern implementations - add anyway, for backwards compatibility
-            enabled_layer_count: 0,
-            pp_enabled_layer_names: ptr::null(),
+        let mut logic_device_create_info = vk::DeviceCreateInfo::builder()
+            .queue_create_infos(&queue_create_infos)
             // extensions: device-specific
-            enabled_extension_count: config::DEVICE_EXTENSION_NAMES.len() as u32,
-            pp_enabled_extension_names: extension_names_input.as_ptr(),
-            p_enabled_features: &phys_device_features,
-        };
+            .enabled_extension_names(&raw_extension_names.1)
+            .enabled_features(&phys_device_features)
+            .push_next(&mut phys_device_feature_11)
+            .build();
 
         let validation_layer_names: Vec<_> = config::VALIDATION_LAYER_NAMES
             .iter()

@@ -167,6 +167,17 @@ impl VulkanBuffer {
         )
     }
 
+    pub fn from_storage(core: &VulkanCore, size: vk::DeviceSize) -> Self {
+        VulkanBuffer::new(
+            core,
+            size,
+            vk::BufferUsageFlags::STORAGE_BUFFER,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            vk::SharingMode::EXCLUSIVE,
+            None,
+        )
+    }
+
     pub fn from_texture_staging(core: &VulkanCore, img_size: u64) -> Self {
         VulkanBuffer::new(
             core,
@@ -217,8 +228,28 @@ impl VulkanBuffer {
 
         Ok(())
     }
+
+    // TODO: error handling
+    /// # Safety
+    ///
+    /// There is no safety don't use this function :)
+    pub unsafe fn upload_data_storage_buffer<T: VulkanUboData>(&self, device: &ash::Device, data: *const T, data_count: usize) -> VkResult<()> {
+        let buff_size = T::device_size() * data_count as u64;
+
+        let data_ptr = device.map_memory(self.mem, 0, buff_size, vk::MemoryMapFlags::empty())? as *mut T;
+        data_ptr.copy_from_nonoverlapping(data, data_count);
+        device.unmap_memory(self.mem);
+
+        Ok(())
+    }
+
 }
 
+impl<'a> VulkanBuffer {
+    pub fn map_memory(&self, device: &'a ash::Device, offset: u64, buff_size: u64, mem_map_flags: vk::MemoryMapFlags) -> VkResult<DeviceMemoryMapGuard<'a>> {
+        DeviceMemoryMapGuard::new(device, self.mem, offset, buff_size, mem_map_flags)
+    }
+}
 
 pub fn find_memory_type(instance: &ash::Instance, phys_device: vk::PhysicalDevice, type_filter: u32, properties: vk::MemoryPropertyFlags) -> u32 {
     let mem_props = unsafe { instance.get_physical_device_memory_properties(phys_device) };
@@ -277,3 +308,46 @@ pub fn copy_buffer_to_img(core: &VulkanCore, buffer: vk::Buffer, img: vk::Image,
 
     core.transfer_cmd_pool.end_single_time_commands(device, cmd_buffer, core.device.queues.transfer.queue);
 }
+
+
+
+
+
+// ----------------------------------------------------------------------------
+// DeviceMemoryGuard
+// ----------------------------------------------------------------------------
+
+pub struct DeviceMemoryMapGuard<'a> {
+    device: &'a ash::Device,
+    mem: vk::DeviceMemory,
+    data_ptr: *mut std::os::raw::c_void,
+}
+
+impl<'a> DeviceMemoryMapGuard<'a> {
+    pub fn new(device: &'a ash::Device, mem: vk::DeviceMemory, offset: vk::DeviceSize, buff_size: vk::DeviceSize, mem_map_flags: vk::MemoryMapFlags) -> VkResult<Self> {
+        let data_ptr = unsafe { device.map_memory(mem, offset, buff_size, mem_map_flags)? };
+
+        Ok(Self {
+            device,
+            mem,
+            data_ptr
+        })
+    }
+
+    pub fn data_as<T>(&mut self) -> &mut T {
+        unsafe {
+            &mut *(self.data_ptr as *mut T)
+        }
+    }
+}
+
+impl Drop for DeviceMemoryMapGuard<'_> {
+    fn drop(&mut self) {
+        // data_ptr.copy_from_nonoverlapping(data, 1);
+        unsafe {
+            self.device.unmap_memory(self.mem);
+        }
+    }
+}
+
+

@@ -15,7 +15,7 @@ pub const VALIDATION_LAYER_NAMES: &[&str] = &[
 ];
 
 pub const DEVICE_EXTENSION_NAMES: &[&str] = &[
-    "VK_KHR_swapchain"
+    "VK_KHR_swapchain",
 ];
 
 pub const VERT_SHADER_PATH: &str = "shaders/sprite.vert.spv";
@@ -23,7 +23,10 @@ pub const FRAG_SHADER_PATH: &str = "shaders/sprite.frag.spv";
 
 pub const MAX_FRAMES_IN_FLIGHT: u32 = 3;
 
+pub const DYNAMIC_UNIFORM_DESCRIPTOR_COUNT: u32 = 10;
+pub const DYNAMIC_STORAGE_DESCRIPTOR_COUNT: u32 = 10;
 pub const TEXTURE_DESCRIPTOR_COUNT: u32 = 10;
+
 pub const MAX_DESCRIPTOR_SET_COUNT: u32 = 10;
 
 pub const ENABLE_SAMPLE_SHADING: bool = true;

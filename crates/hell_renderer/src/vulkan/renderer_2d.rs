@@ -6,7 +6,7 @@ use crate::vulkan::{VulkanLogicDevice, VulkanSampler};
 use crate::vulkan::descriptors::VulkanDescriptorManager;
 
 use super::buffer::VulkanBuffer;
-use super::config;
+use super::{config, SceneData, VulkanUboData};
 use super::frame::VulkanFrameData;
 use super::pipeline::VulkanPipeline;
 use super::render_pass::VulkanRenderPassData;
@@ -132,6 +132,12 @@ impl RenderData {
     }
 }
 
+impl RenderData {
+    pub fn iter(&self) -> RenderDataIter {
+        self.into_iter()
+    }
+}
+
 impl<'a> IntoIterator for &'a RenderData {
     type Item = RenderDataChunk<'a>;
     type IntoIter = RenderDataIter<'a>;
@@ -216,10 +222,11 @@ impl VulkanRenderer2D {
 
         let device = &core.device.device;
         let mut descriptor_manager = VulkanDescriptorManager::new(device).unwrap();
-        let _ = descriptor_manager.add_per_frame_descriptor_sets(device, &core.phys_device, &frame_data.camera_ubos, &frame_data.scene_ubo, config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
-        let _ = descriptor_manager.add_per_material_descriptor_sets(device, &texture[0], &sampler[0]);
-        let _ = descriptor_manager.add_per_material_descriptor_sets(device, &texture[1], &sampler[0]);
-        let _ = descriptor_manager.add_per_material_descriptor_sets(device, &texture[2], &sampler[0]);
+        let _ = descriptor_manager.add_global_descriptor_sets(device, &frame_data.camera_ubos, &frame_data.scene_ubo, config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
+        let _ = descriptor_manager.add_object_descriptor_set(device, &frame_data.object_ubos, config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
+        let _ = descriptor_manager.add_material_descriptor_sets(device, &texture[0], &sampler[0]).unwrap();
+        let _ = descriptor_manager.add_material_descriptor_sets(device, &texture[1], &sampler[0]).unwrap();
+        let _ = descriptor_manager.add_material_descriptor_sets(device, &texture[2], &sampler[0]).unwrap();
 
         let render_pass_data = VulkanRenderPassData::new(&core);
         let default_pipeline = VulkanPipeline::new(&core, &render_pass_data, descriptor_manager.get_layouts());
@@ -380,7 +387,7 @@ impl VulkanRenderer2D {
             let mut curr_mesh = &self.meshes[0];
 
 
-            for rd in render_data {
+            for (idx, rd) in render_data.iter().enumerate() {
                 let mat = &self.materials[rd.material_idx];
 
                 // bind pipeline
@@ -403,10 +410,17 @@ impl VulkanRenderer2D {
                 // bind descriptors
                 // let descriptor_set = [self.descriptor_manager.per_frame_group[self.curr_frame_idx]];
                 let descriptor_set = [
-                    self.descriptor_manager.get_per_frame_set(0, self.curr_frame_idx),
-                    self.descriptor_manager.get_per_material_set(rd.material_idx),
+                    self.descriptor_manager.get_global_set(0, self.curr_frame_idx),
+                    self.descriptor_manager.get_object_set(0, self.curr_frame_idx),
+                    self.descriptor_manager.get_material_set(rd.material_idx),
                 ];
-                device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline_layout, 0, &descriptor_set, &[]);
+
+                let min_ubo_alignment = self.core.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
+
+                let dynamic_descriptor_offsets = [
+                    SceneData::padded_device_size(min_ubo_alignment) as u32 * idx as u32,
+                ];
+                device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline_layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
 
                 // bind push constants
                 let push_constants = [
@@ -420,7 +434,8 @@ impl VulkanRenderer2D {
                 device.cmd_push_constants(cmd_buffer, curr_pipeline.pipeline_layout, vk::ShaderStageFlags::VERTEX, 0, push_const_bytes);
 
                 // draw
-                device.cmd_draw_indexed(cmd_buffer, curr_mesh.indices_count() as u32, 1, 0, 0, 0);
+                // value of 'first_instance' is used in the vertex shader to index into the object storage
+                device.cmd_draw_indexed(cmd_buffer, curr_mesh.indices_count() as u32, 1, 0, 0, idx as u32);
             }
         }
     }

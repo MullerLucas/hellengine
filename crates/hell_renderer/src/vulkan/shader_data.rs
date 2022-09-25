@@ -2,6 +2,8 @@ use ash::prelude::VkResult;
 use ash::vk;
 use crate::vulkan::{VulkanBuffer, VulkanCore};
 
+use super::RenderData;
+
 
 
 // ----------------------------------------------------------------------------
@@ -66,6 +68,7 @@ impl CameraData {
 }
 
 
+
 // ----------------------------------------------------------------------------
 // scene data
 // ----------------------------------------------------------------------------
@@ -118,6 +121,45 @@ impl SceneData {
     }
 }
 
+
+
+// ----------------------------------------------------------------------------
+// scene data
+// ----------------------------------------------------------------------------
+
+#[repr(C)]
+pub struct ObjectData {
+    pub model_mat: glam::Mat4,
+}
+
+impl VulkanUboData for ObjectData {
+    fn device_size() -> vk::DeviceSize {
+        std::mem::size_of::<Self>() as vk::DeviceSize
+    }
+}
+
+impl ObjectData {
+    pub const MAX_OBJ_COUNT: u64 = 10000;
+
+    pub fn total_size() -> vk::DeviceSize {
+        (Self::device_size() *  Self::MAX_OBJ_COUNT) as vk::DeviceSize
+    }
+
+    pub fn update_storage_buffer(core: &VulkanCore, buffer: &VulkanBuffer, render_data: &RenderData) -> VkResult<()>{
+        let object_data: Vec<_> = render_data.iter()
+            .map(|r| ObjectData {
+                model_mat: r.transform.create_model_mat()
+            })
+            .collect();
+
+        unsafe {
+            // TODO: try to write diretly into the buffer
+            buffer.upload_data_storage_buffer(&core.device.device, object_data.as_ptr(), object_data.len())?;
+        }
+
+        Ok(())
+    }
+}
 
 
 // ----------------------------------------------------------------------------

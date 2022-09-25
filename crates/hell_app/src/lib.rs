@@ -1,5 +1,5 @@
 use hell_common::window::{HellWindow, HellWindowExtent};
-use hell_renderer::vulkan;
+use hell_renderer::vulkan::{self, ObjectData};
 use hell_renderer::vulkan::CameraData;
 use crate::scene::Scene;
 
@@ -55,6 +55,7 @@ impl HellApp {
         self.renderer_2d.wait_idle();
     }
 
+    // TODO: error handling
     pub fn draw_frame(&mut self, delta_time: f32) -> bool {
         // TODO: remove
         // std::thread::sleep(std::time::Duration::from_millis(250));
@@ -63,14 +64,19 @@ impl HellApp {
         self.scene.update(delta_time);
 
         let frame_data = &self.renderer_2d.frame_data;
+        let curr_frame_idx = self.renderer_2d.curr_frame_idx as u64;
 
         let camera_buffer = &frame_data.camera_ubos.get(self.renderer_2d.curr_frame_idx).unwrap();
         self.camera_data.update_uniform_buffer(&self.renderer_2d.core, delta_time, camera_buffer).unwrap();
 
         let scene_ubo = &frame_data.scene_ubo;
         let scene_data = self.scene.get_scene_data_mut();
-        scene_data.update_uniform_buffer(&self.renderer_2d.core, scene_ubo, self.renderer_2d.curr_frame_idx as u64).unwrap();
+        scene_data.update_uniform_buffer(&self.renderer_2d.core, scene_ubo, curr_frame_idx).unwrap();
 
-        self.renderer_2d.draw_frame(delta_time, self.scene.get_render_data())
+        let object_ubo = &frame_data.object_ubos[curr_frame_idx as usize];
+        let render_data = self.scene.get_render_data();
+        ObjectData::update_storage_buffer(&self.renderer_2d.core, object_ubo, render_data).unwrap();
+
+        self.renderer_2d.draw_frame(delta_time, render_data)
     }
 }

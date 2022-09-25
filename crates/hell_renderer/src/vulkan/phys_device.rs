@@ -56,7 +56,14 @@ impl VulkanPhysDevice {
         extension_names: &[&str],
     ) -> Option<VulkanPhysDevice> {
         let device_props = unsafe { instance.get_physical_device_properties(phys_device) };
+
         let features = unsafe { instance.get_physical_device_features(phys_device) };
+        let mut features2_phys_device_features_11 = vk::PhysicalDeviceVulkan11Features::default();
+        let mut features2 = vk::PhysicalDeviceFeatures2::builder()
+            .push_next(&mut features2_phys_device_features_11)
+            .build();
+        unsafe { instance.get_physical_device_features2(phys_device, &mut features2) };
+
         let mut _score = 0;
 
         let device_name = unsafe { CStr::from_ptr(device_props.device_name.as_ptr()) };
@@ -83,14 +90,20 @@ impl VulkanPhysDevice {
 
         // shaders
         // -------
-        // can't function without geo-shaders
-        println!(
-            "\t> geometry-shader is supported: {:?}",
-            features.geometry_shader
-        );
-        if features.geometry_shader == vk::FALSE {
+        if features.geometry_shader == vk::TRUE {
+            println!("\t> geometry-shader is supported");
+        } else {
             _score = 0;
+            eprintln!("\t> geometry-shader is NOT supported");
         }
+
+        if features2_phys_device_features_11.shader_draw_parameters == vk::TRUE {
+            println!("\t> shader-draw-parameters are supported");
+        } else {
+            _score = 0;
+            eprintln!("\t> shader-draw-parameters are NOT supported");
+        }
+
 
         // sampler
         // -------
