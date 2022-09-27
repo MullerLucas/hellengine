@@ -20,7 +20,7 @@ pub use queues::{VulkanQueue, VulkanQueues, VulkanQueueFamily, VulkanQueueSuppor
 mod swapchain;
 pub use swapchain::{VulkanSwapchain, VulkanSwapchainSupport};
 
-mod config;
+pub mod config;
 
 mod render_pass;
 pub use render_pass::{VulkanRenderPass, VulkanRenderPassData};
@@ -48,8 +48,8 @@ pub use shader::VulkanShader;
 mod vertext;
 pub use vertext::{Vertex, VertexInfo};
 
-mod renderer_2d;
-pub use renderer_2d::{VulkanRenderer2D, RenderData};
+mod vulkan_backend;
+pub use vulkan_backend::{VulkanBackend, RenderData};
 
 mod instance;
 pub use instance::VulkanInstance;

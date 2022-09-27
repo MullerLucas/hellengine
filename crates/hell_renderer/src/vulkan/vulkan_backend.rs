@@ -1,6 +1,9 @@
 use ash::vk;
+use hell_common::HellResult;
 use hell_common::transform::Transform;
 use hell_common::window::HellWindowExtent;
+use crate::error::err_invalid_frame_idx;
+use crate::shared::camera::Camera;
 use crate::vulkan::image::TextureImage;
 use crate::vulkan::{VulkanLogicDevice, VulkanSampler};
 use crate::vulkan::descriptors::VulkanDescriptorManager;
@@ -190,22 +193,60 @@ pub struct MeshPushConstants {
 // renderer
 // ----------------------------------------------------------------------------
 
-pub struct VulkanRenderer2D {
+pub struct VulkanResourceManger {
+    camera_buffers: Vec<VulkanBuffer>,
+}
+
+impl VulkanResourceManger {
+    pub fn new(core: &VulkanCore) -> Self {
+        let camera_buffer_size = Camera::device_size();
+        let camera_buffers: Vec<_> = (0..config::MAX_FRAMES_IN_FLIGHT).into_iter()
+            .map(|_| VulkanBuffer::from_uniform(core, camera_buffer_size))
+            .collect();
+
+        Self {
+            camera_buffers,
+        }
+    }
+
+    pub fn drop_manaual(&self, device: &ash::Device) {
+        self.camera_buffers.iter().for_each(|p| p.drop_manual(device));
+    }
+}
+
+impl VulkanResourceManger {
+    pub fn get_all_camera_buffer(&self) -> &[VulkanBuffer] {
+        &self.camera_buffers
+    }
+
+    pub fn get_camera_buffer(&self, frame_idx: usize) -> HellResult<&VulkanBuffer> {
+        self.camera_buffers.get(frame_idx).ok_or_else(|| err_invalid_frame_idx(frame_idx))
+    }
+}
+
+// ----------------------------------------------------------------------------
+// renderer
+// ----------------------------------------------------------------------------
+
+pub struct VulkanBackend {
     pub curr_frame_idx: usize,
     pub frame_data: VulkanFrameData,
+
 
     pub pipelines: Vec<VulkanPipeline>,
     pub meshes: Vec<VulkanMesh>,
     pub texture: Vec<TextureImage>,
     pub sampler: Vec<VulkanSampler>,
     pub materials: Vec<VulkanMaterial>,
+
+    pub resource_manager: VulkanResourceManger,
     pub descriptor_manager: VulkanDescriptorManager,
 
     pub render_pass_data: VulkanRenderPassData,
     pub core: VulkanCore,
 }
 
-impl VulkanRenderer2D {
+impl VulkanBackend {
     // TODO: error handling
     pub fn new(core: VulkanCore) -> Self {
         let frame_data = VulkanFrameData::new(&core);
@@ -219,9 +260,11 @@ impl VulkanRenderer2D {
         ];
         let sampler = vec![VulkanSampler::new(&core).unwrap()];
 
+        let resource_manager = VulkanResourceManger::new(&core);
+
         let device = &core.device.device;
         let mut descriptor_manager = VulkanDescriptorManager::new(device).unwrap();
-        let _ = descriptor_manager.add_global_descriptor_sets(device, &frame_data.camera_ubos, &frame_data.scene_ubo, config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
+        let _ = descriptor_manager.add_global_descriptor_sets(device, resource_manager.get_all_camera_buffer(), &frame_data.scene_ubo, config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
         let _ = descriptor_manager.add_object_descriptor_set(device, &frame_data.object_ubos, config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
         let _ = descriptor_manager.add_material_descriptor_sets(device, &texture[0], &sampler[0]).unwrap();
         let _ = descriptor_manager.add_material_descriptor_sets(device, &texture[1], &sampler[0]).unwrap();
@@ -237,9 +280,12 @@ impl VulkanRenderer2D {
             VulkanMaterial::new(0, 2, 2),
         ];
 
+
         Self {
             curr_frame_idx: 0,
             frame_data,
+
+            resource_manager,
 
             pipelines,
             meshes,
@@ -254,7 +300,7 @@ impl VulkanRenderer2D {
     }
 }
 
-impl Drop for VulkanRenderer2D {
+impl Drop for VulkanBackend {
     fn drop(&mut self) {
         println!("> dropping Renerer2D...");
 
@@ -265,6 +311,7 @@ impl Drop for VulkanRenderer2D {
         self.texture.iter().for_each(|t| t.drop_manual(device));
         self.sampler.iter().for_each(|s| s.drop_manual(device));
 
+        self.resource_manager.drop_manaual(device);
         self.descriptor_manager.drop_manual(device);
 
         self.frame_data.drop_manual(device);
@@ -273,12 +320,12 @@ impl Drop for VulkanRenderer2D {
     }
 }
 
-impl VulkanRenderer2D {
+impl VulkanBackend {
     pub fn wait_idle(&self) {
         self.core.wait_device_idle();
     }
 
-    pub fn on_window_changed(&mut self, window_extent: &HellWindowExtent) {
+    pub fn on_window_changed(&mut self, window_extent: HellWindowExtent) {
         self.core.recreate_swapchain(window_extent);
         self.render_pass_data.recreate_framebuffer(&self.core);
     }
@@ -448,5 +495,14 @@ impl VulkanRenderer2D {
                 device.cmd_draw_indexed(cmd_buffer, curr_mesh.indices_count() as u32, 1, 0, 0, idx as u32);
             }
         }
+    }
+}
+
+impl VulkanBackend {
+    pub fn update_camera_buffer(&self, frame_idx: usize, camera: &Camera) -> HellResult<()> {
+        let buffer = self.resource_manager.get_camera_buffer(frame_idx)?;
+        buffer.upload_data_buffer(&self.core.device.device, camera)?;
+
+        Ok(())
     }
 }

@@ -1,5 +1,6 @@
 use ash::prelude::VkResult;
 use ash::vk;
+use crate::shared::camera::Camera;
 use crate::vulkan::{VulkanBuffer, VulkanCore};
 
 use super::RenderData;
@@ -24,48 +25,12 @@ pub trait VulkanUboData {
 // camera data
 // ----------------------------------------------------------------------------
 
-#[derive(Clone)]
-#[repr(C)]
-pub struct CameraData {
-    pub view: glam::Mat4,
-    pub proj: glam::Mat4,
-    pub view_proj: glam::Mat4,
-}
-
-impl VulkanUboData for CameraData {
+impl VulkanUboData for Camera {
     fn device_size() -> vk::DeviceSize {
         std::mem::size_of::<Self>() as vk::DeviceSize
     }
 }
 
-impl CameraData {
-    pub fn new(core: &VulkanCore) -> Self {
-        let aspect_ratio = core.swapchain.aspect_ratio();
-
-        let view = glam::Mat4::look_at_rh(glam::Vec3::new(0.0, 0.0, 2.0), glam::Vec3::new(0.0, 0.0, 0.0), glam::Vec3::new(0.0, 1.0, 0.0));
-        let proj = glam::Mat4::perspective_rh(90.0, aspect_ratio, 0.1, 10.0);
-        let view_proj = view * proj;
-
-        Self {
-            view, proj, view_proj
-        }
-    }
-}
-
-impl CameraData {
-    pub fn update_view_proj(&mut self) {
-        self.view_proj = self.proj * self.view;
-    }
-
-    // TODO: error handling
-    pub fn update_uniform_buffer(&mut self, core: &VulkanCore, delta_time: f32, buffer: &VulkanBuffer) -> VkResult<()> {
-        static mut POS: glam::Vec3 = glam::Vec3::new(0.0, 0.0, 0.0);
-        unsafe { POS.x += delta_time * 10.0; }
-        self.update_view_proj();
-
-        buffer.upload_data_buffer(&core.device.device, self)
-    }
-}
 
 
 

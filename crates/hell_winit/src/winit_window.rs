@@ -1,4 +1,5 @@
 use hell_app::HellApp;
+use hell_common::HellResult;
 use hell_common::window::{HellWindow, HellSurfaceInfo, HellWindowExtent};
 
 use winit::dpi::LogicalSize;
@@ -79,7 +80,8 @@ impl WinitWindow {
                     self.window.request_redraw();
                 }
                 Event::RedrawRequested(_) => {
-                    WinitWindow::handle_redraw_request(&mut handle_resize, &self.window, &mut app, &mut fps);
+                    // TODO: error handling
+                    WinitWindow::handle_redraw_request(&mut handle_resize, &self.window, &mut app, &mut fps).unwrap();
                 }
                 Event::LoopDestroyed => {
                     app.wait_idle();
@@ -105,13 +107,13 @@ impl WinitWindow {
         }
     }
 
-    fn handle_redraw_request(handle_resize: &mut bool, window: &winit::window::Window, app: &mut HellApp, fps: &mut FPSLimiter) {
+    fn handle_redraw_request(handle_resize: &mut bool, window: &winit::window::Window, app: &mut HellApp, fps: &mut FPSLimiter) -> HellResult<()> {
         // TODO: check resize logic
         if *handle_resize {
             let window_extent = WinitWindow::get_winit_window_extent(window);
 
             if (window_extent.width * window_extent.height) > 0 {
-                app.on_window_changed(&window_extent);
+                app.handle_window_changed(window_extent);
                 *handle_resize = false;
                 println!("> resize was handled...");
             } else {
@@ -119,9 +121,11 @@ impl WinitWindow {
             }
         } else {
             let delta_time = fps.delta_time();
-            *handle_resize = app.draw_frame(delta_time);
+            *handle_resize = app.draw_frame(delta_time)?;
         }
 
         fps.tick_frame();
+
+        Ok(())
     }
 }

@@ -62,7 +62,7 @@ impl VulkanCore {
         })
     }
 
-    pub fn recreate_swapchain(&mut self, window_extent: &HellWindowExtent) {
+    pub fn recreate_swapchain(&mut self, window_extent: HellWindowExtent) {
         println!("> recreating swapchain...");
 
         self.swapchain.drop_manual(&self.device.device);

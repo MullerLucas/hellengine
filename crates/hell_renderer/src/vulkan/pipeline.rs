@@ -1,5 +1,5 @@
 use ash::vk;
-use crate::vulkan::renderer_2d::MeshPushConstants;
+use crate::vulkan::vulkan_backend::MeshPushConstants;
 
 use super::config;
 use super::render_pass::VulkanRenderPassData;

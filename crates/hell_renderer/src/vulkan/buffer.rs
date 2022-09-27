@@ -1,5 +1,8 @@
 use ash::prelude::VkResult;
 use ash::vk;
+use hell_common::HellResult;
+use crate::error::vk_to_hell_err;
+
 use super::VulkanUboData;
 use super::command_buffer::VulkanCommandPool;
 use super::vertext::Vertex;
@@ -204,11 +207,11 @@ impl VulkanBuffer {
 
 impl VulkanBuffer {
     // TODO: error handling
-    pub fn upload_data_buffer<T: VulkanUboData>(&self, device: &ash::Device, data: &T) -> VkResult<()> {
+    pub fn upload_data_buffer<T: VulkanUboData>(&self, device: &ash::Device, data: &T) -> HellResult<()> {
         let buff_size = T::device_size();
 
         unsafe {
-            let data_ptr = device.map_memory(self.mem, 0, buff_size, vk::MemoryMapFlags::empty())? as *mut T;
+            let data_ptr = device.map_memory(self.mem, 0, buff_size, vk::MemoryMapFlags::empty()).map_err(vk_to_hell_err)? as *mut T;
             data_ptr.copy_from_nonoverlapping(data, 1);
             device.unmap_memory(self.mem);
         }

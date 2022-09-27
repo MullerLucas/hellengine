@@ -1,6 +1,7 @@
 use std::os::raw;
 
 
+#[derive(Clone, Copy)]
 pub struct HellSurfaceInfo {
     display: *mut raw::c_void,
     window: raw::c_ulong,
@@ -23,6 +24,7 @@ impl HellSurfaceInfo {
 
 
 
+#[derive(Clone, Copy)]
 pub struct HellWindowExtent {
     pub width: u32,
     pub height: u32,

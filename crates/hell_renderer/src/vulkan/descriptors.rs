@@ -1,6 +1,7 @@
 use ash::prelude::VkResult;
 use ash::vk;
-use crate::vulkan::shader_data::CameraData;
+
+use crate::shared::camera::Camera;
 
 use super::image::TextureImage;
 use super::{config, VulkanBuffer, VulkanSampler, SceneData, VulkanUboData, ObjectData};
@@ -140,7 +141,7 @@ impl VulkanDescriptorManager {
         let pool_sizes = [
             vk::DescriptorPoolSize::builder()
                 .ty(vk::DescriptorType::UNIFORM_BUFFER)
-                .descriptor_count(config::MAX_FRAMES_IN_FLIGHT)
+                .descriptor_count(config::MAX_FRAMES_IN_FLIGHT as u32)
                 .build(),
             vk::DescriptorPoolSize::builder()
                 .ty(vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC)
@@ -247,7 +248,7 @@ impl VulkanDescriptorManager {
                 vk::DescriptorBufferInfo::builder()
                     .buffer(camera_ubos[idx].buffer)
                     .offset(0)
-                    .range(CameraData::device_size())
+                    .range(Camera::device_size())
                     .build()
             ];
 
