@@ -1,5 +1,6 @@
 use hell_common::transform::Transform;
-use hell_renderer::vulkan::{RenderData, SceneData};
+use hell_renderer::render_data::SceneData;
+use hell_renderer::vulkan::RenderData;
 
 pub struct Scene {
     scene_data: SceneData,

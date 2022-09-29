@@ -1,7 +1,7 @@
 use hell_common::HellResult;
 use hell_common::window::{HellWindow, HellWindowExtent};
 use hell_renderer::{HellRenderer, HellRendererInfo};
-use hell_renderer::vulkan::{ObjectData, config};
+use hell_renderer::vulkan::config;
 use crate::scene::Scene;
 
 mod scene;
@@ -54,17 +54,12 @@ impl HellApp {
 
         self.scene.update(delta_time);
 
-        let frame_data = self.renderer.get_frame_data();
-        let curr_frame_idx = self.renderer.get_frame_idx() as u64;
-        let core = self.renderer.get_core();
-
-        let scene_ubo = &frame_data.scene_ubo;
         let scene_data = self.scene.get_scene_data_mut();
-        scene_data.update_uniform_buffer(core, scene_ubo, curr_frame_idx).unwrap();
+        scene_data.update_data();
+        self.renderer.update_scene_buffer(scene_data)?;
 
-        let object_ubo = &frame_data.object_ubos[curr_frame_idx as usize];
         let render_data = self.scene.get_render_data();
-        ObjectData::update_storage_buffer(core, object_ubo, render_data).unwrap();
+        self.renderer.update_object_buffer(render_data)?;
 
         self.renderer.draw_frame(delta_time, render_data)
     }

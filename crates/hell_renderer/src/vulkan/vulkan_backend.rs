@@ -3,13 +3,13 @@ use hell_common::HellResult;
 use hell_common::transform::Transform;
 use hell_common::window::HellWindowExtent;
 use crate::error::err_invalid_frame_idx;
-use crate::shared::camera::Camera;
+use crate::shared::render_data::{CameraData, SceneData, ObjectData};
 use crate::vulkan::image::TextureImage;
 use crate::vulkan::{VulkanLogicDevice, VulkanSampler};
 use crate::vulkan::descriptors::VulkanDescriptorManager;
 
 use super::buffer::VulkanBuffer;
-use super::{config, SceneData, VulkanUboData};
+use super::{config, VulkanUboData};
 use super::frame::VulkanFrameData;
 use super::pipeline::VulkanPipeline;
 use super::render_pass::VulkanRenderPassData;
@@ -95,7 +95,6 @@ impl VulkanMaterial {
 // ----------------------------------------------------------------------------
 
 pub struct RenderDataChunk<'a> {
-    // pub pipeline_idx: usize,
     pub mesh_idx: usize,
     pub transform: &'a Transform,
     pub material_idx: usize,
@@ -104,8 +103,6 @@ pub struct RenderDataChunk<'a> {
 #[derive(Default)]
 pub struct RenderData {
     pub mesh_indices: Vec<usize>,
-    // pub pipeline_indices: Vec<usize>,
-    // pub texture_descriptor_set: Vec<vk::DescriptorSet>,
     pub material_indices: Vec<usize>,
 
     pub transforms: Vec<Transform>,
@@ -120,8 +117,6 @@ impl RenderData {
         self.mesh_indices.push(mesh_idx);
         self.transforms.push(trans);
         self.material_indices.push(material_idx);
-        // self.pipeline_indices.push(pipeline_idx);
-        // self.texture_descriptor_set.push(texture_descriptor);
 
         self.data_count()
     }
@@ -195,22 +190,37 @@ pub struct MeshPushConstants {
 
 pub struct VulkanResourceManger {
     camera_buffers: Vec<VulkanBuffer>,
+    scene_buffers: VulkanBuffer, // one ubo for all frames
+    object_buffers: Vec<VulkanBuffer>,
 }
 
 impl VulkanResourceManger {
     pub fn new(core: &VulkanCore) -> Self {
-        let camera_buffer_size = Camera::device_size();
+        let camera_buffer_size = CameraData::device_size();
         let camera_buffers: Vec<_> = (0..config::MAX_FRAMES_IN_FLIGHT).into_iter()
             .map(|_| VulkanBuffer::from_uniform(core, camera_buffer_size))
             .collect();
 
+        let scene_ubo_size = SceneData::total_size(core.phys_device.device_props.limits.min_uniform_buffer_offset_alignment, config::MAX_FRAMES_IN_FLIGHT as u64);
+        let scene_ubo = VulkanBuffer::from_uniform(core, scene_ubo_size);
+
+        let object_ubo_size = ObjectData::total_size();
+        let object_ubos: Vec<_> = (0..config::MAX_FRAMES_IN_FLIGHT).into_iter()
+            .map(|_| VulkanBuffer::from_storage(core, object_ubo_size))
+            .collect();
+
+
         Self {
             camera_buffers,
+            scene_buffers: scene_ubo,
+            object_buffers: object_ubos,
         }
     }
 
     pub fn drop_manaual(&self, device: &ash::Device) {
         self.camera_buffers.iter().for_each(|p| p.drop_manual(device));
+        self.scene_buffers.drop_manual(device);
+        self.object_buffers.iter().for_each(|p| p.drop_manual(device));
     }
 }
 
@@ -221,6 +231,18 @@ impl VulkanResourceManger {
 
     pub fn get_camera_buffer(&self, frame_idx: usize) -> HellResult<&VulkanBuffer> {
         self.camera_buffers.get(frame_idx).ok_or_else(|| err_invalid_frame_idx(frame_idx))
+    }
+
+    pub fn get_scene_buffer(&self) -> &VulkanBuffer {
+        &self.scene_buffers
+    }
+
+    pub fn get_all_object_buffers(&self) -> &[VulkanBuffer] {
+        &self.object_buffers
+    }
+
+    pub fn get_object_buffer(&self, frame_idx: usize) -> HellResult<&VulkanBuffer> {
+        self.object_buffers.get(frame_idx).ok_or_else(|| err_invalid_frame_idx(frame_idx))
     }
 }
 
@@ -264,8 +286,8 @@ impl VulkanBackend {
 
         let device = &core.device.device;
         let mut descriptor_manager = VulkanDescriptorManager::new(device).unwrap();
-        let _ = descriptor_manager.add_global_descriptor_sets(device, resource_manager.get_all_camera_buffer(), &frame_data.scene_ubo, config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
-        let _ = descriptor_manager.add_object_descriptor_set(device, &frame_data.object_ubos, config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
+        let _ = descriptor_manager.add_global_descriptor_sets(device, resource_manager.get_all_camera_buffer(), resource_manager.get_scene_buffer(), config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
+        let _ = descriptor_manager.add_object_descriptor_set(device, resource_manager.get_all_object_buffers(), config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
         let _ = descriptor_manager.add_material_descriptor_sets(device, &texture[0], &sampler[0]).unwrap();
         let _ = descriptor_manager.add_material_descriptor_sets(device, &texture[1], &sampler[0]).unwrap();
         let _ = descriptor_manager.add_material_descriptor_sets(device, &texture[2], &sampler[0]).unwrap();
@@ -499,7 +521,7 @@ impl VulkanBackend {
 }
 
 impl VulkanBackend {
-    pub fn update_camera_buffer(&self, frame_idx: usize, camera: &Camera) -> HellResult<()> {
+    pub fn update_camera_buffer(&self, frame_idx: usize, camera: &CameraData) -> HellResult<()> {
         let buffer = self.resource_manager.get_camera_buffer(frame_idx)?;
         buffer.upload_data_buffer(&self.core.device.device, camera)?;
 

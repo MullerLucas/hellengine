@@ -1,5 +1,6 @@
 pub mod vulkan;
 mod shared;
+pub use shared::render_data;
 
 mod error;
 mod hell_renderer;

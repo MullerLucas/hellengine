@@ -1,9 +1,12 @@
 use hell_common::HellResult;
 use hell_common::window::{HellSurfaceInfo, HellWindowExtent};
 
-use crate::shared::camera::Camera;
+use crate::render_data::ObjectData;
+use crate::shared::render_data::{CameraData, SceneData};
 use crate::vulkan::{VulkanBackend, VulkanCore, VulkanFrameData, RenderData};
 use crate::error::vk_to_hell_err;
+
+
 
 pub struct HellRendererInfo {
     pub max_frames_in_flight: usize,
@@ -14,7 +17,7 @@ pub struct HellRendererInfo {
 pub struct HellRenderer {
     info: HellRendererInfo,
     backend: VulkanBackend,
-    camera: Camera,
+    camera: CameraData,
 
     frame_idx: usize,
 }
@@ -24,7 +27,7 @@ impl HellRenderer {
         let core = VulkanCore::new(&info.surface_info, &info.window_extent).map_err(vk_to_hell_err)?;
         let aspect_ratio = core.swapchain.aspect_ratio();
         let backend = VulkanBackend::new(core);
-        let camera = Camera::new(aspect_ratio);
+        let camera = CameraData::new(aspect_ratio);
 
         Ok(Self {
             info,
@@ -59,6 +62,29 @@ impl HellRenderer {
         self.increment_frame_idx();
         Ok(is_resized)
     }
+
+    pub fn update_scene_buffer(&self, scene_data: &SceneData) -> HellResult<()> {
+        let buffer = self.backend.resource_manager.get_scene_buffer();
+        let min_ubo_alignment = self.backend.core.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
+        buffer.upload_data_buffer_array(&self.backend.core.device.device, min_ubo_alignment, scene_data, self.frame_idx)
+            .map_err(vk_to_hell_err)
+    }
+
+    pub fn update_object_buffer(&self, render_data: &RenderData) -> HellResult<()> {
+        let buffer = self.backend.resource_manager.get_object_buffer(self.frame_idx)?;
+
+        let object_data: Vec<_> = render_data.iter()
+            .map(|r| ObjectData {
+                model: r.transform.create_model_mat()
+            })
+            .collect();
+
+        unsafe {
+            // TODO: try to write diretly into the buffer
+            buffer.upload_data_storage_buffer(&self.backend.core.device.device, object_data.as_ptr(), object_data.len())
+                .map_err(vk_to_hell_err)
+        }
+    }
 }
 
 impl HellRenderer {
@@ -72,7 +98,6 @@ impl HellRenderer {
         self.camera.update_view_proj();
 
         self.backend.update_camera_buffer(self.frame_idx, &self.camera)?;
-        // buffer.upload_data_buffer(&core.device.device, self)
 
         Ok(())
     }

@@ -1,10 +1,11 @@
 use ash::prelude::VkResult;
 use ash::vk;
 
-use crate::shared::camera::Camera;
+
+use crate::shared::render_data::{CameraData, SceneData, ObjectData};
 
 use super::image::TextureImage;
-use super::{config, VulkanBuffer, VulkanSampler, SceneData, VulkanUboData, ObjectData};
+use super::{config, VulkanBuffer, VulkanSampler, VulkanUboData};
 
 
 
@@ -248,7 +249,7 @@ impl VulkanDescriptorManager {
                 vk::DescriptorBufferInfo::builder()
                     .buffer(camera_ubos[idx].buffer)
                     .offset(0)
-                    .range(Camera::device_size())
+                    .range(CameraData::device_size())
                     .build()
             ];
 

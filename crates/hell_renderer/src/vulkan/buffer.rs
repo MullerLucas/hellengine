@@ -219,8 +219,8 @@ impl VulkanBuffer {
         Ok(())
     }
 
-    pub fn upload_data_buffer_array<T: VulkanUboData>(&self, device: &ash::Device, min_ubo_alignment: u64, data: &T, idx: u64) -> VkResult<()> {
-        let offset = T::padded_device_size(min_ubo_alignment) * idx;
+    pub fn upload_data_buffer_array<T: VulkanUboData>(&self, device: &ash::Device, min_ubo_alignment: u64, data: &T, idx: usize) -> VkResult<()> {
+        let offset = T::padded_device_size(min_ubo_alignment) * idx as u64;
         let buff_size = T::device_size();
 
         unsafe {
