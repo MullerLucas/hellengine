@@ -21,7 +21,11 @@ impl VulkanPipeline {
 
         // let render_pass_data = VulkanRenderPassData::new(core);
 
-        let shader = VulkanShader::new(&core.device.device, config::VERT_SHADER_PATH, config::FRAG_SHADER_PATH);
+        let shader = VulkanShader::new(
+            &core.device.device,
+            &config::engine_path(config::VERT_SHADER_PATH),
+            &config::engine_path(config::FRAG_SHADER_PATH)
+        );
         let shader_stages = shader.get_stage_create_infos();
 
         let vertex_info = VertexInfo::new();

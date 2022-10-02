@@ -276,9 +276,9 @@ impl VulkanBackend {
         let quad_mesh = VulkanMesh::new_quad(&core);
         let meshes = vec![quad_mesh];
         let texture = vec![
-            TextureImage::new(&core, config::TEXTURE_0_PATH),
-            TextureImage::new(&core, config::TEXTURE_1_PATH),
-            TextureImage::new(&core, config::TEXTURE_2_PATH)
+            TextureImage::new(&core, &config::engine_path(config::TEXTURE_0_PATH)),
+            TextureImage::new(&core, &config::engine_path(config::TEXTURE_1_PATH)),
+            TextureImage::new(&core, &config::engine_path(config::TEXTURE_2_PATH))
         ];
         let sampler = vec![VulkanSampler::new(&core).unwrap()];
 
