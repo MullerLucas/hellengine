@@ -1,4 +1,4 @@
-use hell_common::{HellResult, HellError};
+use hell_common::prelude::*;
 
 use crate::resources::{ImageResource, MaterialResource};
 
@@ -37,7 +37,7 @@ impl<T> ResourceGroup<T> {
 
     pub fn add(&mut self, path: String, res: T) -> HellResult<usize> {
         if self.contains(&path) {
-            return Err(HellError::from("trying to duplicate resource".to_owned()));
+            return Err(HellError::from_msg(HellErrorKind::ResourceError, "trying to duplicate resource".to_owned()));
         }
 
         self.paths.push(path);

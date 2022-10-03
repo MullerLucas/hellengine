@@ -1,4 +1,5 @@
 use std::os::raw;
+use crate::prelude::*;
 
 
 #[derive(Clone, Copy)]
@@ -34,6 +35,6 @@ pub struct HellWindowExtent {
 
 
 pub trait HellWindow {
-    fn create_surface_info(&self) -> HellSurfaceInfo;
+    fn create_surface_info(&self) -> HellResult<HellSurfaceInfo>;
     fn get_window_extent(&self) -> HellWindowExtent;
 }

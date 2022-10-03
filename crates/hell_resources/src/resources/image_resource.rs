@@ -1,7 +1,8 @@
 use std::path::Path;
 
-use hell_common::{HellResult, HellError};
+use hell_common::prelude::*;
 use image::{DynamicImage, RgbaImage};
+
 
 
 
@@ -11,7 +12,7 @@ pub struct ImageResource {
 
 impl ImageResource {
     pub fn load_from_disk(path: &str, flipv: bool) -> HellResult<Self> {
-        let dyn_img = image::open(Path::new(path)).map_err(|e| HellError::from(format!("{}", e)))?;
+        let dyn_img = image::open(Path::new(path))?;
 
         if flipv {
             dyn_img.flipv();

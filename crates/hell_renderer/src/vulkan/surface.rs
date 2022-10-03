@@ -1,4 +1,5 @@
 use ash::vk;
+use hell_common::prelude::*;
 use hell_common::window::HellSurfaceInfo;
 
 
@@ -9,14 +10,14 @@ pub struct VulkanSurface {
 
 
 impl VulkanSurface {
-    pub fn new(entry: &ash::Entry, instance: &ash::Instance, surface_info: &HellSurfaceInfo) -> Self {
-        let surface = create_surface(entry, instance, surface_info).unwrap();
+    pub fn new(entry: &ash::Entry, instance: &ash::Instance, surface_info: &HellSurfaceInfo) -> HellResult<Self> {
+        let surface = create_surface(entry, instance, surface_info).to_render_hell_err()?;
         let surface_loader = ash::extensions::khr::Surface::new(entry, instance);
 
-        Self {
+        Ok(Self {
             surface,
             surface_loader,
-        }
+        })
     }
 }
 

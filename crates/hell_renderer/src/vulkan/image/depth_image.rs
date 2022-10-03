@@ -1,5 +1,6 @@
 use ash::vk;
 
+use hell_common::prelude::*;
 use crate::vulkan::VulkanCore;
 
 use super::RawImage;
@@ -9,7 +10,7 @@ pub struct DepthImage {
 }
 
 impl DepthImage {
-    pub fn new(core: &VulkanCore) -> Self {
+    pub fn new(core: &VulkanCore) -> HellResult<Self> {
         let depth_format = core.phys_device.depth_format;
         let extent = core.swapchain.extent;
 
@@ -33,9 +34,9 @@ impl DepthImage {
             depth_format,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        );
+        )?;
 
-        Self { img }
+        Ok(Self { img })
     }
 }
 

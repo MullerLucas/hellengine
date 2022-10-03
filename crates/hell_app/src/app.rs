@@ -1,4 +1,4 @@
-use hell_common::HellResult;
+use hell_common::prelude::*;
 use hell_common::window::{HellWindow, HellWindowExtent};
 use hell_renderer::{HellRenderer, HellRendererInfo};
 use hell_renderer::vulkan::config;
@@ -7,11 +7,20 @@ use hell_resources::ResourceManager;
 use crate::scene::Scene;
 
 
+// ----------------------------------------------------------------------------
+// hell-game
+// ----------------------------------------------------------------------------
 
 pub trait HellGame {
     fn init_game(&mut self, scene: &mut Scene, resource_manager: &mut ResourceManager) -> HellResult<()>;
     fn update_game(&mut self, scene: &mut Scene, delta_time: f32) -> HellResult<()>;
 }
+
+
+
+// ----------------------------------------------------------------------------
+// hell-app
+// ----------------------------------------------------------------------------
 
 pub struct HellApp {
     resource_manager: ResourceManager,
@@ -25,11 +34,11 @@ pub struct HellApp {
 // create
 impl<'a> HellApp {
     pub fn new(window: &dyn HellWindow, game: &'static mut dyn HellGame) -> HellResult<Self> {
-        let surface_info = window.create_surface_info();
+        let surface_info = window.create_surface_info()?;
         let window_extent = window.get_window_extent();
 
         let info = HellRendererInfo {
-            max_frames_in_flight: config::MAX_FRAMES_IN_FLIGHT, // TODO:
+            max_frames_in_flight: config::MAX_FRAMES_IN_FLIGHT,
             surface_info,
             window_extent,
         };
@@ -61,33 +70,30 @@ impl<'a> HellApp {
 
 impl HellApp {
     pub fn init_game(&mut self) -> HellResult<()> {
-        let scene = self.scene.as_mut().unwrap();
+        let scene = self.scene.as_mut().to_render_hell_err()?;
         self.game.init_game(scene, &mut self.resource_manager)
     }
 
 
     pub fn update_game(&mut self, delta_time: f32) -> HellResult<()> {
-        let scene = self.scene.as_mut().unwrap();
+        let scene = self.scene.as_mut().to_render_hell_err()?;
         self.game.update_game(scene, delta_time)
     }
 }
 
 impl HellApp {
-    pub fn handle_window_changed(&mut self, window_extent: HellWindowExtent) {
-        self.wait_idle();
-        self.renderer.handle_window_changed(window_extent);
+    pub fn handle_window_changed(&mut self, window_extent: HellWindowExtent) -> HellResult<()> {
+        self.wait_idle()?;
+        self.renderer.handle_window_changed(window_extent)
     }
 
-    pub fn wait_idle(&self) {
-        self.renderer.wait_idle();
+    pub fn wait_idle(&self) -> HellResult<()> {
+        self.renderer.wait_idle()
     }
 
-    // TODO: error handling
     pub fn draw_frame(&mut self, delta_time: f32) -> HellResult<bool> {
-        // TODO: remove
         // std::thread::sleep(std::time::Duration::from_millis(250));
         // let delta_time = 0.1;
-
 
         self.update_game(delta_time)?;
 
@@ -97,7 +103,7 @@ impl HellApp {
         };
 
         let scene_data = scene.get_scene_data_mut();
-        scene_data.update_data();
+        scene_data.update_data()?;
         self.renderer.update_scene_buffer(scene_data)?;
 
         let render_data = scene.get_render_data();

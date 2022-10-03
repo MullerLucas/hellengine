@@ -2,6 +2,7 @@ use std::ffi;
 use std::os::raw;
 
 use ash::vk;
+use hell_common::prelude::*;
 
 use super::{config, platforms, validation_layers, debugging};
 
@@ -16,18 +17,16 @@ pub struct VulkanInstance {
 
 
 impl VulkanInstance {
-    pub fn new (app_name: &str) -> Self {
-        let entry = unsafe { ash::Entry::load().unwrap() };
+    pub fn new (app_name: &str) -> HellResult<Self> {
+        let entry = unsafe { ash::Entry::load().to_render_hell_err()? };
 
-        if config::ENABLE_VALIDATION_LAYERS
-            && !validation_layers::check_validation_layer_support(&entry, config::VALIDATION_LAYER_NAMES)
-        {
+        if config::ENABLE_VALIDATION_LAYERS && !validation_layers::check_validation_layer_support(&entry, config::VALIDATION_LAYER_NAMES)? {
             panic!("validation layers requested, but not available!");
         }
 
 
-        let app_name = ffi::CString::new(app_name).unwrap();
-        let engine_name = ffi::CString::new(config::ENGINE_NAME).unwrap();
+        let app_name = ffi::CString::new(app_name).to_render_hell_err()?;
+        let engine_name = ffi::CString::new(config::ENGINE_NAME).to_render_hell_err()?;
 
         let app_info = vk::ApplicationInfo::builder()
             .application_name(&app_name)
@@ -45,10 +44,11 @@ impl VulkanInstance {
 
 
         // TODO: improve
-        let enabled_validation_layers: Vec<_> = config::VALIDATION_LAYER_NAMES
+        let enabled_validation_layers: HellResult<Vec<_>> = config::VALIDATION_LAYER_NAMES
             .iter()
-            .map(|l| ffi::CString::new(*l).unwrap())
+            .map(|l| ffi::CString::new(*l).to_render_hell_err())
             .collect();
+        let enabled_validation_layers = enabled_validation_layers?;
 
         let enabled_validation_layer_ref: Vec<_> = enabled_validation_layers
             .iter()
@@ -65,12 +65,12 @@ impl VulkanInstance {
                 as *const raw::c_void;
         }
 
-        let vk_instance = unsafe { entry.create_instance(&instance_info, None).unwrap() };
+        let vk_instance = unsafe { entry.create_instance(&instance_info, None).to_render_hell_err()? };
 
-        Self {
+        Ok(Self {
             entry,
             instance: vk_instance
-        }
+        })
     }
 }
 

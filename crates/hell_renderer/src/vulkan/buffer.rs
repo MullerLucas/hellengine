@@ -1,7 +1,6 @@
 use ash::prelude::VkResult;
 use ash::vk;
-use hell_common::HellResult;
-use crate::error::vk_to_hell_err;
+use hell_common::prelude::*;
 
 use super::VulkanUboData;
 use super::command_buffer::VulkanCommandPool;
@@ -70,8 +69,7 @@ impl VulkanBuffer {
         }
     }
 
-    // TODO: error handling
-    pub fn from_vertices(core: &VulkanCore, vertices: &[Vertex]) -> Self {
+    pub fn from_vertices(core: &VulkanCore, vertices: &[Vertex]) -> HellResult<Self> {
         let device = &core.device.device;
 
         let buffer_size = std::mem::size_of_val(vertices) as vk::DeviceSize;
@@ -87,7 +85,7 @@ impl VulkanBuffer {
         );
 
         unsafe {
-            let mem_ptr = device.map_memory(staging_buffer.mem, 0, buffer_size, vk::MemoryMapFlags::empty()).unwrap() as *mut Vertex;
+            let mem_ptr = device.map_memory(staging_buffer.mem, 0, buffer_size, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut Vertex;
             mem_ptr.copy_from_nonoverlapping(vertices.as_ptr(), vertices.len());
             device.unmap_memory(staging_buffer.mem);
         }
@@ -104,7 +102,7 @@ impl VulkanBuffer {
         copy_buffer(
             device, &core.transfer_cmd_pool, core.device.queues.transfer.queue,
             &staging_buffer, &device_buffer
-        );
+        )?;
 
         unsafe {
             // TODO: implement drop for VulkanBuffer
@@ -112,12 +110,10 @@ impl VulkanBuffer {
             device.free_memory(staging_buffer.mem, None);
         }
 
-
-
-        device_buffer
+        Ok(device_buffer)
     }
 
-    pub fn from_indices(core: &VulkanCore, indices: &[u32]) -> Self {
+    pub fn from_indices(core: &VulkanCore, indices: &[u32]) -> HellResult<Self> {
         let device = &core.device.device;
 
         let buffer_size = std::mem::size_of_val(indices) as vk::DeviceSize;
@@ -132,7 +128,7 @@ impl VulkanBuffer {
         );
 
         unsafe {
-            let mem_ptr = device.map_memory(staging_buffer.mem, 0, buffer_size, vk::MemoryMapFlags::empty()).unwrap() as *mut u32;
+            let mem_ptr = device.map_memory(staging_buffer.mem, 0, buffer_size, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut u32;
             mem_ptr.copy_from_nonoverlapping(indices.as_ptr(), indices.len());
             device.unmap_memory(staging_buffer.mem);
         }
@@ -146,7 +142,7 @@ impl VulkanBuffer {
             Some(&[core.device.queues.graphics.family_idx, core.device.queues.transfer.family_idx])
         );
 
-        copy_buffer(device, &core.transfer_cmd_pool, core.device.queues.transfer.queue, &staging_buffer, &device_buffer);
+        copy_buffer(device, &core.transfer_cmd_pool, core.device.queues.transfer.queue, &staging_buffer, &device_buffer)?;
 
         unsafe {
             // TODO: implement Drop for VulkanBuffer
@@ -156,7 +152,7 @@ impl VulkanBuffer {
 
 
 
-        device_buffer
+        Ok(device_buffer)
     }
 
     pub fn from_uniform(core: &VulkanCore, size: vk::DeviceSize) -> Self {
@@ -206,12 +202,11 @@ impl VulkanBuffer {
 }
 
 impl VulkanBuffer {
-    // TODO: error handling
     pub fn upload_data_buffer<T: VulkanUboData>(&self, device: &ash::Device, data: &T) -> HellResult<()> {
         let buff_size = T::device_size();
 
         unsafe {
-            let data_ptr = device.map_memory(self.mem, 0, buff_size, vk::MemoryMapFlags::empty()).map_err(vk_to_hell_err)? as *mut T;
+            let data_ptr = device.map_memory(self.mem, 0, buff_size, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut T;
             data_ptr.copy_from_nonoverlapping(data, 1);
             device.unmap_memory(self.mem);
         }
@@ -232,14 +227,12 @@ impl VulkanBuffer {
         Ok(())
     }
 
-    // TODO: error handling
     /// # Safety
-    ///
     /// There is no safety don't use this function :)
-    pub unsafe fn upload_data_storage_buffer<T: VulkanUboData>(&self, device: &ash::Device, data: *const T, data_count: usize) -> VkResult<()> {
+    pub unsafe fn upload_data_storage_buffer<T: VulkanUboData>(&self, device: &ash::Device, data: *const T, data_count: usize) -> HellResult<()> {
         let buff_size = T::device_size() * data_count as u64;
 
-        let data_ptr = device.map_memory(self.mem, 0, buff_size, vk::MemoryMapFlags::empty())? as *mut T;
+        let data_ptr = device.map_memory(self.mem, 0, buff_size, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut T;
         data_ptr.copy_from_nonoverlapping(data, data_count);
         device.unmap_memory(self.mem);
 
@@ -266,7 +259,7 @@ pub fn find_memory_type(instance: &ash::Instance, phys_device: vk::PhysicalDevic
     panic!("failed to find suitable memory-type");
 }
 
-fn copy_buffer(device: &ash::Device, cmd_pool: &VulkanCommandPool, queue: vk::Queue, src_buff: &VulkanBuffer, dst_buff: &VulkanBuffer) {
+fn copy_buffer(device: &ash::Device, cmd_pool: &VulkanCommandPool, queue: vk::Queue, src_buff: &VulkanBuffer, dst_buff: &VulkanBuffer) -> HellResult<()> {
     let command_buffer = cmd_pool.begin_single_time_commands(device);
 
     let copy_region = vk::BufferCopy {
@@ -279,10 +272,12 @@ fn copy_buffer(device: &ash::Device, cmd_pool: &VulkanCommandPool, queue: vk::Qu
         device.cmd_copy_buffer(command_buffer, src_buff.buffer, dst_buff.buffer, &[copy_region]);
     }
 
-    cmd_pool.end_single_time_commands(device, command_buffer, queue);
+    cmd_pool.end_single_time_commands(device, command_buffer, queue)?;
+
+    Ok(())
 }
 
-pub fn copy_buffer_to_img(core: &VulkanCore, buffer: vk::Buffer, img: vk::Image, width: u32, height: u32) {
+pub fn copy_buffer_to_img(core: &VulkanCore, buffer: vk::Buffer, img: vk::Image, width: u32, height: u32) -> HellResult<()> {
     let device = &core.device.device;
     let cmd_buffer = core.transfer_cmd_pool.begin_single_time_commands(device);
 
@@ -309,7 +304,9 @@ pub fn copy_buffer_to_img(core: &VulkanCore, buffer: vk::Buffer, img: vk::Image,
         device.cmd_copy_buffer_to_image(cmd_buffer, buffer, img, vk::ImageLayout::TRANSFER_DST_OPTIMAL, &[region]);
     }
 
-    core.transfer_cmd_pool.end_single_time_commands(device, cmd_buffer, core.device.queues.transfer.queue);
+    core.transfer_cmd_pool.end_single_time_commands(device, cmd_buffer, core.device.queues.transfer.queue)?;
+
+    Ok(())
 }
 
 

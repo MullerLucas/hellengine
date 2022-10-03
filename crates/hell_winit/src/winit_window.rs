@@ -1,5 +1,5 @@
 use hell_app::HellApp;
-use hell_common::HellResult;
+use hell_common::prelude::*;
 use hell_common::window::{HellWindow, HellSurfaceInfo, HellWindowExtent};
 
 use winit::dpi::LogicalSize;
@@ -35,13 +35,13 @@ impl WinitWindow {
 }
 
 impl HellWindow for WinitWindow {
-    fn create_surface_info(&self) -> HellSurfaceInfo {
+    fn create_surface_info(&self) -> HellResult<HellSurfaceInfo> {
         use winit::platform::unix::WindowExtUnix;
 
-        let x11_display = self.window.xlib_display().unwrap();
-        let x11_window = self.window.xlib_window().unwrap();
+        let x11_display = self.window.xlib_display().to_generic_hell_err()?;
+        let x11_window = self.window.xlib_window().to_window_hell_err()?;
 
-        HellSurfaceInfo::new(x11_display, x11_window)
+        Ok(HellSurfaceInfo::new(x11_display, x11_window))
     }
 
     fn get_window_extent(&self) -> HellWindowExtent {
@@ -81,10 +81,10 @@ impl WinitWindow {
                 }
                 Event::RedrawRequested(_) => {
                     // TODO: error handling
-                    WinitWindow::handle_redraw_request(&mut handle_resize, &self.window, &mut app, &mut fps).unwrap();
+                    WinitWindow::handle_redraw_request(&mut handle_resize, &self.window, &mut app, &mut fps).expect("failed to handle redraw request");
                 }
                 Event::LoopDestroyed => {
-                    app.wait_idle();
+                    app.wait_idle().expect("failed to wait for the app to become idle");
                 },
                 _ => {}
 
@@ -113,7 +113,7 @@ impl WinitWindow {
             let window_extent = WinitWindow::get_winit_window_extent(window);
 
             if (window_extent.width * window_extent.height) > 0 {
-                app.handle_window_changed(window_extent);
+                app.handle_window_changed(window_extent)?;
                 *handle_resize = false;
                 println!("> resize was handled...");
             } else {

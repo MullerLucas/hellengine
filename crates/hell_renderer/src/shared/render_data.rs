@@ -1,4 +1,6 @@
 
+use hell_common::prelude::*;
+
 use crate::vulkan::RenderData;
 
 pub trait HellRenderable {
@@ -68,9 +70,9 @@ impl Default for SceneData {
 }
 
 impl SceneData {
-    pub fn update_data(&mut self) {
+    pub fn update_data(&mut self) -> HellResult<()>{
         let time_raw = std::time::SystemTime::now()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH).to_generic_hell_err()?
             .as_secs_f64();
 
         let time = (time_raw / 2.0 % 100_000.0) as f32;
@@ -81,6 +83,8 @@ impl SceneData {
             time.tan(),
             1.0
         );
+
+        Ok(())
     }
 }
 

@@ -1,6 +1,7 @@
 use ash::vk;
 use crate::vulkan::vulkan_backend::MeshPushConstants;
 
+use hell_common::prelude::*;
 use super::config;
 use super::render_pass::VulkanRenderPassData;
 use super::shader::VulkanShader;
@@ -14,8 +15,7 @@ pub struct VulkanPipeline {
 }
 
 impl VulkanPipeline {
-    // TODO: error handling
-    pub fn new(core: &VulkanCore, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout]) -> Self {
+    pub fn new(core: &VulkanCore, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout]) -> HellResult<Self> {
         let device = &core.device.device;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 
@@ -25,7 +25,7 @@ impl VulkanPipeline {
             &core.device.device,
             config::VERT_SHADER_PATH,
             config::FRAG_SHADER_PATH
-        );
+        )?;
         let shader_stages = shader.get_stage_create_infos();
 
         let vertex_info = VertexInfo::new();
@@ -55,7 +55,7 @@ impl VulkanPipeline {
             .push_constant_ranges(&push_constants)
             .build();
 
-        let pipeline_layout = create_pipeline_layout_data(device, &pipeline_layout_info);
+        let pipeline_layout = create_pipeline_layout_data(device, &pipeline_layout_info)?;
 
         let pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
             .stages(shader_stages)
@@ -73,14 +73,18 @@ impl VulkanPipeline {
             .base_pipeline_index(-1)
             .build();
 
-        let pipeline = unsafe { device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None).unwrap()[0] };
+        let pipeline = unsafe {
+            device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
+                .map_err(|_| HellError::from_msg(HellErrorKind::RenderError, "failed to create graphics pipeline".to_owned()))?
+                [0]
+        };
 
         shader.drop_manual(&core.device.device);
 
-        Self {
+        Ok(Self {
             pipeline_layout,
             pipeline,
-        }
+        })
     }
 }
 
@@ -161,6 +165,6 @@ fn create_pipeline_blend_data(color_blend_attachments: &[vk::PipelineColorBlendA
         .build()
 }
 
-fn create_pipeline_layout_data(device: &ash::Device, layout_info: &vk::PipelineLayoutCreateInfo /*, set_layouts: &[vk::DescriptorSetLayout]*/) -> vk::PipelineLayout {
-    unsafe { device.create_pipeline_layout(layout_info, None).unwrap() }
+fn create_pipeline_layout_data(device: &ash::Device, layout_info: &vk::PipelineLayoutCreateInfo) -> HellResult<vk::PipelineLayout> {
+    unsafe { device.create_pipeline_layout(layout_info, None).to_render_hell_err() }
 }

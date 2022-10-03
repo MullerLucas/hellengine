@@ -1,7 +1,8 @@
 use ash::prelude::VkResult;
 use ash::vk;
 
-
+use hell_common::prelude::*;
+use crate::error::{err_invalid_frame_idx, err_invalid_set_idx};
 use crate::shared::render_data::{CameraData, SceneData, ObjectData};
 
 use super::image::TextureImage;
@@ -206,25 +207,28 @@ impl VulkanDescriptorManager {
         &self.layouts
     }
 
-    // TODO: error handling
-    pub fn get_global_set(&self, set_idx: usize, frame_idx: usize) -> vk::DescriptorSet {
-        *self.global_group.sets
-            .get(set_idx).unwrap()
-            .get(frame_idx).unwrap()
+    pub fn get_global_set(&self, set_idx: usize, frame_idx: usize) -> HellResult<vk::DescriptorSet> {
+        Ok(
+            *self.global_group.sets
+                .get(set_idx).ok_or_else(|| err_invalid_set_idx(frame_idx))?
+                .get(frame_idx).ok_or_else(|| err_invalid_frame_idx(frame_idx))?
+        )
     }
 
-    // TODO: error handling
-    pub fn get_object_set(&self, set_idx: usize, frame_idx: usize) -> vk::DescriptorSet {
-        *self.object_group.sets
-            .get(set_idx).unwrap()
-            .get(frame_idx).unwrap()
+    pub fn get_object_set(&self, set_idx: usize, frame_idx: usize) -> HellResult<vk::DescriptorSet> {
+        Ok(
+            *self.object_group.sets
+                .get(set_idx).ok_or_else(|| err_invalid_set_idx(frame_idx))?
+                .get(frame_idx).ok_or_else(|| err_invalid_frame_idx(frame_idx))?
+        )
     }
 
-    // TODO: error handling
-    pub fn get_material_set(&self, set_idx: usize) -> vk::DescriptorSet {
-        *self.material_group.sets
-            .get(set_idx).unwrap()
-            .get(0).unwrap()
+    pub fn get_material_set(&self, set_idx: usize) -> HellResult<vk::DescriptorSet> {
+        Ok(
+            *self.material_group.sets
+                .get(set_idx).ok_or_else(|| err_invalid_set_idx(set_idx))?
+                .get(0).ok_or_else(|| err_invalid_frame_idx(0))?
+        )
     }
 }
 

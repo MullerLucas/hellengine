@@ -1,6 +1,7 @@
 use ash::vk;
 use std::ptr;
 
+use hell_common::prelude::*;
 use crate::vulkan::phys_device::has_stencil_component;
 use crate::vulkan::{VulkanCore, buffer, VulkanQueue, VulkanCommandPool};
 
@@ -113,7 +114,7 @@ impl RawImage {
 }
 
 impl RawImage {
-    pub fn transition_image_layout(&self, device: &ash::Device, cmd_pool: &VulkanCommandPool, queue: &VulkanQueue, format: vk::Format, old_layout: vk::ImageLayout, new_layout: vk::ImageLayout) {
+    pub fn transition_image_layout(&self, device: &ash::Device, cmd_pool: &VulkanCommandPool, queue: &VulkanQueue, format: vk::Format, old_layout: vk::ImageLayout, new_layout: vk::ImageLayout) -> HellResult<()> {
         let cmd_buffer = cmd_pool.begin_single_time_commands(device);
 
         let subresource_range = vk::ImageSubresourceRange::builder()
@@ -184,7 +185,7 @@ impl RawImage {
             );
         }
 
-        cmd_pool.end_single_time_commands(device, cmd_buffer, queue.queue);
+        cmd_pool.end_single_time_commands(device, cmd_buffer, queue.queue)
     }
 }
 

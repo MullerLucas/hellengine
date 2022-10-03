@@ -1,4 +1,5 @@
 use ash::vk;
+use hell_common::prelude::*;
 use hell_utils::conversion::c_str_from_char_slice;
 use std::ffi::CStr;
 use std::fmt;
@@ -21,8 +22,8 @@ pub struct VulkanPhysDevice {
 
 
 impl VulkanPhysDevice {
-    pub fn pick_phys_device(instance: &ash::Instance, surface: &VulkanSurface) -> Self {
-        let all_devices = unsafe { instance.enumerate_physical_devices().unwrap() };
+    pub fn pick_phys_device(instance: &ash::Instance, surface: &VulkanSurface) -> HellResult<Self> {
+        let all_devices = unsafe { instance.enumerate_physical_devices().to_render_hell_err()? };
 
         let device = all_devices
             .into_iter()
@@ -46,15 +47,10 @@ impl VulkanPhysDevice {
 
         println!("physical device picked: {:?}", device);
 
-        device
+        Ok(device)
     }
 
-    pub fn rate_device_suitability(
-        instance: &ash::Instance,
-        phys_device: vk::PhysicalDevice,
-        surface: &VulkanSurface,
-        extension_names: &[&str],
-    ) -> Option<VulkanPhysDevice> {
+    pub fn rate_device_suitability(instance: &ash::Instance, phys_device: vk::PhysicalDevice, surface: &VulkanSurface, extension_names: &[&str]) -> Option<VulkanPhysDevice> {
         let device_props = unsafe { instance.get_physical_device_properties(phys_device) };
 
         let features = unsafe { instance.get_physical_device_features(phys_device) };
@@ -119,7 +115,7 @@ impl VulkanPhysDevice {
         // --------------
         queues::print_queue_families(instance, phys_device);
 
-        let queue_support = VulkanQueueSupport::new(instance, phys_device, surface);
+        let queue_support = VulkanQueueSupport::new(instance, phys_device, surface).ok()?;
         if !queue_support.is_complete() {
             _score = 0;
             println!("> no suitable queues were found!");
@@ -129,21 +125,22 @@ impl VulkanPhysDevice {
 
         // extensions
         // ----------
-        let swapchain_support =
-            if !check_device_extension_support(instance, phys_device, extension_names) {
+        let swapchain_support = {
+            if !check_device_extension_support(instance, phys_device, extension_names).ok()? {
                 _score = 0;
                 println!("> not all device extensions are supported!");
                 return None;
             } else {
                 // swap-chains
                 // -----------
-                let swapchain_support = VulkanSwapchainSupport::new(phys_device, surface);
+                let swapchain_support = VulkanSwapchainSupport::new(phys_device, surface).ok()?;
                 if !swapchain_support.is_suitable() {
                     _score = 0;
                     println!("> no suitable swap-chain found!");
                 }
                 swapchain_support
-            };
+            }
+        };
 
         let depth_format = find_depth_format(instance, phys_device);
 
@@ -171,15 +168,11 @@ impl fmt::Debug for VulkanPhysDevice {
     }
 }
 
-fn check_device_extension_support(
-    instance: &ash::Instance,
-    phys_device: vk::PhysicalDevice,
-    extension_names: &[&str],
-) -> bool {
+fn check_device_extension_support(instance: &ash::Instance, phys_device: vk::PhysicalDevice, extension_names: &[&str]) -> HellResult<bool> {
     let extension_props = unsafe {
         instance
             .enumerate_device_extension_properties(phys_device)
-            .unwrap()
+            .to_render_hell_err()?
     };
     let mut remaining_extensions = extension_names.to_owned();
 
@@ -190,7 +183,7 @@ fn check_device_extension_support(
     for prop in extension_props {
         let ext = c_str_from_char_slice(&prop.extension_name)
             .to_str()
-            .unwrap();
+            .to_render_hell_err()?;
         // println!("\t\t> {:?}", ext);
 
         remaining_extensions.retain(|e| *e != ext);
@@ -201,7 +194,7 @@ fn check_device_extension_support(
         println!("\t\t> {:?}", ext);
     }
 
-    remaining_extensions.is_empty()
+    Ok(remaining_extensions.is_empty())
 }
 
 pub fn find_supported_format(

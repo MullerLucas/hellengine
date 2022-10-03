@@ -1,4 +1,5 @@
 use ash::vk;
+use hell_common::prelude::*;
 
 use super::config;
 use super::image::DepthImage;
@@ -13,14 +14,9 @@ pub struct VulkanFramebuffer {
 
 impl VulkanFramebuffer {
 
-    pub fn new(
-        device: &ash::Device,
-        swapchain: &VulkanSwapchain,
-        render_pass: &VulkanRenderPass,
-        depth_buffer: &DepthImage,
-    ) -> Self {
+    pub fn new(device: &ash::Device, swapchain: &VulkanSwapchain, render_pass: &VulkanRenderPass, depth_buffer: &DepthImage,) -> HellResult<Self> {
 
-        let buffers = swapchain.views
+        let buffers: Result<Vec<_>, _> = swapchain.views
             .iter()
             .map(|sv| {
                 // only a single subpass is running at the same time, so we can reuse the same depth-buffer for all frames in flight
@@ -34,14 +30,15 @@ impl VulkanFramebuffer {
                     .layers(config::FRAME_BUFFER_LAYER_COUNT)
                     .build();
 
-                // TODO: error handling
-                unsafe { device.create_framebuffer(&buffer_info, None).unwrap() }
+                unsafe { device.create_framebuffer(&buffer_info, None).to_render_hell_err() }
 
             })
             .collect();
 
 
-        Self { buffers }
+        Ok(Self {
+            buffers: buffers?
+        })
     }
 }
 

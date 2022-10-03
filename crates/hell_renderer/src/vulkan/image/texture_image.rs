@@ -1,4 +1,5 @@
 use ash::vk;
+use hell_common::prelude::*;
 use hell_resources::resources::ImageResource;
 
 use crate::vulkan::buffer::copy_buffer_to_img;
@@ -13,7 +14,7 @@ pub struct TextureImage {
 }
 
 impl TextureImage {
-    pub fn from(core: &VulkanCore, img_res: &ImageResource) -> Self {
+    pub fn from(core: &VulkanCore, img_res: &ImageResource) -> HellResult<Self> {
         let device = &core.device.device;
 
         let img = img_res.get_img();
@@ -32,7 +33,7 @@ impl TextureImage {
         let staging_buffer = VulkanBuffer::from_texture_staging(core, img_size);
 
         unsafe {
-            let data_ptr = device.map_memory(staging_buffer.mem, 0, img_size, vk::MemoryMapFlags::empty()).unwrap() as *mut u8;
+            let data_ptr = device.map_memory(staging_buffer.mem, 0, img_size, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut u8;
             data_ptr.copy_from_nonoverlapping(img_data.as_ptr(), img_data.len());
             device.unmap_memory(staging_buffer.mem);
         }
@@ -57,9 +58,9 @@ impl TextureImage {
             vk::Format::R8G8B8A8_SRGB,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL
-        );
+        )?;
 
-        copy_buffer_to_img(core, staging_buffer.buffer, raw_img.img, img_width, img_height);
+        copy_buffer_to_img(core, staging_buffer.buffer, raw_img.img, img_width, img_height)?;
 
         // prepare for being read by shader
         raw_img.transition_image_layout(
@@ -69,12 +70,12 @@ impl TextureImage {
             vk::Format::R8G8B8A8_SRGB,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
-        );
+        )?;
 
         staging_buffer.drop_manual(device);
 
 
-        Self { img: raw_img }
+        Ok(Self { img: raw_img })
     }
 }
 

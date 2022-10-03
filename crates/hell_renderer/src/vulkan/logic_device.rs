@@ -1,4 +1,5 @@
 use std::{ptr, ffi};
+use hell_common::prelude::*;
 
 use ash::vk;
 use hell_utils::conversion;
@@ -15,10 +16,7 @@ pub struct VulkanLogicDevice {
 
 
 impl VulkanLogicDevice {
-    pub fn new(
-        instance: &ash::Instance,
-        phys_device: &VulkanPhysDevice
-    ) -> Self {
+    pub fn new(instance: &ash::Instance, phys_device: &VulkanPhysDevice) -> HellResult<Self> {
 
         let queue_priorities = [1.0_f32];
 
@@ -43,7 +41,7 @@ impl VulkanLogicDevice {
             .shader_draw_parameters(true)
             .build();
 
-        let raw_extension_names = conversion::c_char_from_str_slice(config::DEVICE_EXTENSION_NAMES);
+        let raw_extension_names = conversion::c_char_from_str_slice(config::DEVICE_EXTENSION_NAMES)?;
 
         let mut logic_device_create_info = vk::DeviceCreateInfo::builder()
             .queue_create_infos(&queue_create_infos)
@@ -53,10 +51,11 @@ impl VulkanLogicDevice {
             .push_next(&mut phys_device_feature_11)
             .build();
 
-        let validation_layer_names: Vec<_> = config::VALIDATION_LAYER_NAMES
+        let validation_layer_names: HellResult<Vec<_>> = config::VALIDATION_LAYER_NAMES
             .iter()
-            .map(|l| ffi::CString::new(*l).unwrap())
+            .map(|l| ffi::CString::new(*l).to_render_hell_err())
             .collect();
+        let validation_layer_names = validation_layer_names?;
 
         let validation_layer_names_input: Vec<_> =
             validation_layer_names.iter().map(|l| l.as_ptr()).collect();
@@ -67,18 +66,13 @@ impl VulkanLogicDevice {
             logic_device_create_info.pp_enabled_layer_names = validation_layer_names_input.as_ptr();
         }
 
-        let device = unsafe {
-            instance
-                .create_device(phys_device.phys_device, &logic_device_create_info, None)
-                .expect("failed to create logical device")
-        };
+        let device = unsafe { instance.create_device(phys_device.phys_device, &logic_device_create_info, None)? };
+        let queues = VulkanQueues::from_support(&device, &phys_device.queue_support)?;
 
-        let queues = VulkanQueues::from_support(&device, &phys_device.queue_support);
-
-        Self {
+        Ok(Self {
             device,
             queues
-        }
+        })
     }
 }
 
@@ -94,10 +88,9 @@ impl Drop for VulkanLogicDevice {
 }
 
 impl VulkanLogicDevice {
-    // TODO: error handling
-    pub fn wait_idle(&self) {
-        unsafe {
-            self.device.device_wait_idle().unwrap();
-        }
+    pub fn wait_idle(&self) -> HellResult<()> {
+        unsafe { self.device.device_wait_idle().to_render_hell_err()?; }
+
+        Ok(())
     }
 }

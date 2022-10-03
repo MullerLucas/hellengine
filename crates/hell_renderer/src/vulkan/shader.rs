@@ -1,5 +1,6 @@
 use ash::vk;
 
+use hell_common::prelude::*;
 use std::io::Read;
 use std::path::Path;
 use std::{fs, ffi};
@@ -13,20 +14,20 @@ pub struct VulkanShader {
 }
 
 impl VulkanShader {
-    pub fn new(device: &ash::Device, vert_path: &str, frag_path: &str) -> Self {
-        let vert_module = VulkanShaderModule::new(device, vert_path);
-        let frag_module = VulkanShaderModule::new(device, frag_path);
+    pub fn new(device: &ash::Device, vert_path: &str, frag_path: &str) -> HellResult<Self> {
+        let vert_module = VulkanShaderModule::new(device, vert_path)?;
+        let frag_module = VulkanShaderModule::new(device, frag_path)?;
 
         let stage_create_infos = [
             vert_module.stage_create_info(vk::ShaderStageFlags::VERTEX),
             frag_module.stage_create_info(vk::ShaderStageFlags::FRAGMENT),
         ];
 
-        Self {
+        Ok(Self {
             vert_module,
             frag_module,
             stage_create_infos,
-        }
+        })
     }
 
     pub fn get_stage_create_infos(&self) -> &[vk::PipelineShaderStageCreateInfo] {
@@ -51,15 +52,14 @@ pub struct VulkanShaderModule {
 }
 
 impl VulkanShaderModule {
-    pub fn new(device: &ash::Device, code_path: &str) -> Self {
-        let entrypoint = ffi::CString::new("main").unwrap();
-        let code = read_shader_code(Path::new(code_path));
-        let module = create_shader_module(device, &code);
+    pub fn new(device: &ash::Device, code_path: &str) -> HellResult<Self> {
+        let entrypoint = ffi::CString::new("main").to_render_hell_err()?;
+        let code = read_shader_code(Path::new(code_path))?;
+        let module = create_shader_module(device, &code)?;
 
-        Self { entrypoint, module }
+        Ok(Self { entrypoint, module })
     }
 
-    // TODO: error handling
     pub fn stage_create_info(&self, stage: vk::ShaderStageFlags) -> vk::PipelineShaderStageCreateInfo {
         vk::PipelineShaderStageCreateInfo::builder()
             .stage(stage)
@@ -73,15 +73,16 @@ impl VulkanShaderModule {
 
 
 
-// TODO: error handling
-fn read_shader_code(path: &Path) -> Vec<u8> {
-    let file = fs::File::open(path).unwrap();
-    // file.bytes().flatten().collect()
-    file.bytes().filter_map(|b| b.ok()).collect()
+fn read_shader_code(path: &Path) -> HellResult<Vec<u8>> {
+    let file = fs::File::open(path).to_render_hell_err()?;
+    Ok(
+        file.bytes()
+            .filter_map(|b| b.ok())
+            .collect()
+    )
 }
 
-// TODO: error handling
-fn create_shader_module(device: &ash::Device, code: &[u8]) -> vk::ShaderModule {
+fn create_shader_module(device: &ash::Device, code: &[u8]) -> HellResult<vk::ShaderModule> {
     // TODO: check
     // let code = unsafe { std::mem::transmute::<&[u8], &[u32]>(code) };
     // let module_info = vk::ShaderModuleCreateInfo::builder()
@@ -97,6 +98,6 @@ fn create_shader_module(device: &ash::Device, code: &[u8]) -> vk::ShaderModule {
     };
 
     unsafe {
-        device.create_shader_module(&module_info, None).unwrap()
+        device.create_shader_module(&module_info, None).to_render_hell_err()
     }
 }

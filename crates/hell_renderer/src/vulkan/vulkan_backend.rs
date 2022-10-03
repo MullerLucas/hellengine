@@ -1,5 +1,5 @@
 use ash::vk;
-use hell_common::HellResult;
+use hell_common::prelude::*;
 use hell_common::transform::Transform;
 use hell_common::window::HellWindowExtent;
 use hell_resources::ResourceManager;
@@ -48,14 +48,14 @@ pub struct VulkanMesh {
 impl VulkanMesh {
     pub const INDEX_TYPE: vk::IndexType = vk::IndexType::UINT32;
 
-    pub fn new_quad(core: &VulkanCore) -> Self {
-        Self {
+    pub fn new_quad(core: &VulkanCore) -> HellResult<Self> {
+        Ok(Self {
             vertices: QUAD_VERTS.to_vec(),
             indices: QUAD_INDICES.to_vec(),
 
-            vertex_buffer: VulkanBuffer::from_vertices(core, QUAD_VERTS),
-            index_buffer: VulkanBuffer::from_indices(core, QUAD_INDICES),
-        }
+            vertex_buffer: VulkanBuffer::from_vertices(core, QUAD_VERTS)?,
+            index_buffer: VulkanBuffer::from_indices(core, QUAD_INDICES)?,
+        })
     }
 
     pub fn indices_count(&self) -> usize {
@@ -270,21 +270,20 @@ pub struct VulkanBackend {
 }
 
 impl VulkanBackend {
-    // TODO: error handling
-    pub fn new(core: VulkanCore) -> Self {
-        let frame_data = VulkanFrameData::new(&core);
+    pub fn new(core: VulkanCore) -> HellResult<Self> {
+        let frame_data = VulkanFrameData::new(&core)?;
 
-        let quad_mesh = VulkanMesh::new_quad(&core);
+        let quad_mesh = VulkanMesh::new_quad(&core)?;
         let meshes = vec![quad_mesh];
-        let sampler = VulkanSampler::new(&core).unwrap();
+        let sampler = VulkanSampler::new(&core).to_render_hell_err()?;
 
         let gpu_resource_manager = VulkanResourceManager::new(&core);
 
         let device = &core.device.device;
-        let descriptor_manager = VulkanDescriptorManager::new(device).unwrap();
+        let descriptor_manager = VulkanDescriptorManager::new(device).to_render_hell_err()?;
 
-        let render_pass_data = VulkanRenderPassData::new(&core);
-        let default_pipeline = VulkanPipeline::new(&core, &render_pass_data, descriptor_manager.get_layouts());
+        let render_pass_data = VulkanRenderPassData::new(&core)?;
+        let default_pipeline = VulkanPipeline::new(&core, &render_pass_data, descriptor_manager.get_layouts())?;
         let pipelines = vec![default_pipeline];
 
         let materials = vec![
@@ -294,7 +293,7 @@ impl VulkanBackend {
         ];
 
 
-        Self {
+        Ok(Self {
             curr_frame_idx: 0,
             frame_data,
 
@@ -309,20 +308,22 @@ impl VulkanBackend {
 
             render_pass_data,
             core,
-        }
+        })
     }
 
     pub fn upload_resources(&mut self, resource_manager: &ResourceManager) -> HellResult<()> {
         let device = &self.core.device.device;
 
-        self.texture = resource_manager.get_all_images().iter()
+        let texture: HellResult<Vec<_>> = resource_manager.get_all_images().iter()
             .map(|i| TextureImage::from(&self.core, i))
             .collect();
+        self.texture = texture?;
+
         let _ = self.descriptor_manager.add_global_descriptor_sets(device, self.gpu_resource_manager.get_all_camera_buffer(), self.gpu_resource_manager.get_scene_buffer(), config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
-        let _ = self.descriptor_manager.add_object_descriptor_set(device, self.gpu_resource_manager.get_all_object_buffers(), config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
-        let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[0], &self.sampler).unwrap();
-        let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[1], &self.sampler).unwrap();
-        let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[2], &self.sampler).unwrap();
+        let _ = self.descriptor_manager.add_object_descriptor_set(device, self.gpu_resource_manager.get_all_object_buffers(), config::MAX_FRAMES_IN_FLIGHT as usize).to_render_hell_err()?;
+        let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[0], &self.sampler).to_render_hell_err()?;
+        let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[1], &self.sampler).to_render_hell_err()?;
+        let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[2], &self.sampler).to_render_hell_err()?;
 
         Ok(())
     }
@@ -349,23 +350,25 @@ impl Drop for VulkanBackend {
 }
 
 impl VulkanBackend {
-    pub fn wait_idle(&self) {
-        self.core.wait_device_idle();
+    pub fn wait_idle(&self) -> HellResult<()> {
+        self.core.wait_device_idle()?;
+        Ok(())
     }
 
-    pub fn on_window_changed(&mut self, window_extent: HellWindowExtent) {
-        self.core.recreate_swapchain(window_extent);
-        self.render_pass_data.recreate_framebuffer(&self.core);
+    pub fn on_window_changed(&mut self, window_extent: HellWindowExtent) -> HellResult<()> {
+        self.core.recreate_swapchain(window_extent)?;
+        self.render_pass_data.recreate_framebuffer(&self.core)?;
+        Ok(())
     }
 
-    pub fn draw_frame(&mut self, _delta_time: f32, render_data: &RenderData) -> bool {
+    pub fn draw_frame(&mut self, _delta_time: f32, render_data: &RenderData) -> HellResult<bool> {
         let core = &self.core;
         let device = &core.device.device;
         let render_pass_data = &self.render_pass_data;
 
         // let frame_data = &self.frame_data[frame_idx];
-        let cmd_pool = &self.frame_data.graphics_cmd_pools.get(self.curr_frame_idx).unwrap();
-        self.frame_data.wait_for_in_flight(&self.core.device.device, self.curr_frame_idx);
+        let cmd_pool = &self.frame_data.graphics_cmd_pools.get(self.curr_frame_idx).to_render_hell_err()?;
+        self.frame_data.wait_for_in_flight(&self.core.device.device, self.curr_frame_idx)?;
 
         // TODO: check
         // let swap_img_idx = match self.swapchain.aquire_next_image(frame_data.img_available_sem[0]) {
@@ -373,19 +376,19 @@ impl VulkanBackend {
         //     Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => { return true },
         //     _ => { panic!("failed to aquire next image") }
         // };
-        let (curr_swap_idx, _is_suboptimal) = core.swapchain.aquire_next_image(self.frame_data.img_available_semaphors[self.curr_frame_idx][0]).unwrap();
+        let (curr_swap_idx, _is_suboptimal) = core.swapchain.aquire_next_image(self.frame_data.img_available_semaphors[self.curr_frame_idx])?;
 
-        cmd_pool.reset_cmd_buffer(device, 0);
+        cmd_pool.reset_cmd_buffer(device, 0)?;
         self.record_cmd_buffer(
             core,
             render_pass_data,
             curr_swap_idx as usize,
             render_data
-        );
+        )?;
 
         // delay resetting the fence until we know for sure we will be submitting work with it (not return early)
-        self.frame_data.reset_in_flight_fence(device, self.curr_frame_idx);
-        self.frame_data.submit_queue(device, core.device.queues.graphics.queue, &[cmd_pool.get_buffer(0)], self.curr_frame_idx);
+        self.frame_data.reset_in_flight_fence(device, self.curr_frame_idx)?;
+        self.frame_data.submit_queue(device, core.device.queues.graphics.queue, &[cmd_pool.get_buffer(0)], self.curr_frame_idx)?;
 
         let present_result = self.frame_data.present_queue(core.device.queues.present.queue, &core.swapchain, &[curr_swap_idx], self.curr_frame_idx);
 
@@ -393,27 +396,21 @@ impl VulkanBackend {
         // do this after queue-present to ensure that the semaphores are in a consistent state - otherwise a signaled semaphore may never be properly waited upon
         let is_resized = match present_result {
             Ok(is_suboptimal) => { is_suboptimal },
-            Err(vk::Result::ERROR_OUT_OF_DATE_KHR | vk::Result::SUBOPTIMAL_KHR)  => { true },
-            _ => { panic!("failed to aquire next image") }
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR | vk::Result::SUBOPTIMAL_KHR) => { true },
+            _ => { return Err(HellError::from_msg(HellErrorKind::RenderError, "failed to aquire next image".to_owned())) }
         };
 
         self.curr_frame_idx = (self.curr_frame_idx + 1) % config::MAX_FRAMES_IN_FLIGHT as usize;
 
-        is_resized
+        Ok(is_resized)
     }
 
-    fn record_cmd_buffer(
-        &self,
-        core: &VulkanCore,
-        render_pass_data: &VulkanRenderPassData,
-        swap_img_idx: usize,
-        render_data: &RenderData
-    ) {
+    fn record_cmd_buffer(&self, core: &VulkanCore, render_pass_data: &VulkanRenderPassData, swap_img_idx: usize, render_data: &RenderData) -> HellResult<()> {
         let begin_info = vk::CommandBufferBeginInfo::default();
         let device = &core.device.device;
-        let cmd_buffer = self.frame_data.get_cmd_buffer(self.curr_frame_idx);
+        let cmd_buffer = self.frame_data.get_cmd_buffer(self.curr_frame_idx)?;
 
-        unsafe { device.begin_command_buffer(cmd_buffer, &begin_info).unwrap(); }
+        unsafe { device.begin_command_buffer(cmd_buffer, &begin_info).to_render_hell_err()?; }
 
         // one clear-color per attachment with load-op-clear - order should be identical
         let clear_values = [
@@ -441,18 +438,20 @@ impl VulkanBackend {
         unsafe { device.cmd_begin_render_pass(cmd_buffer, &render_pass_info, vk::SubpassContents::INLINE); }
 
         // record commands
-        self.record_scene_cmd_buffer(device, cmd_buffer, render_data);
+        self.record_scene_cmd_buffer(device, cmd_buffer, render_data)?;
 
         unsafe {
             device.cmd_end_render_pass(cmd_buffer);
         }
 
         unsafe {
-            device.end_command_buffer(cmd_buffer).unwrap();
+            device.end_command_buffer(cmd_buffer).to_render_hell_err()?;
         }
+
+        Ok(())
     }
 
-    fn record_scene_cmd_buffer(&self, device: &ash::Device, cmd_buffer: vk::CommandBuffer, render_data: &RenderData) {
+    fn record_scene_cmd_buffer(&self, device: &ash::Device, cmd_buffer: vk::CommandBuffer, render_data: &RenderData) -> HellResult<()> {
         unsafe {
             let mut curr_pipeline_idx = usize::MAX;
             let mut curr_mat_idx = usize::MAX;
@@ -466,8 +465,8 @@ impl VulkanBackend {
 
             // bind static descriptor sets once
             let descriptor_set = [
-                self.descriptor_manager.get_global_set(0, self.curr_frame_idx),
-                self.descriptor_manager.get_object_set(0, self.curr_frame_idx),
+                self.descriptor_manager.get_global_set(0, self.curr_frame_idx)?,
+                self.descriptor_manager.get_object_set(0, self.curr_frame_idx)?,
             ];
 
             let min_ubo_alignment = self.core.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
@@ -487,7 +486,7 @@ impl VulkanBackend {
                     curr_mat = &self.materials[curr_mat_idx];
 
                     // bind material descriptors
-                    let descriptor_set = [ self.descriptor_manager.get_material_set(rd.material_idx) ];
+                    let descriptor_set = [ self.descriptor_manager.get_material_set(rd.material_idx)? ];
                     device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline_layout, 2, &descriptor_set, &[]);
                 }
 
@@ -523,6 +522,8 @@ impl VulkanBackend {
                 device.cmd_draw_indexed(cmd_buffer, curr_mesh.indices_count() as u32, 1, 0, 0, idx as u32);
             }
         }
+
+        Ok(())
     }
 }
 

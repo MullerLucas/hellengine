@@ -1,11 +1,10 @@
-use hell_common::HellResult;
+use hell_common::prelude::*;
 use hell_common::window::{HellSurfaceInfo, HellWindowExtent};
 use hell_resources::ResourceManager;
 
 use crate::render_data::ObjectData;
 use crate::shared::render_data::{CameraData, SceneData};
 use crate::vulkan::{VulkanBackend, VulkanCore, VulkanFrameData, RenderData};
-use crate::error::vk_to_hell_err;
 
 
 
@@ -25,9 +24,9 @@ pub struct HellRenderer {
 
 impl HellRenderer {
     pub fn new(info: HellRendererInfo) -> HellResult<Self> {
-        let core = VulkanCore::new(&info.surface_info, &info.window_extent).map_err(vk_to_hell_err)?;
+        let core = VulkanCore::new(&info.surface_info, &info.window_extent)?;
         let aspect_ratio = core.swapchain.aspect_ratio();
-        let backend = VulkanBackend::new(core);
+        let backend = VulkanBackend::new(core)?;
         let camera = CameraData::new(aspect_ratio);
 
         Ok(Self {
@@ -46,13 +45,13 @@ impl HellRenderer {
 }
 
 impl HellRenderer {
-    pub fn wait_idle(&self) {
+    pub fn wait_idle(&self) -> HellResult<()> {
         self.backend.wait_idle()
     }
 
-    pub fn handle_window_changed(&mut self, window_extent: HellWindowExtent) {
+    pub fn handle_window_changed(&mut self, window_extent: HellWindowExtent) -> HellResult<()> {
         self.info.window_extent = window_extent;
-        self.backend.on_window_changed(self.info.window_extent);
+        self.backend.on_window_changed(self.info.window_extent)
     }
 
     pub fn upload_resources(&mut self, resource_manager: &ResourceManager) -> HellResult<()> {
@@ -62,7 +61,7 @@ impl HellRenderer {
     pub fn draw_frame(&mut self, delta_time: f32, render_data: &RenderData) -> HellResult<bool> {
         self.update_camera(delta_time)?;
 
-        let is_resized = self.backend.draw_frame(delta_time, render_data);
+        let is_resized = self.backend.draw_frame(delta_time, render_data)?;
 
         self.increment_frame_idx();
         Ok(is_resized)
@@ -72,7 +71,7 @@ impl HellRenderer {
         let buffer = self.backend.gpu_resource_manager.get_scene_buffer();
         let min_ubo_alignment = self.backend.core.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
         buffer.upload_data_buffer_array(&self.backend.core.device.device, min_ubo_alignment, scene_data, self.frame_idx)
-            .map_err(vk_to_hell_err)
+            .to_hell_err(HellErrorKind::RenderError)
     }
 
     pub fn update_object_buffer(&self, render_data: &RenderData) -> HellResult<()> {
@@ -87,7 +86,6 @@ impl HellRenderer {
         unsafe {
             // TODO: try to write diretly into the buffer
             buffer.upload_data_storage_buffer(&self.backend.core.device.device, object_data.as_ptr(), object_data.len())
-                .map_err(vk_to_hell_err)
         }
     }
 }

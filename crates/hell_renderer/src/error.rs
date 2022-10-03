@@ -1,11 +1,9 @@
-use ash::vk;
-use hell_common::HellError;
-
-
-pub fn vk_to_hell_err(res: vk::Result) -> HellError {
-    HellError::from(res.as_raw())
-}
+use hell_common::prelude::*;
 
 pub fn err_invalid_frame_idx(frame_idx: usize) -> HellError {
-    HellError::from(format!("frame-idx '{}' is out of range", frame_idx))
+    HellError::from_msg(HellErrorKind::RenderError, format!("frame-idx '{}' is out of range", frame_idx))
+}
+
+pub fn err_invalid_set_idx(set_idx: usize) -> HellError {
+    HellError::from_msg(HellErrorKind::RenderError, format!("set-idx '{}' is out of range", set_idx))
 }

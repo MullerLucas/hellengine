@@ -2,6 +2,7 @@ use std::ptr;
 
 use ash::vk;
 
+use hell_common::prelude::*;
 use super::config;
 use super::logic_device::VulkanLogicDevice;
 
@@ -14,21 +15,21 @@ pub struct VulkanCommandPool {
 }
 
 impl VulkanCommandPool {
-    pub fn new(device: &ash::Device, queue_family_idx: u32, pool_flags: vk::CommandPoolCreateFlags) -> Self {
-        let pool = create_pool(device, queue_family_idx, pool_flags);
-        let buffers = create_buffers(pool, device, config::MAX_FRAMES_IN_FLIGHT as u32);
+    pub fn new(device: &ash::Device, queue_family_idx: u32, pool_flags: vk::CommandPoolCreateFlags) -> HellResult<Self> {
+        let pool = create_pool(device, queue_family_idx, pool_flags)?;
+        let buffers = create_buffers(pool, device, config::MAX_FRAMES_IN_FLIGHT as u32)?;
 
-        Self {
+        Ok(Self {
             pool,
             cmd_buffers: buffers,
-        }
+        })
     }
 
-    pub fn default_for_graphics(device: &VulkanLogicDevice) -> Self {
+    pub fn default_for_graphics(device: &VulkanLogicDevice) -> HellResult<Self> {
         VulkanCommandPool::new(&device.device, device.queues.graphics.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
     }
 
-    pub fn default_for_transfer(device: &VulkanLogicDevice) -> Self {
+    pub fn default_for_transfer(device: &VulkanLogicDevice) -> HellResult<Self> {
         VulkanCommandPool::new(&device.device, device.queues.transfer.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER | vk::CommandPoolCreateFlags::TRANSIENT)
     }
 
@@ -50,25 +51,23 @@ impl VulkanCommandPool {
 }
 
 
-// TODO: error handling
-fn create_pool(device: &ash::Device, queue_family_idx: u32, flags: vk::CommandPoolCreateFlags) -> vk::CommandPool {
+fn create_pool(device: &ash::Device, queue_family_idx: u32, flags: vk::CommandPoolCreateFlags) -> HellResult<vk::CommandPool> {
     let pool_info = vk::CommandPoolCreateInfo::builder()
         .flags(flags)
         .queue_family_index(queue_family_idx)
         .build();
 
-    unsafe { device.create_command_pool(&pool_info, None).unwrap() }
+    unsafe { device.create_command_pool(&pool_info, None).to_render_hell_err() }
 }
 
-// TODO: error handling
-fn create_buffers(pool: vk::CommandPool, device: &ash::Device, buffer_count: u32) -> Vec<vk::CommandBuffer> {
+fn create_buffers(pool: vk::CommandPool, device: &ash::Device, buffer_count: u32) -> HellResult<Vec<vk::CommandBuffer>> {
     let alloc_info = vk::CommandBufferAllocateInfo::builder()
         .command_pool(pool)
         .level(vk::CommandBufferLevel::PRIMARY)
         .command_buffer_count(buffer_count)
         .build();
 
-    unsafe { device.allocate_command_buffers(&alloc_info).unwrap() }
+    unsafe { device.allocate_command_buffers(&alloc_info).to_render_hell_err() }
 }
 
 
@@ -104,7 +103,7 @@ impl VulkanCommandPool {
         cmd_buffer
     }
 
-    pub fn end_single_time_commands(&self, device: &ash::Device, cmd_buffer: vk::CommandBuffer, queue: vk::Queue) {
+    pub fn end_single_time_commands(&self, device: &ash::Device, cmd_buffer: vk::CommandBuffer, queue: vk::Queue) -> HellResult<()>{
         unsafe {
             device.end_command_buffer(cmd_buffer)
                 .expect("failed to end single-time-command-buffer");
@@ -125,9 +124,11 @@ impl VulkanCommandPool {
         unsafe {
             device.queue_submit(queue, &[submit_info], vk::Fence::null())
                 .expect("failed to submit single-time-command-buffer");
-            device.queue_wait_idle(queue).unwrap();
+            device.queue_wait_idle(queue).to_render_hell_err()?;
             device.free_command_buffers(self.pool, &[cmd_buffer]);
         }
+
+        Ok(())
     }
 }
 
@@ -137,10 +138,9 @@ impl VulkanCommandPool {
 
 
 impl VulkanCommandPool {
-    // TODO: error handling
-    pub fn reset_cmd_buffer(&self, device: &ash::Device, idx: usize) {
+    pub fn reset_cmd_buffer(&self, device: &ash::Device, idx: usize) -> HellResult<()> {
         unsafe {
-            device.reset_command_buffer(self.cmd_buffers[idx], vk::CommandBufferResetFlags::empty()) .unwrap()
+            device.reset_command_buffer(self.cmd_buffers[idx], vk::CommandBufferResetFlags::empty()).to_render_hell_err()
         }
     }
 

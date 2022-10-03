@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use ash::vk;
+use hell_common::prelude::*;
 
 use super::surface::VulkanSurface;
 
@@ -58,20 +59,20 @@ pub struct VulkanQueues {
 }
 
 impl VulkanQueues {
-    pub fn from_support(device: &ash::Device, support: &VulkanQueueSupport) -> Self {
-        let graphics_family = support.graphics_family.as_ref().unwrap();
-        let present_family = support.present_family.as_ref().unwrap();
-        let transfer_family = support.transfer_family.as_ref().unwrap();
+    pub fn from_support(device: &ash::Device, support: &VulkanQueueSupport) -> HellResult<Self> {
+        let graphics_family = support.graphics_family.as_ref().to_render_hell_err()?;
+        let present_family = support.present_family.as_ref().to_render_hell_err()?;
+        let transfer_family = support.transfer_family.as_ref().to_render_hell_err()?;
 
         let graphics_queue = VulkanQueue::new(device, graphics_family.idx, 0);
         let present_queue = VulkanQueue::new(device, present_family.idx, 0);
         let transfer_queue = VulkanQueue::new(device, transfer_family.idx, 0);
 
-        Self {
+        Ok(Self {
             graphics: graphics_queue,
             present: present_queue,
             transfer: transfer_queue,
-        }
+        })
     }
 }
 
@@ -90,7 +91,7 @@ pub struct VulkanQueueSupport {
 }
 
 impl VulkanQueueSupport {
-    pub fn new(instance: &ash::Instance, phys_device: vk::PhysicalDevice, surface_data: &VulkanSurface) -> Self {
+    pub fn new(instance: &ash::Instance, phys_device: vk::PhysicalDevice, surface_data: &VulkanSurface) -> HellResult<Self> {
         let properties = unsafe { instance.get_physical_device_queue_family_properties(phys_device) };
 
 
@@ -108,7 +109,7 @@ impl VulkanQueueSupport {
                 let present_is_supported = unsafe {
                     surface_data.surface_loader
                         .get_physical_device_surface_support(phys_device, idx, surface_data.surface)
-                        .unwrap()
+                        .to_render_hell_err()?
                 };
 
                 if present_is_supported {
@@ -120,15 +121,16 @@ impl VulkanQueueSupport {
         }
 
 
-        result
+        Ok(result)
     }
 
 }
 
 impl VulkanQueueSupport {
-    // TODO:
-    pub fn single_queue(&self) -> bool {
-        self.graphics_family.as_ref().unwrap().idx == self.present_family.as_ref().unwrap().idx
+    pub fn single_queue(&self) -> HellResult<bool> {
+        Ok(
+            self.graphics_family.as_ref().to_render_hell_err()?.idx == self.present_family.as_ref().to_render_hell_err()?.idx
+        )
     }
 
     pub fn indices(&self) -> HashSet<u32> {
