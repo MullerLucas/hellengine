@@ -1,5 +1,16 @@
 
+use crate::vulkan::RenderData;
 
+pub trait HellRenderable {
+    fn get_render_data(&self) -> &RenderData;
+    fn get_scene_data(&self) -> &SceneData;
+}
+
+
+
+// ----------------------------------------------------------------------------
+// CameraData
+// ----------------------------------------------------------------------------
 
 
 #[derive(Clone)]

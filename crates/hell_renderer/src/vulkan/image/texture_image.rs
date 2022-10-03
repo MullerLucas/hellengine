@@ -1,4 +1,5 @@
 use ash::vk;
+use hell_resources::resources::ImageResource;
 
 use crate::vulkan::buffer::copy_buffer_to_img;
 use crate::vulkan::{VulkanCore, VulkanBuffer};
@@ -10,30 +11,28 @@ pub struct TextureImage {
 }
 
 impl TextureImage {
-    // TODO: error handling
-    pub fn new(core: &VulkanCore, path: impl AsRef<std::path::Path>) -> Self {
+    pub fn from(core: &VulkanCore, img_res: &ImageResource) -> Self {
         let device = &core.device.device;
 
-        let raw_img = image::open(path).unwrap();
-        raw_img.flipv();
-
-        let img_width = raw_img.width();
-        let img_height = raw_img.height();
+        let img = img_res.get_img();
+        let img_data = img.as_raw();
+        let img_width = img.width();
+        let img_height = img.height();
         let img_size = (std::mem::size_of::<u8>() as u32 * img_width * img_height * 4) as vk::DeviceSize;
 
         if img_size == 0 {
             panic!("failed to load image at");
         }
 
-        let img_data = match &raw_img {
-            image::DynamicImage::ImageLuma8(_) | image::DynamicImage::ImageRgb8(_) => {
-                raw_img.to_rgba8().into_raw()
-            },
-            image::DynamicImage::ImageLumaA8(_) | image::DynamicImage::ImageRgba8(_) => {
-                raw_img.into_bytes()
-            }
-            _ => { panic!("invalid image format"); }
-        };
+        // let img_data = match &raw_img {
+        //     image::DynamicImage::ImageLuma8(_) | image::DynamicImage::ImageRgb8(_) => {
+        //         raw_img.to_rgba8().into_raw()
+        //     },
+        //     image::DynamicImage::ImageLumaA8(_) | image::DynamicImage::ImageRgba8(_) => {
+        //         raw_img.into_bytes()
+        //     }
+        //     _ => { panic!("invalid image format"); }
+        // };
 
         let staging_buffer = VulkanBuffer::from_texture_staging(core, img_size);
 
@@ -43,7 +42,7 @@ impl TextureImage {
             device.unmap_memory(staging_buffer.mem);
         }
 
-        let img = RawImage::new(
+        let raw_img = RawImage::new(
             core,
             img_width,
             img_height,
@@ -53,38 +52,36 @@ impl TextureImage {
             vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
             vk::ImageAspectFlags::COLOR
-        );
+            );
 
         // prepare for being copied into
-        img.transition_image_layout(
+        raw_img.transition_image_layout(
             device,
             &core.graphics_cmd_pool,
             &core.device.queues.graphics,
             vk::Format::R8G8B8A8_SRGB,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL
-        );
+            );
 
-        copy_buffer_to_img(core, staging_buffer.buffer, img.img, img_width, img_height);
+        copy_buffer_to_img(core, staging_buffer.buffer, raw_img.img, img_width, img_height);
 
         // prepare for being read by shader
-        img.transition_image_layout(
+        raw_img.transition_image_layout(
             device,
             &core.graphics_cmd_pool,
             &core.device.queues.graphics,
             vk::Format::R8G8B8A8_SRGB,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
-        );
+            );
 
         staging_buffer.drop_manual(device);
 
 
-        Self { img }
+        Self { img: raw_img }
     }
 }
-
-
 
 impl TextureImage {
     pub fn drop_manual(&self, device: &ash::Device) {

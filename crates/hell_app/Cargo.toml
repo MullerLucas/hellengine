@@ -6,5 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hell_common = { path = "../hell_common" }
-hell_renderer = { path = "../hell_renderer" }
+hell_common    = { path = "../hell_common" }
+hell_renderer  = { path = "../hell_renderer" }
+hell_resources = { path = "../hell_resources" }

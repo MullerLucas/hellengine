@@ -1,0 +1,13 @@
+[package]
+name = "hell_resources"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hell_common = { path = "../hell_common" }
+
+image = "0.24.4"
+serde = { version = "1.0.145", features = ["derive"] }
+serde_yaml = "0.9.13"

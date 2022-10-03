@@ -2,6 +2,7 @@ use ash::vk;
 use hell_common::HellResult;
 use hell_common::transform::Transform;
 use hell_common::window::HellWindowExtent;
+use hell_resources::ResourceManager;
 use crate::error::err_invalid_frame_idx;
 use crate::shared::render_data::{CameraData, SceneData, ObjectData};
 use crate::vulkan::image::TextureImage;
@@ -188,13 +189,13 @@ pub struct MeshPushConstants {
 // renderer
 // ----------------------------------------------------------------------------
 
-pub struct VulkanResourceManger {
+pub struct VulkanResourceManager {
     camera_buffers: Vec<VulkanBuffer>,
     scene_buffers: VulkanBuffer, // one ubo for all frames
     object_buffers: Vec<VulkanBuffer>,
 }
 
-impl VulkanResourceManger {
+impl VulkanResourceManager {
     pub fn new(core: &VulkanCore) -> Self {
         let camera_buffer_size = CameraData::device_size();
         let camera_buffers: Vec<_> = (0..config::MAX_FRAMES_IN_FLIGHT).into_iter()
@@ -224,7 +225,7 @@ impl VulkanResourceManger {
     }
 }
 
-impl VulkanResourceManger {
+impl VulkanResourceManager {
     pub fn get_all_camera_buffer(&self) -> &[VulkanBuffer] {
         &self.camera_buffers
     }
@@ -258,10 +259,10 @@ pub struct VulkanBackend {
     pub pipelines: Vec<VulkanPipeline>,
     pub meshes: Vec<VulkanMesh>,
     pub texture: Vec<TextureImage>,
-    pub sampler: Vec<VulkanSampler>,
+    pub sampler: VulkanSampler,
     pub materials: Vec<VulkanMaterial>,
 
-    pub resource_manager: VulkanResourceManger,
+    pub gpu_resource_manager: VulkanResourceManager,
     pub descriptor_manager: VulkanDescriptorManager,
 
     pub render_pass_data: VulkanRenderPassData,
@@ -275,22 +276,12 @@ impl VulkanBackend {
 
         let quad_mesh = VulkanMesh::new_quad(&core);
         let meshes = vec![quad_mesh];
-        let texture = vec![
-            TextureImage::new(&core, &config::engine_path(config::TEXTURE_0_PATH)),
-            TextureImage::new(&core, &config::engine_path(config::TEXTURE_1_PATH)),
-            TextureImage::new(&core, &config::engine_path(config::TEXTURE_2_PATH))
-        ];
-        let sampler = vec![VulkanSampler::new(&core).unwrap()];
+        let sampler = VulkanSampler::new(&core).unwrap();
 
-        let resource_manager = VulkanResourceManger::new(&core);
+        let gpu_resource_manager = VulkanResourceManager::new(&core);
 
         let device = &core.device.device;
-        let mut descriptor_manager = VulkanDescriptorManager::new(device).unwrap();
-        let _ = descriptor_manager.add_global_descriptor_sets(device, resource_manager.get_all_camera_buffer(), resource_manager.get_scene_buffer(), config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
-        let _ = descriptor_manager.add_object_descriptor_set(device, resource_manager.get_all_object_buffers(), config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
-        let _ = descriptor_manager.add_material_descriptor_sets(device, &texture[0], &sampler[0]).unwrap();
-        let _ = descriptor_manager.add_material_descriptor_sets(device, &texture[1], &sampler[0]).unwrap();
-        let _ = descriptor_manager.add_material_descriptor_sets(device, &texture[2], &sampler[0]).unwrap();
+        let descriptor_manager = VulkanDescriptorManager::new(device).unwrap();
 
         let render_pass_data = VulkanRenderPassData::new(&core);
         let default_pipeline = VulkanPipeline::new(&core, &render_pass_data, descriptor_manager.get_layouts());
@@ -307,11 +298,11 @@ impl VulkanBackend {
             curr_frame_idx: 0,
             frame_data,
 
-            resource_manager,
+            gpu_resource_manager,
 
             pipelines,
             meshes,
-            texture,
+            texture: Vec::new(),
             sampler,
             materials,
             descriptor_manager,
@@ -319,6 +310,21 @@ impl VulkanBackend {
             render_pass_data,
             core,
         }
+    }
+
+    pub fn upload_resources(&mut self, resource_manager: &ResourceManager) -> HellResult<()> {
+        let device = &self.core.device.device;
+
+        self.texture = resource_manager.get_all_images().iter()
+            .map(|i| TextureImage::from(&self.core, i))
+            .collect();
+        let _ = self.descriptor_manager.add_global_descriptor_sets(device, self.gpu_resource_manager.get_all_camera_buffer(), self.gpu_resource_manager.get_scene_buffer(), config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
+        let _ = self.descriptor_manager.add_object_descriptor_set(device, self.gpu_resource_manager.get_all_object_buffers(), config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
+        let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[0], &self.sampler).unwrap();
+        let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[1], &self.sampler).unwrap();
+        let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[2], &self.sampler).unwrap();
+
+        Ok(())
     }
 }
 
@@ -331,9 +337,9 @@ impl Drop for VulkanBackend {
         self.meshes.iter_mut().for_each(|m| m.drop_manual(&self.core.device));
 
         self.texture.iter().for_each(|t| t.drop_manual(device));
-        self.sampler.iter().for_each(|s| s.drop_manual(device));
+        self.sampler.drop_manual(device);
 
-        self.resource_manager.drop_manaual(device);
+        self.gpu_resource_manager.drop_manaual(device);
         self.descriptor_manager.drop_manual(device);
 
         self.frame_data.drop_manual(device);
@@ -522,7 +528,7 @@ impl VulkanBackend {
 
 impl VulkanBackend {
     pub fn update_camera_buffer(&self, frame_idx: usize, camera: &CameraData) -> HellResult<()> {
-        let buffer = self.resource_manager.get_camera_buffer(frame_idx)?;
+        let buffer = self.gpu_resource_manager.get_camera_buffer(frame_idx)?;
         buffer.upload_data_buffer(&self.core.device.device, camera)?;
 
         Ok(())
