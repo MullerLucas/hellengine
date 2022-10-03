@@ -21,11 +21,6 @@ pub const DEVICE_EXTENSION_NAMES: &[&str] = &[
 pub const VERT_SHADER_PATH: &str = "shaders/sprite.vert.spv";
 pub const FRAG_SHADER_PATH: &str = "shaders/sprite.frag.spv";
 
-// TODO: create config file
-pub fn engine_path(sub_path: &str) -> String {
-    format!("../hellengine/{}", sub_path)
-}
-
 pub const MAX_FRAMES_IN_FLIGHT: usize = 3;
 
 pub const DYNAMIC_UNIFORM_DESCRIPTOR_COUNT: u32 = 10;
