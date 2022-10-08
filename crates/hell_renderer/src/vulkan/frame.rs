@@ -2,7 +2,7 @@ use crate::error::err_invalid_frame_idx;
 use crate::vulkan::VulkanCommandPool;
 use ash::prelude::VkResult;
 use ash::vk;
-use hell_common::prelude::*;
+use hell_error::{HellResult, ErrToHellErr};
 
 use super::{config, VulkanCore};
 use super::swapchain::VulkanSwapchain;
@@ -10,9 +10,6 @@ use super::swapchain::VulkanSwapchain;
 
 
 pub struct VulkanFrameData {
-    // pub img_available_semaphors: Vec<[vk::Semaphore; 1]>,
-    // pub render_finished_semaphors: Vec<[vk::Semaphore; 1]>,
-    // pub in_flight_fences: Vec<[vk::Fence; 1]>,
     pub img_available_semaphors: Vec<vk::Semaphore>,
     pub render_finished_semaphors: Vec<vk::Semaphore>,
     pub in_flight_fences: Vec<vk::Fence>,

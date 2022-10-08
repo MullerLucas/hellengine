@@ -1,5 +1,5 @@
 use ash::vk;
-use hell_common::prelude::*;
+use hell_error::{HellResult, ErrToHellErr};
 use hell_resources::resources::ImageResource;
 
 use crate::vulkan::buffer::copy_buffer_to_img;

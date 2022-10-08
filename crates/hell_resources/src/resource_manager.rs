@@ -1,4 +1,4 @@
-use hell_common::prelude::*;
+use hell_error::{HellErrorKind, HellError, HellResult};
 
 use crate::resources::{ImageResource, MaterialResource};
 

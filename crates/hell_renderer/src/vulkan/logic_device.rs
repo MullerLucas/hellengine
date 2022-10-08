@@ -1,7 +1,7 @@
 use std::{ptr, ffi};
-use hell_common::prelude::*;
 
 use ash::vk;
+use hell_error::{HellResult, ErrToHellErr};
 use hell_utils::conversion;
 
 use super::config;

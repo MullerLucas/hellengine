@@ -1,7 +1,7 @@
 use hell_app::HellApp;
-use hell_common::prelude::*;
 use hell_common::window::{HellWindow, HellSurfaceInfo, HellWindowExtent};
 
+use hell_error::{HellResult, OptToHellErr};
 use winit::dpi::LogicalSize;
 use winit::error::OsError;
 use winit::event::{VirtualKeyCode, ElementState, KeyboardInput, WindowEvent, Event};

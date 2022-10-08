@@ -1,5 +1,5 @@
 [package]
-name = "hell_winit"
+name = "hell_window"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,6 +10,7 @@ winit = "0.27.1"
 
 
 hell_common = { path = "../hell_common" }
+hell_error  = { path = "../hell_error" }
 hell_app = { path = "../hell_app" }
 hell_renderer = { path = "../hell_renderer" }
 

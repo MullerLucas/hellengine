@@ -1,5 +1,6 @@
 use std::os::raw;
-use crate::prelude::*;
+
+use hell_error::HellResult;
 
 
 #[derive(Clone, Copy)]

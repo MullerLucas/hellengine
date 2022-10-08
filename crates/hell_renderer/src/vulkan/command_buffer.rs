@@ -1,8 +1,8 @@
 use std::ptr;
 
 use ash::vk;
+use hell_error::{HellResult, ErrToHellErr};
 
-use hell_common::prelude::*;
 use super::config;
 use super::logic_device::VulkanLogicDevice;
 

@@ -1,5 +1,5 @@
 use ash::vk;
-use hell_common::prelude::*;
+use hell_error::{HellResult, ErrToHellErr};
 use super::framebuffer::VulkanFramebuffer;
 use super::image::DepthImage;
 use super::vulkan_core::VulkanCore;

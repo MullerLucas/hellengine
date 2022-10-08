@@ -1,6 +1,6 @@
 use ash::vk;
+use hell_error::{HellResult, ErrToHellErr};
 
-use hell_common::prelude::*;
 use std::io::Read;
 use std::path::Path;
 use std::{fs, ffi};

@@ -1,4 +1,4 @@
-use hell_common::prelude::*;
+use hell_error::{HellError, HellErrorKind};
 
 pub fn err_invalid_frame_idx(frame_idx: usize) -> HellError {
     HellError::from_msg(HellErrorKind::RenderError, format!("frame-idx '{}' is out of range", frame_idx))

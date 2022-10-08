@@ -1,7 +1,7 @@
 use ash::prelude::VkResult;
 use ash::vk;
+use hell_error::HellResult;
 
-use hell_common::prelude::*;
 use crate::error::{err_invalid_frame_idx, err_invalid_set_idx};
 use crate::shared::render_data::{CameraData, SceneData, ObjectData};
 

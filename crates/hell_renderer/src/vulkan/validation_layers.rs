@@ -1,4 +1,4 @@
-use hell_common::prelude::*;
+use hell_error::{HellResult, ErrToHellErr};
 use hell_utils::conversion;
 
 

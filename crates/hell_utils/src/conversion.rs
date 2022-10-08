@@ -1,7 +1,9 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-use hell_common::prelude::*;
-use hell_common::prelude::ErrToHellErr;
+
+use hell_error::{HellResult, ErrToHellErr};
+
+
 
 pub fn c_str_from_char_slice(raw: &[c_char]) -> &CStr {
     unsafe {

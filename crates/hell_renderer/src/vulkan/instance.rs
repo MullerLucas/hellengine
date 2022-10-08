@@ -2,7 +2,7 @@ use std::ffi;
 use std::os::raw;
 
 use ash::vk;
-use hell_common::prelude::*;
+use hell_error::{HellResult, ErrToHellErr};
 
 use super::{config, platforms, validation_layers, debugging};
 

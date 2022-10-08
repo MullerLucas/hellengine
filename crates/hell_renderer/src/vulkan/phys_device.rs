@@ -1,5 +1,5 @@
 use ash::vk;
-use hell_common::prelude::*;
+use hell_error::{HellResult, ErrToHellErr};
 use hell_utils::conversion::c_str_from_char_slice;
 use std::ffi::CStr;
 use std::fmt;
