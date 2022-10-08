@@ -7,17 +7,18 @@ use winit::error::OsError;
 use winit::event::{VirtualKeyCode, ElementState, KeyboardInput, WindowEvent, Event};
 use winit::event_loop::{EventLoop, ControlFlow};
 
+use crate::input::{keycode_to_hell, element_state_to_hell};
 use crate::utils::fps_limiter::FPSLimiter;
 
 
 
 
-pub struct WinitWindow {
+pub struct Window {
     event_loop: winit::event_loop::EventLoop<()>,
     window: winit::window::Window,
 }
 
-impl WinitWindow {
+impl Window {
     pub fn new(title: &str, width: u32, height: u32) -> Result<Self, OsError> {
         let event_loop = EventLoop::new();
 
@@ -34,7 +35,7 @@ impl WinitWindow {
     }
 }
 
-impl HellWindow for WinitWindow {
+impl HellWindow for Window {
     fn create_surface_info(&self) -> HellResult<HellSurfaceInfo> {
         use winit::platform::unix::WindowExtUnix;
 
@@ -54,7 +55,7 @@ impl HellWindow for WinitWindow {
     }
 }
 
-impl WinitWindow {
+impl Window {
     pub fn get_winit_window_extent(window: &winit::window::Window) -> HellWindowExtent {
         let inner_size = window.inner_size();
 
@@ -65,23 +66,30 @@ impl WinitWindow {
     }
 }
 
-impl WinitWindow {
+impl Window {
+    // TODO: error handling
     pub fn main_loop(self, mut app: HellApp) {
         let mut fps = FPSLimiter::new();
         let mut handle_resize = false;
 
 
         self.event_loop.run(move |event, _, control_flow| {
+            // continously run the event loop, event if the OS hasn't dispatched any events
+            control_flow.set_poll();
+            // wait until events are available
+            // control_flow.set_wait();
+
+            app.advance_frame().unwrap();
+
             match event {
                 Event::WindowEvent { event, .. } => {
-                    Self::handle_window_event(&event, control_flow);
+                    Self::handle_window_event(&event, control_flow, &mut app).expect("failed to handle window event");
                 },
                 Event::MainEventsCleared => {
                     self.window.request_redraw();
                 }
                 Event::RedrawRequested(_) => {
-                    // TODO: error handling
-                    WinitWindow::handle_redraw_request(&mut handle_resize, &self.window, &mut app, &mut fps).expect("failed to handle redraw request");
+                    Window::handle_redraw_request(&mut handle_resize, &self.window, &mut app, &mut fps).expect("failed to handle redraw request");
                 }
                 Event::LoopDestroyed => {
                     app.wait_idle().expect("failed to wait for the app to become idle");
@@ -94,7 +102,7 @@ impl WinitWindow {
         });
     }
 
-    fn handle_window_event(event: &winit::event::WindowEvent, control_flow: &mut winit::event_loop::ControlFlow) {
+    fn handle_window_event(event: &winit::event::WindowEvent, control_flow: &mut winit::event_loop::ControlFlow, app: &mut HellApp) -> HellResult<()> {
         match event {
             WindowEvent::CloseRequested => { *control_flow = ControlFlow::Exit },
 
@@ -103,14 +111,23 @@ impl WinitWindow {
                 *control_flow = ControlFlow::Exit;
             }
 
+            WindowEvent::KeyboardInput { input: KeyboardInput { virtual_keycode: Some(keycode), state, .. }, .. } => {
+                println!("> handle-input: {:?} | {:?}", keycode, state);
+                let keycode = keycode_to_hell(keycode);
+                let state = element_state_to_hell(*state);
+                app.input.update_key_state(keycode, state)?;
+            }
+
             _ => (),
-        }
+        };
+
+        Ok(())
     }
 
     fn handle_redraw_request(handle_resize: &mut bool, window: &winit::window::Window, app: &mut HellApp, fps: &mut FPSLimiter) -> HellResult<()> {
         // TODO: check resize logic
         if *handle_resize {
-            let window_extent = WinitWindow::get_winit_window_extent(window);
+            let window_extent = Window::get_winit_window_extent(window);
 
             if (window_extent.width * window_extent.height) > 0 {
                 app.handle_window_changed(window_extent)?;

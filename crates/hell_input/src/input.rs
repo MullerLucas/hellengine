@@ -1,3 +1,5 @@
+use core::fmt;
+
 use hell_error::HellResult;
 use strum::EnumCount;
 use crate::keycodes::KeyCode;
@@ -5,21 +7,27 @@ use crate::keycodes::KeyCode;
 
 
 #[repr(u8)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum KeyState {
+    NeverUsed,
     Inactive,
     Pressed,
     Held,
     Released,
 }
 
-impl From<winit::event::ElementState> for KeyState {
-    fn from(s: winit::event::ElementState) -> Self {
-        match s {
-            winit::event::ElementState::Pressed => KeyState::Pressed,
-            winit::event::ElementState::Released => KeyState::Released,
-        }
+impl KeyState {
+    pub const UP_STATES:   &'static [KeyState] = &[KeyState::Released, KeyState::Inactive];
+    pub const DOWN_STATES: &'static [KeyState] = &[KeyState::Pressed, KeyState::Held];
+
+    pub fn is_up(&self) -> bool {
+        Self::UP_STATES.contains(self)
     }
+
+    pub fn is_down(&self) -> bool {
+        Self::DOWN_STATES.contains(self)
+    }
+
 }
 
 bitflags::bitflags! {
@@ -43,23 +51,18 @@ bitflags::bitflags! {
     }
 }
 
-impl From<winit::event::ModifiersState> for ModifiersState {
-    fn from(s: winit::event::ModifiersState) -> Self {
-        // TODO: error handling
-        ModifiersState::from_bits(s.bits()).unwrap()
-    }
-}
 
-#[allow(dead_code)]
-pub struct InputState {
+
+
+pub struct InputManager {
     modifier_states: ModifiersState,
     key_states: [KeyState; KeyCode::COUNT],
 }
 
-impl InputState {
+impl InputManager {
     pub fn new() -> Self {
         let modifier_states = ModifiersState::from_bits(0).unwrap();
-        let key_states = [KeyState::Inactive; KeyCode::COUNT];
+        let key_states = [KeyState::NeverUsed; KeyCode::COUNT];
 
         Self {
             modifier_states,
@@ -67,27 +70,45 @@ impl InputState {
         }
     }
 
-    pub fn update_key_state_winit(&mut self, e: winit::event::KeyboardInput) -> HellResult<()> {
-        if let Some(code) = e.virtual_keycode {
-            let keycode = KeyCode::from(code);
-            let state = self.key_states.get_mut(keycode as usize).unwrap();
-            *state = KeyState::from(e.state);
-        };
+    pub fn update_key_state(&mut self, keycode: KeyCode, new_state: KeyState) -> HellResult<()> {
+        let state = self.key_states.get_mut(keycode as usize).unwrap();
+        *state = new_state;
 
         Ok(())
     }
 
-    pub fn update_modifiers_state(&mut self, e: winit::event::ModifiersState) {
-        todo!();
+    pub fn key_state(&self, keycode: KeyCode) -> KeyState {
+        self.key_states[keycode as usize]
+    }
+
+    pub fn update_modifiers_state(&mut self, new_state: ModifiersState) {
+        self.modifier_states = new_state;
+    }
+
+    pub fn reset_released_keys(&mut self) {
+        self.key_states.iter_mut()
+            .filter(|s| **s == KeyState::Released)
+            .for_each(|s| *s = KeyState::Inactive);
     }
 }
 
 
-
-pub struct InputContext {
-
+impl Default for InputManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-pub struct HellInput {
-    active_contexts: Vec<InputContext>,
+impl fmt::Display for InputManager {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (idx, state) in self.key_states.iter().enumerate() {
+            if *state == KeyState::NeverUsed { continue; }
+            if *state == KeyState::Inactive { continue; }
+
+            writeln!(f, "key_state: {:?} = {:?}", (KeyCode::try_from(idx as u32).unwrap()), state)?;
+        }
+
+        Ok(())
+    }
 }
+

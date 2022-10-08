@@ -1,5 +1,6 @@
 use hell_common::window::{HellWindow, HellWindowExtent};
 use hell_error::{HellResult, OptToHellErr};
+use hell_input::InputManager;
 use hell_renderer::{HellRenderer, HellRendererInfo};
 use hell_renderer::vulkan::config;
 use hell_resources::ResourceManager;
@@ -13,7 +14,7 @@ use crate::scene::Scene;
 
 pub trait HellGame {
     fn init_game(&mut self, scene: &mut Scene, resource_manager: &mut ResourceManager) -> HellResult<()>;
-    fn update_game(&mut self, scene: &mut Scene, delta_time: f32) -> HellResult<()>;
+    fn update_game(&mut self, scene: &mut Scene, input: &InputManager, delta_time: f32) -> HellResult<()>;
 }
 
 
@@ -28,6 +29,7 @@ pub struct HellApp {
     scene: Option<Scene>,
     // game_info:GameInfo,
     game: &'static mut dyn HellGame,
+    pub input: InputManager,
 }
 
 
@@ -45,12 +47,14 @@ impl<'a> HellApp {
 
         let resource_manager = ResourceManager::new();
         let renderer = HellRenderer::new(info)?;
+        let input = InputManager::new();
 
         Ok(Self {
             resource_manager,
             renderer,
             scene: None,
             game,
+            input,
         })
     }
 
@@ -77,7 +81,7 @@ impl HellApp {
 
     pub fn update_game(&mut self, delta_time: f32) -> HellResult<()> {
         let scene = self.scene.as_mut().to_render_hell_err()?;
-        self.game.update_game(scene, delta_time)
+        self.game.update_game(scene, &self.input, delta_time)
     }
 }
 
@@ -89,6 +93,12 @@ impl HellApp {
 
     pub fn wait_idle(&self) -> HellResult<()> {
         self.renderer.wait_idle()
+    }
+
+    pub fn advance_frame(&mut self) -> HellResult<()> {
+        self.input.reset_released_keys();
+
+        Ok(())
     }
 
     pub fn draw_frame(&mut self, delta_time: f32) -> HellResult<bool> {
@@ -103,7 +113,7 @@ impl HellApp {
         };
 
         let scene_data = scene.get_scene_data_mut();
-        scene_data.update_data()?;
+        // scene_data.update_data()?;
         self.renderer.update_scene_buffer(scene_data)?;
 
         let render_data = scene.get_render_data();

@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hell_common = { path = "../hell_common" }
 hell_error  = { path = "../hell_error" }
 
-winit = "0.27.3"
 bitflags = "1.3.2"
 strum = { version = "0.24.1", features = ["derive"] }
+num-traits = "0.2"
+num-derive= "0.3"
