@@ -1,9 +1,10 @@
 use hell_common::window::{HellWindow, HellWindowExtent};
+use hell_core::config;
 use hell_error::HellResult;
 use hell_input::InputManager;
 use hell_renderer::render_data::SceneData;
 use hell_renderer::{HellRenderer, HellRendererInfo};
-use hell_renderer::vulkan::{config, RenderData};
+use hell_renderer::vulkan::RenderData;
 use hell_resources::ResourceManager;
 
 

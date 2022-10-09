@@ -1,13 +1,7 @@
-use ash::vk;
-
-
-
-
-
 pub const APP_NAME: &str = "hellengine";
 pub const ENGINE_NAME: &str = "hellengine";
 pub const ENGINE_VERSION: u32 = 1;
-pub const API_VERSION: u32 = vk::API_VERSION_1_3;
+// pub const API_VERSION: u32 = vk::API_VERSION_1_3;
 
 pub const ENABLE_VALIDATION_LAYERS: bool = true;
 pub const VALIDATION_LAYER_NAMES: &[&str] = &[
@@ -39,3 +33,5 @@ pub const CLEAR_COLOR: [f32; 4] = [0.1, 0.1, 0.1, 1.0];
 pub const TEXTURE_0_PATH: &str = "assets/example_1/texture_0.jpg";
 pub const TEXTURE_2_PATH: &str = "assets/example_1/texture_1.jpg";
 pub const TEXTURE_1_PATH: &str = "assets/example_1/texture_2.jpg";
+
+pub const IMG_FLIP_V: bool = true;

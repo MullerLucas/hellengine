@@ -2,9 +2,10 @@ use std::ffi;
 use std::os::raw;
 
 use ash::vk;
+use hell_core::config;
 use hell_error::{HellResult, ErrToHellErr};
 
-use super::{config, platforms, validation_layers, debugging};
+use super::{platforms, validation_layers, debugging};
 
 
 
@@ -15,6 +16,9 @@ pub struct VulkanInstance {
 }
 
 
+impl VulkanInstance {
+    pub const API_VERSION: u32 = vk::API_VERSION_1_3;
+}
 
 impl VulkanInstance {
     pub fn new (app_name: &str) -> HellResult<Self> {
@@ -32,7 +36,7 @@ impl VulkanInstance {
             .application_name(&app_name)
             .engine_name(&engine_name)
             .engine_version(config::ENGINE_VERSION)
-            .api_version(config::API_VERSION)
+            .api_version(Self::API_VERSION)
             .build();
 
         let extension_names = platforms::required_extension_names();

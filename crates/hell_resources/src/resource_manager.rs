@@ -23,8 +23,23 @@ impl<T> ResourceGroup<T> {
     }
 
     #[allow(dead_code)]
-    pub fn get_resources(&self) -> &[T] {
+    pub fn get_all(&self) -> &[T] {
         &self.resources
+    }
+
+    pub fn get_at(&self, idx: usize) -> Option<&T> {
+        self.resources.get(idx)
+    }
+
+    pub fn index_of(&self, path: &str) -> Option<usize> {
+        self.paths.iter()
+            .position(|p| p == path)
+    }
+
+    #[allow(dead_code)]
+    pub fn get(&self, path: &str) -> Option<&T> {
+        self.index_of(path)
+            .and_then(|i| self.get_at(i))
     }
 
     pub fn len(&self) -> usize {
@@ -75,9 +90,9 @@ impl Default for ResourceManager {
 }
 
 impl ResourceManager {
-    pub fn load_image(&mut self, path: &str, flipv: bool) -> HellResult<usize> {
-        let img = ImageResource::load_from_disk(path, flipv)?;
-        self.images.add(path.to_owned(), img)
+    pub fn load_image(&mut self, path: String, flipv: bool) -> HellResult<usize> {
+        let img = ImageResource::load_from_disk(&path, flipv)?;
+        self.images.add(path, img)
     }
 
     pub fn get_all_images(&self) -> &[ImageResource] {
@@ -87,8 +102,20 @@ impl ResourceManager {
 
 impl ResourceManager {
     pub fn load_material(&mut self, path: &str) -> HellResult<usize> {
-        let mat = MaterialResource::load_from_disk(path)?;
+        // return already existing material
+        // --------------------------------
+        if let Some(idx) = self.materials.index_of(path) {
+            return Ok(idx);
+        }
 
+        // load new material
+        // -----------------
+        let mut mat = MaterialResource::load_from_disk(path)?;
+        mat.load_texture(self)?;
         self.materials.add(path.to_owned(), mat)
+    }
+
+    pub fn material_at(&self, idx: usize) -> Option<&MaterialResource> {
+        self.materials.get_at(idx)
     }
 }

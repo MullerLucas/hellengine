@@ -3,8 +3,9 @@ use crate::vulkan::VulkanCommandPool;
 use ash::prelude::VkResult;
 use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
+use hell_core::config;
 
-use super::{config, VulkanCore};
+use super::VulkanCore;
 use super::swapchain::VulkanSwapchain;
 
 

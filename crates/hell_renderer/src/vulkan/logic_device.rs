@@ -3,8 +3,8 @@ use std::{ptr, ffi};
 use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
 use hell_utils::conversion;
+use hell_core::config;
 
-use super::config;
 use super::phys_device::VulkanPhysDevice;
 use super::queues::VulkanQueues;
 

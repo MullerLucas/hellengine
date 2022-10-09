@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 hell_error     = { path = "../hell_error" }
+hell_core      = { path = "../hell_core" }
 hell_common    = { path = "../hell_common" }
 hell_input     = { path = "../hell_input" }
 hell_renderer  = { path = "../hell_renderer" }

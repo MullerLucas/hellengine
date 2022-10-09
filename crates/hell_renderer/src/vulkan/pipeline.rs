@@ -2,7 +2,7 @@ use ash::vk;
 use hell_error::{HellResult, HellError, HellErrorKind, ErrToHellErr};
 use crate::vulkan::vulkan_backend::MeshPushConstants;
 
-use super::config;
+use hell_core::config;
 use super::render_pass::VulkanRenderPassData;
 use super::shader::VulkanShader;
 use super::vertext::VertexInfo;

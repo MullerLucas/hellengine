@@ -1,7 +1,7 @@
 use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
+use hell_core::config;
 
-use super::config;
 use super::image::DepthImage;
 use super::render_pass::VulkanRenderPass;
 use super::swapchain::VulkanSwapchain;

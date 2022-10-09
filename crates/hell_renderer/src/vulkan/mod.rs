@@ -20,8 +20,6 @@ pub use queues::{VulkanQueue, VulkanQueues, VulkanQueueFamily, VulkanQueueSuppor
 mod swapchain;
 pub use swapchain::{VulkanSwapchain, VulkanSwapchainSupport};
 
-pub mod config;
-
 mod render_pass;
 pub use render_pass::{VulkanRenderPass, VulkanRenderPassData};
 

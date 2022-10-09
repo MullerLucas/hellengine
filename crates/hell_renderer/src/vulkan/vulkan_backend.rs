@@ -1,6 +1,7 @@
 use ash::vk;
 use hell_common::transform::Transform;
 use hell_common::window::HellWindowExtent;
+use hell_core::config;
 use hell_error::{HellResult, HellError, HellErrorKind, ErrToHellErr, OptToHellErr};
 use hell_resources::ResourceManager;
 use crate::error::err_invalid_frame_idx;
@@ -10,7 +11,7 @@ use crate::vulkan::{VulkanLogicDevice, VulkanSampler};
 use crate::vulkan::descriptors::VulkanDescriptorManager;
 
 use super::buffer::VulkanBuffer;
-use super::{config, VulkanUboData};
+use super::VulkanUboData;
 use super::frame::VulkanFrameData;
 use super::pipeline::VulkanPipeline;
 use super::render_pass::VulkanRenderPassData;

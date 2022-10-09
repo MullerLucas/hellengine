@@ -1,12 +1,13 @@
 use ash::prelude::VkResult;
 use ash::vk;
+use hell_core::config;
 use hell_error::HellResult;
 
 use crate::error::{err_invalid_frame_idx, err_invalid_set_idx};
 use crate::shared::render_data::{CameraData, SceneData, ObjectData};
 
 use super::image::TextureImage;
-use super::{config, VulkanBuffer, VulkanSampler, VulkanUboData};
+use super::{VulkanBuffer, VulkanSampler, VulkanUboData};
 
 
 

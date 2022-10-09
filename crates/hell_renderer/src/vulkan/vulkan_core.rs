@@ -8,7 +8,7 @@ use super::logic_device::VulkanLogicDevice;
 use super::phys_device::VulkanPhysDevice;
 use super::surface::VulkanSurface;
 use super::swapchain::VulkanSwapchain;
-use super::config;
+use hell_core::config;
 
 
 
