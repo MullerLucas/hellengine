@@ -112,7 +112,6 @@ impl Window {
             }
 
             WindowEvent::KeyboardInput { input: KeyboardInput { virtual_keycode: Some(keycode), state, .. }, .. } => {
-                println!("> handle-input: {:?} | {:?}", keycode, state);
                 let keycode = keycode_to_hell(keycode);
                 let state = element_state_to_hell(*state);
                 app.input.update_key_state(keycode, state)?;

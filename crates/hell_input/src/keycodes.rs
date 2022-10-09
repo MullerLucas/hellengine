@@ -2,7 +2,7 @@ use hell_error::{HellError, HellErrorKind, HellErrorContent};
 use num_traits::FromPrimitive;
 
 #[repr(u32)]
-#[derive(Debug, strum::EnumCount, num_derive::FromPrimitive)]
+#[derive(Debug, Copy, Clone, strum::EnumCount, num_derive::FromPrimitive)]
 pub enum KeyCode {
     Invalid,
     A,

@@ -1,11 +1,12 @@
 use hell_common::window::{HellWindow, HellWindowExtent};
-use hell_error::{HellResult, OptToHellErr};
+use hell_error::HellResult;
 use hell_input::InputManager;
+use hell_renderer::render_data::SceneData;
 use hell_renderer::{HellRenderer, HellRendererInfo};
-use hell_renderer::vulkan::config;
+use hell_renderer::vulkan::{config, RenderData};
 use hell_resources::ResourceManager;
 
-use crate::scene::Scene;
+
 
 
 // ----------------------------------------------------------------------------
@@ -13,8 +14,13 @@ use crate::scene::Scene;
 // ----------------------------------------------------------------------------
 
 pub trait HellGame {
-    fn init_game(&mut self, scene: &mut Scene, resource_manager: &mut ResourceManager) -> HellResult<()>;
-    fn update_game(&mut self, scene: &mut Scene, input: &InputManager, delta_time: f32) -> HellResult<()>;
+    fn scene_data(&self) -> &SceneData;
+    fn scene_data_mut(&mut self) -> &mut SceneData;
+    fn render_data(&self) -> &RenderData;
+    fn render_data_mut(&mut self) -> &mut RenderData;
+
+    fn init_game(&mut self, resource_manager: &mut ResourceManager) -> HellResult<()>;
+    fn update_game(&mut self, delta_time: f32, input: &InputManager) -> HellResult<()>;
 }
 
 
@@ -26,15 +32,13 @@ pub trait HellGame {
 pub struct HellApp {
     resource_manager: ResourceManager,
     renderer: HellRenderer,
-    scene: Option<Scene>,
-    // game_info:GameInfo,
     game: &'static mut dyn HellGame,
     pub input: InputManager,
 }
 
 
 // create
-impl<'a> HellApp {
+impl HellApp {
     pub fn new(window: &dyn HellWindow, game: &'static mut dyn HellGame) -> HellResult<Self> {
         let surface_info = window.create_surface_info()?;
         let window_extent = window.get_window_extent();
@@ -52,36 +56,23 @@ impl<'a> HellApp {
         Ok(Self {
             resource_manager,
             renderer,
-            scene: None,
             game,
             input,
         })
-    }
-
-    pub fn create_scene(&self) -> Scene {
-        Scene::new()
-    }
-
-    // FIX: resource upload
-    pub fn load_scene(&'a mut self, scene: Scene) -> HellResult<()> {
-        self.scene = Some(scene);
-        self.init_game()?;
-        self.renderer.upload_resources(&self.resource_manager)?;
-
-        Ok(())
     }
 }
 
 impl HellApp {
     pub fn init_game(&mut self) -> HellResult<()> {
-        let scene = self.scene.as_mut().to_render_hell_err()?;
-        self.game.init_game(scene, &mut self.resource_manager)
+        self.game.init_game(&mut self.resource_manager)?;
+        self.renderer.upload_resources(&self.resource_manager)?;
+
+        Ok(())
     }
 
 
-    pub fn update_game(&mut self, delta_time: f32) -> HellResult<()> {
-        let scene = self.scene.as_mut().to_render_hell_err()?;
-        self.game.update_game(scene, &self.input, delta_time)
+    fn update_game(&mut self, delta_time: f32) -> HellResult<()> {
+        self.game.update_game(delta_time, &self.input)
     }
 }
 
@@ -107,16 +98,10 @@ impl HellApp {
 
         self.update_game(delta_time)?;
 
-        let scene = match &mut self.scene {
-            None => return Ok(false),
-            Some(s) => s,
-        };
-
-        let scene_data = scene.get_scene_data_mut();
-        // scene_data.update_data()?;
+        let scene_data = self.game.scene_data();
         self.renderer.update_scene_buffer(scene_data)?;
 
-        let render_data = scene.get_render_data();
+        let render_data = self.game.render_data();
         self.renderer.update_object_buffer(render_data)?;
 
         self.renderer.draw_frame(delta_time, render_data)

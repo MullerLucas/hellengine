@@ -105,7 +105,6 @@ pub struct RenderDataChunk<'a> {
 pub struct RenderData {
     pub mesh_indices: Vec<usize>,
     pub material_indices: Vec<usize>,
-
     pub transforms: Vec<Transform>,
 }
 

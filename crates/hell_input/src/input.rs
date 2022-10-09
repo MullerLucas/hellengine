@@ -72,6 +72,14 @@ impl InputManager {
 
     pub fn update_key_state(&mut self, keycode: KeyCode, new_state: KeyState) -> HellResult<()> {
         let state = self.key_states.get_mut(keycode as usize).unwrap();
+
+        let new_state = match (*state, new_state) {
+            (KeyState::Pressed | KeyState::Held, KeyState::Pressed) => KeyState::Held,
+            (_, s) => s,
+        };
+
+        println!("INPUT: udpate key state: {:?} => {:?}", keycode, new_state);
+
         *state = new_state;
 
         Ok(())

@@ -60,6 +60,22 @@ impl Transform {
     pub fn translate_z(&mut self, offset: f32) {
         self.translation.z += offset;
     }
+
+    pub fn translate_xy(&mut self, offset: glam::Vec2) {
+        self.translation += glam::Vec3::new(offset.x, offset.y, 0.0);
+    }
+
+    pub fn clamp_x(&mut self, min: f32, max: f32) {
+        self.translation.x = self.translation.x.clamp(min, max);
+    }
+
+    pub fn clamp_y(&mut self, min: f32, max: f32) {
+        self.translation.y = self.translation.y.clamp(min, max);
+    }
+
+    pub fn clamp_z(&mut self, min: f32, max: f32) {
+        self.translation.z = self.translation.z.clamp(min, max);
+    }
 }
 
 // rotations
