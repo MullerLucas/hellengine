@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 hell_core  = { path = "../hell_core" }
-hell_error = { path = "../hell_error" }
+hell_error = { path = "../../../hust/crates/hell_error" }
 
 image = "0.24.4"
 serde = { version = "1.0.145", features = ["derive"] }

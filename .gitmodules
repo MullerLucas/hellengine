@@ -1,0 +1,4 @@
+[submodule "hust"]
+	path = hust
+	url = git@gitlab.com:helloki-app/hust.git
+	branch = game/nocoru
