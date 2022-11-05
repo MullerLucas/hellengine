@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 hell_error  = { path = "../../../hust/crates/hell_error" }
 
-glam = "0.21.3"
+glam.workspace = true

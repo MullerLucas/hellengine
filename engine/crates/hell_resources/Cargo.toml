@@ -9,6 +9,6 @@ edition = "2021"
 hell_core  = { path = "../hell_core" }
 hell_error = { path = "../../../hust/crates/hell_error" }
 
-image = "0.24.4"
-serde = { version = "1.0.145", features = ["derive"] }
-serde_yaml = "0.9.13"
+image.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true

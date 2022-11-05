@@ -11,5 +11,5 @@ hell_common = { path = "../hell_common" }
 hell_input  = { path = "../hell_input" }
 hell_app    = { path = "../hell_app" }
 
-winit = "0.27.1"
+winit.workspace = true
 
