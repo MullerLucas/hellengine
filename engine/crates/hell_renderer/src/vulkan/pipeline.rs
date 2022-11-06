@@ -112,8 +112,8 @@ fn create_pipeline_rasterization_data() -> vk::PipelineRasterizationStateCreateI
         .depth_clamp_enable(false) // clamp fragments that are beyond the near- and far-plane to them
         .rasterizer_discard_enable(false) // prevetns geometry to pass through te rasterizer stage
         .polygon_mode(vk::PolygonMode::FILL)
-        .cull_mode(vk::CullModeFlags::NONE)
-        .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
+        .cull_mode(vk::CullModeFlags::BACK)
+        .front_face(vk::FrontFace::CLOCKWISE)
         .depth_bias_enable(false)
         .depth_bias_constant_factor(0.0)
         .depth_bias_clamp(0.0)

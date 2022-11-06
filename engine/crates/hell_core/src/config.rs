@@ -28,7 +28,7 @@ pub const ENABLE_SAMPLE_SHADING: bool = true;
 
 pub const FRAME_BUFFER_LAYER_COUNT: u32 = 1;
 
-pub const CLEAR_COLOR: [f32; 4] = [0.1, 0.1, 0.1, 1.0];
+pub const CLEAR_COLOR: [f32; 4] = [0.3, 0.2, 0.8, 1.0];
 
 pub const TEXTURE_0_PATH: &str = "assets/example_1/texture_0.jpg";
 pub const TEXTURE_2_PATH: &str = "assets/example_1/texture_1.jpg";

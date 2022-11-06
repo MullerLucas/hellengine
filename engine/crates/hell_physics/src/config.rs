@@ -13,7 +13,7 @@ impl PhysicsConfig {
 impl Default for PhysicsConfig {
     fn default() -> Self {
         Self {
-            g_force: 9.81,
+            g_force: -9.81,
         }
     }
 }
