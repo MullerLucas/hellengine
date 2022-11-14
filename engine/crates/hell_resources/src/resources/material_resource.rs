@@ -71,7 +71,7 @@ impl MaterialResource {
     // TODO: move to resource-manager (maybe)
     pub fn load_texture(&mut self, resources: &mut ResourceManager) -> HellResult<()> {
         for (_, tex) in self.textures.iter_mut() {
-            let idx = resources.load_image(tex.path.clone(), config::IMG_FLIP_V)?;
+            let idx = resources.load_image(tex.path.clone(), config::IMG_FLIP_V, config::IMG_FLIP_H)?;
             tex.idx = idx;
         }
 

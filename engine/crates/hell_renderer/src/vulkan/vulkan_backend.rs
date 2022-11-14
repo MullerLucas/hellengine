@@ -477,10 +477,8 @@ impl VulkanBackend {
             device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline_layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
 
 
-
             // draw each object
             for (idx, rd) in render_data.iter().enumerate() {
-
                 if curr_mat_idx != rd.material_idx {
                     curr_mat_idx = rd.material_idx;
                     curr_mat = &self.materials[curr_mat_idx];

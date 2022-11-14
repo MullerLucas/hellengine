@@ -11,11 +11,11 @@ pub struct ImageResource {
 }
 
 impl ImageResource {
-    pub fn load_from_disk(path: &str, flipv: bool) -> HellResult<Self> {
+    pub fn load_from_disk(path: &str, flipv: bool, fliph: bool) -> HellResult<Self> {
         let dyn_img = {
             let i = image::open(Path::new(path))?;
-            if flipv { i.flipv() }
-            else     { i }
+            let tmp = if flipv { i.flipv() } else { i };
+            if fliph { tmp.fliph() } else { tmp }
         };
 
         let rgba_img: RgbaImage = match dyn_img {

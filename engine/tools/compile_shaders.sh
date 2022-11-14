@@ -5,8 +5,8 @@ echo "> start compiling shaders '$shader_file'...."
 
 sh_dir=$(dirname $0)
 
-vert_in="$sh_dir/../../${shader_file}.vert"
-frag_in="$sh_dir/../../${shader_file}.frag"
+vert_in="${shader_file}.vert"
+frag_in="${shader_file}.frag"
 
 [ -f "$vert_in" ] || { echo "> invalid vertex input file '$vert_in'" ; exit 1 ; }
 [ -f "$frag_in" ] || { echo "> invalid fragment input file '$frag_in'" ; exit 1 ; }

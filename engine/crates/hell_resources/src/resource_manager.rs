@@ -90,8 +90,8 @@ impl Default for ResourceManager {
 }
 
 impl ResourceManager {
-    pub fn load_image(&mut self, path: String, flipv: bool) -> HellResult<usize> {
-        let img = ImageResource::load_from_disk(&path, flipv)?;
+    pub fn load_image(&mut self, path: String, flipv: bool, fliph: bool) -> HellResult<usize> {
+        let img = ImageResource::load_from_disk(&path, flipv, fliph)?;
         self.images.add(path, img)
     }
 

@@ -113,7 +113,7 @@ fn create_pipeline_rasterization_data() -> vk::PipelineRasterizationStateCreateI
         .rasterizer_discard_enable(false) // prevetns geometry to pass through te rasterizer stage
         .polygon_mode(vk::PolygonMode::FILL)
         .cull_mode(vk::CullModeFlags::BACK)
-        .front_face(vk::FrontFace::CLOCKWISE)
+        .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
         .depth_bias_enable(false)
         .depth_bias_constant_factor(0.0)
         .depth_bias_clamp(0.0)
@@ -132,7 +132,7 @@ fn create_pipeline_depth_stencil_data() -> vk::PipelineDepthStencilStateCreateIn
     vk::PipelineDepthStencilStateCreateInfo::builder()
         .depth_test_enable(true)
         .depth_write_enable(true)
-        .depth_compare_op(vk::CompareOp::LESS)
+        .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL)
         // only keep fragments that fall in a specific range
         .depth_bounds_test_enable(false)
         .min_depth_bounds(0.0)
@@ -145,7 +145,7 @@ fn create_pipeline_depth_stencil_data() -> vk::PipelineDepthStencilStateCreateIn
 
 fn create_color_blend_attachment() -> vk::PipelineColorBlendAttachmentState  {
     vk::PipelineColorBlendAttachmentState::builder()
-        .blend_enable(false)
+        .blend_enable(true)
         .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
         .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
         .color_blend_op(vk::BlendOp::ADD)

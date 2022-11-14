@@ -54,7 +54,7 @@ impl VulkanSwapchainSupport {
     pub fn choose_swap_surface_format(&self) -> HellResult<vk::SurfaceFormatKHR> {
         let desired_format = self.formats.iter()
             .find(|f| {
-                f.format == vk::Format::B8G8R8_SRGB && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
+                f.format == vk::Format::B8G8R8A8_SRGB && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
             });
 
         if let Some(desired_format) = desired_format {
