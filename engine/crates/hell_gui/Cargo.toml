@@ -1,0 +1,9 @@
+[package]
+name = "hell_gui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+hell_common = { path = "../hell_common" }
+
+glam.workspace = true

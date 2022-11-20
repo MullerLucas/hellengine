@@ -104,29 +104,29 @@ pub struct RenderDataChunk<'a> {
 
 #[derive(Default)]
 pub struct RenderData {
-    pub mesh_indices: Vec<usize>,
-    pub material_indices: Vec<usize>,
+    pub meshes: Vec<usize>,
+    pub materials: Vec<usize>,
     pub transforms: Vec<Transform>,
 }
 
 impl RenderData {
     pub fn data_count(&self) -> usize {
-        self.mesh_indices.len()
+        self.meshes.len()
     }
 
     pub fn add_data(&mut self, mesh_idx: usize, material_idx: usize, trans: Transform) -> usize {
-        self.mesh_indices.push(mesh_idx);
+        self.meshes.push(mesh_idx);
         self.transforms.push(trans);
-        self.material_indices.push(material_idx);
+        self.materials.push(material_idx);
 
         self.data_count()
     }
 
     pub fn data_at(&self, idx: usize) -> RenderDataChunk {
         RenderDataChunk {
-            mesh_idx: self.mesh_indices[idx],
+            mesh_idx: self.meshes[idx],
             transform: &self.transforms[idx],
-            material_idx: self.material_indices[idx]
+            material_idx: self.materials[idx]
         }
     }
 }
