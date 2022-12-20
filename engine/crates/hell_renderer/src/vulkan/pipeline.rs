@@ -2,7 +2,6 @@ use ash::vk;
 use hell_error::{HellResult, HellError, HellErrorKind, ErrToHellErr};
 use crate::vulkan::vulkan_backend::MeshPushConstants;
 
-use hell_core::config;
 use super::render_pass::VulkanRenderPassData;
 use super::shader::VulkanShader;
 use super::vertext::VertexInfo;
@@ -15,17 +14,17 @@ pub struct VulkanPipeline {
 }
 
 impl VulkanPipeline {
-    pub fn new(core: &VulkanCore, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout]) -> HellResult<Self> {
+    pub fn new(core: &VulkanCore, shader: VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout]) -> HellResult<Self> {
         let device = &core.device.device;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 
         // let render_pass_data = VulkanRenderPassData::new(core);
 
-        let shader = VulkanShader::new(
-            &core.device.device,
-            config::VERT_SHADER_PATH,
-            config::FRAG_SHADER_PATH
-        )?;
+        // let shader = VulkanShader::new(
+        //     &core.device.device,
+        //     config::VERT_SHADER_PATH,
+        //     config::FRAG_SHADER_PATH
+        // )?;
         let shader_stages = shader.get_stage_create_infos();
 
         let vertex_info = VertexInfo::new();

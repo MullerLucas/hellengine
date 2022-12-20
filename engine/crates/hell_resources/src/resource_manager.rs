@@ -1,6 +1,9 @@
+use std::collections::HashSet;
+
+use hell_core::config;
 use hell_error::{HellErrorKind, HellError, HellResult};
 
-use crate::resources::{ImageResource, MaterialResource};
+use crate::resources::{TextureResource, MaterialResource};
 
 
 
@@ -10,8 +13,8 @@ use crate::resources::{ImageResource, MaterialResource};
 // ----------------------------------------------------------------------------
 
 pub struct ResourceGroup<T> {
-    paths: Vec<String>,
-    resources: Vec<T>,
+    pub paths: Vec<String>,
+    pub resources: Vec<T>,
 }
 
 impl<T> ResourceGroup<T> {
@@ -50,7 +53,7 @@ impl<T> ResourceGroup<T> {
         self.paths.iter().any(|p| p == path)
     }
 
-    pub fn add(&mut self, path: String, res: T) -> HellResult<usize> {
+    pub fn add(&mut self, path: String, res: T) -> HellResult<ResourceHandle> {
         if self.contains(&path) {
             return Err(HellError::from_msg(HellErrorKind::ResourceError, "trying to duplicate resource".to_owned()));
         }
@@ -58,7 +61,7 @@ impl<T> ResourceGroup<T> {
         self.paths.push(path);
         self.resources.push(res);
 
-        Ok(self.len() - 1)
+        Ok(ResourceHandle::from(self.len() - 1))
     }
 }
 
@@ -66,11 +69,31 @@ impl<T> ResourceGroup<T> {
 
 
 // ----------------------------------------------------------------------------
+// Resource-Handle
+// ----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResourceHandle {
+    pub id: usize,
+}
+
+impl From<usize> for ResourceHandle {
+    fn from(value: usize) -> Self {
+        Self { id: value }
+    }
+}
+
+impl ResourceHandle {
+    pub const MAX: Self = Self { id: usize::MAX };
+}
+
+
+// ----------------------------------------------------------------------------
 // resource manager
 // ----------------------------------------------------------------------------
 
 pub struct ResourceManager {
-    images: ResourceGroup<ImageResource>,
+    images: ResourceGroup<TextureResource>,
     materials: ResourceGroup<MaterialResource>,
 }
 
@@ -90,29 +113,53 @@ impl Default for ResourceManager {
 }
 
 impl ResourceManager {
-    pub fn load_image(&mut self, path: String, flipv: bool, fliph: bool) -> HellResult<usize> {
-        let img = ImageResource::load_from_disk(&path, flipv, fliph)?;
+    pub fn load_image(&mut self, path: String, flipv: bool, fliph: bool) -> HellResult<ResourceHandle> {
+        let img = TextureResource::load_from_disk(&path, flipv, fliph)?;
         self.images.add(path, img)
     }
 
-    pub fn get_all_images(&self) -> &[ImageResource] {
+    pub fn get_all_images(&self) -> &[TextureResource] {
         &self.images.resources
     }
 }
 
+
 impl ResourceManager {
-    pub fn load_material(&mut self, path: &str) -> HellResult<usize> {
+    pub fn load_material(&mut self, path: &str) -> HellResult<ResourceHandle> {
         // return already existing material
         // --------------------------------
         if let Some(idx) = self.materials.index_of(path) {
-            return Ok(idx);
+            return Ok(ResourceHandle::from(idx));
         }
 
         // load new material
-        // -----------------
-        let mut mat = MaterialResource::load_from_disk(path)?;
-        mat.load_texture(self)?;
+        // ----------------
+        let mat = MaterialResource::load_from_disk(path)?;
+        // TODO: load texture
+        // mat.load_texture(self)?;
         self.materials.add(path.to_owned(), mat)
+    }
+
+    pub fn load_used_textures(&mut self) -> HellResult<()> {
+        let imgs_to_load: Vec<String> = self.materials.resources
+            .iter()
+            .flat_map(|m| {
+                let t: Vec<String> = m.textures.iter().map(|(_, v)| v.path.clone()).collect();
+                t
+            })
+            .collect();
+
+        for path in imgs_to_load {
+            self.load_image(path, config::IMG_FLIP_V, config::IMG_FLIP_H)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn unique_shader_keys(&self) -> HashSet<String> {
+        self.materials.resources.iter()
+            .map(|m| m.shader.clone())
+            .collect()
     }
 
     pub fn material_at(&self, idx: usize) -> Option<&MaterialResource> {

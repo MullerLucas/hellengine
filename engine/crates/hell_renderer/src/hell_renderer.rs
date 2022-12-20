@@ -54,14 +54,16 @@ impl HellRenderer {
         self.backend.on_window_changed(self.info.window_extent)
     }
 
-    pub fn upload_resources(&mut self, resource_manager: &ResourceManager) -> HellResult<()> {
+    pub fn prepare_renderer(&mut self, resource_manager: &ResourceManager) -> HellResult<()> {
+        let shaders = resource_manager.unique_shader_keys();
+        self.backend.create_pipelines(shaders)?;
         self.backend.upload_resources(resource_manager)
     }
 
-    pub fn draw_frame(&mut self, delta_time: f32, render_data: &RenderData) -> HellResult<bool> {
+    pub fn draw_frame(&mut self, delta_time: f32, render_data: &RenderData, resources: &ResourceManager) -> HellResult<bool> {
         self.update_camera(delta_time)?;
 
-        let is_resized = self.backend.draw_frame(delta_time, render_data)?;
+        let is_resized = self.backend.draw_frame(delta_time, render_data, resources)?;
 
         self.increment_frame_idx();
         Ok(is_resized)

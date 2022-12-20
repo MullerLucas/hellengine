@@ -66,7 +66,9 @@ impl HellApp {
 impl HellApp {
     pub fn init_game(&mut self) -> HellResult<()> {
         self.game.init_game(&mut self.resource_manager)?;
-        self.renderer.upload_resources(&self.resource_manager)?;
+
+        self.resource_manager.load_used_textures()?;
+        self.renderer.prepare_renderer(&self.resource_manager)?;
 
         Ok(())
     }
@@ -105,6 +107,6 @@ impl HellApp {
         let render_data = self.game.render_data();
         self.renderer.update_object_buffer(render_data)?;
 
-        self.renderer.draw_frame(delta_time, render_data)
+        self.renderer.draw_frame(delta_time, render_data, &self.resource_manager)
     }
 }

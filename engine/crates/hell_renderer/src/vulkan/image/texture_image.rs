@@ -1,6 +1,6 @@
 use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
-use hell_resources::resources::ImageResource;
+use hell_resources::resources::TextureResource;
 
 use crate::vulkan::buffer::copy_buffer_to_img;
 use crate::vulkan::{VulkanCore, VulkanBuffer};
@@ -14,7 +14,7 @@ pub struct TextureImage {
 }
 
 impl TextureImage {
-    pub fn from(core: &VulkanCore, img_res: &ImageResource) -> HellResult<Self> {
+    pub fn from(core: &VulkanCore, img_res: &TextureResource) -> HellResult<Self> {
         let device = &core.device.device;
 
         let img = img_res.get_img();

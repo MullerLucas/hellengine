@@ -1,9 +1,11 @@
+use std::collections::{HashMap, HashSet};
+
 use ash::vk;
 use hell_common::transform::Transform;
 use hell_common::window::HellWindowExtent;
 use hell_core::config;
 use hell_error::{HellResult, HellError, HellErrorKind, ErrToHellErr, OptToHellErr};
-use hell_resources::ResourceManager;
+use hell_resources::{ResourceManager, ResourceHandle};
 use crate::error::err_invalid_frame_idx;
 use crate::shared::render_data::{CameraData, SceneData, ObjectData};
 use crate::vulkan::image::TextureImage;
@@ -11,7 +13,7 @@ use crate::vulkan::{VulkanLogicDevice, VulkanSampler};
 use crate::vulkan::descriptors::VulkanDescriptorManager;
 
 use super::buffer::VulkanBuffer;
-use super::VulkanUboData;
+use super::{VulkanUboData, VulkanShader};
 use super::frame::VulkanFrameData;
 use super::pipeline::VulkanPipeline;
 use super::render_pass::VulkanRenderPassData;
@@ -94,22 +96,22 @@ impl VulkanMesh {
 // render data
 // ----------------------------------------------------------------------------
 
-#[derive(Debug)]
-pub struct VulkanMaterial {
-    pub pipeline_idx: usize,
-    pub texture_idx: usize,
-    pub descriptor_set_idx: usize,
-}
-
-impl VulkanMaterial {
-    pub fn new(pipeline_idx: usize, texture_idx: usize, descriptor_set_idx: usize) -> Self {
-        Self {
-            pipeline_idx,
-            texture_idx,
-            descriptor_set_idx,
-        }
-    }
-}
+// #[derive(Debug)]
+// pub struct VulkanMaterial {
+//     pub pipeline_idx: usize,
+//     pub texture_idx: usize,
+//     pub descriptor_set_idx: usize,
+// }
+//
+// impl VulkanMaterial {
+//     pub fn new(pipeline_idx: usize, texture_idx: usize, descriptor_set_idx: usize) -> Self {
+//         Self {
+//             pipeline_idx,
+//             texture_idx,
+//             descriptor_set_idx,
+//         }
+//     }
+// }
 
 // ----------------------------------------------------------------------------
 // render data
@@ -118,14 +120,23 @@ impl VulkanMaterial {
 pub struct RenderDataChunk<'a> {
     pub mesh_idx: usize,
     pub transform: &'a Transform,
-    pub material_idx: usize,
+    pub material: ResourceHandle,
 }
 
-#[derive(Default)]
 pub struct RenderData {
     pub meshes: Vec<usize>,
-    pub materials: Vec<usize>,
     pub transforms: Vec<Transform>,
+    pub materials: Vec<ResourceHandle>,
+}
+
+impl Default for RenderData {
+    fn default() -> Self {
+        Self {
+            meshes: Vec::new(),
+            transforms: Vec::new(),
+            materials: Vec::new(),
+        }
+    }
 }
 
 impl RenderData {
@@ -133,10 +144,10 @@ impl RenderData {
         self.meshes.len()
     }
 
-    pub fn add_data(&mut self, mesh_idx: usize, material_idx: usize, trans: Transform) -> usize {
+    pub fn add_data(&mut self, mesh_idx: usize, material: ResourceHandle, trans: Transform) -> usize {
         self.meshes.push(mesh_idx);
         self.transforms.push(trans);
-        self.materials.push(material_idx);
+        self.materials.push(material);
 
         self.data_count()
     }
@@ -145,7 +156,7 @@ impl RenderData {
         RenderDataChunk {
             mesh_idx: self.meshes[idx],
             transform: &self.transforms[idx],
-            material_idx: self.materials[idx]
+            material: self.materials[idx]
         }
     }
 }
@@ -274,12 +285,12 @@ pub struct VulkanBackend {
     pub curr_frame_idx: usize,
     pub frame_data: VulkanFrameData,
 
-
-    pub pipelines: Vec<VulkanPipeline>,
+    // pub pipelines: Vec<VulkanPipeline>,
+    pub pipelines: HashMap<String, VulkanPipeline>,
     pub meshes: Vec<VulkanMesh>,
     pub texture: Vec<TextureImage>,
     pub sampler: VulkanSampler,
-    pub materials: Vec<VulkanMaterial>,
+    // pub materials: Vec<VulkanMaterial>,
 
     pub gpu_resource_manager: VulkanResourceManager,
     pub descriptor_manager: VulkanDescriptorManager,
@@ -302,16 +313,17 @@ impl VulkanBackend {
         let descriptor_manager = VulkanDescriptorManager::new(device).to_render_hell_err()?;
 
         let render_pass_data = VulkanRenderPassData::new(&core)?;
-        let default_pipeline = VulkanPipeline::new(&core, &render_pass_data, descriptor_manager.get_layouts())?;
-        let pipelines = vec![default_pipeline];
+        // let default_pipeline = VulkanPipeline::new(&core, &render_pass_data, descriptor_manager.get_layouts())?;
+        // let pipelines = vec![default_pipeline];
+        let pipelines = HashMap::new();
 
         // TODO:softcode
-        let materials = vec![
-            VulkanMaterial::new(0, 0, 0),
-            VulkanMaterial::new(0, 1, 1),
-            VulkanMaterial::new(0, 2, 2),
-            VulkanMaterial::new(0, 3, 3),
-        ];
+        // let materials = vec![
+        //     VulkanMaterial::new(0, 0, 0),
+        //     VulkanMaterial::new(0, 1, 1),
+        //     VulkanMaterial::new(0, 2, 2),
+        //     VulkanMaterial::new(0, 3, 3),
+        // ];
 
 
         Ok(Self {
@@ -324,7 +336,7 @@ impl VulkanBackend {
             meshes,
             texture: Vec::new(),
             sampler,
-            materials,
+            // materials,
             descriptor_manager,
 
             render_pass_data,
@@ -368,7 +380,25 @@ impl Drop for VulkanBackend {
 
         self.frame_data.drop_manual(device);
         self.render_pass_data.drop_manual(&self.core.device.device);
-        self.pipelines.iter_mut().for_each(|p| { p.drop_manual(&self.core.device.device) });
+        self.pipelines.iter_mut().for_each(|(_, p)| { p.drop_manual(&self.core.device.device) });
+    }
+}
+
+impl VulkanBackend {
+    pub fn create_pipelines(&mut self, shader_key: HashSet<String>) -> HellResult<()>{
+        for key in shader_key {
+
+            let shader = VulkanShader::new(
+                &self.core.device.device,
+                config::VERT_SHADER_PATH,
+                config::FRAG_SHADER_PATH
+            )?;
+
+            let pipeline = VulkanPipeline::new(&self.core, shader, &self.render_pass_data, &self.descriptor_manager.get_layouts())?;
+            self.pipelines.insert(key, pipeline);
+        }
+
+        Ok(())
     }
 }
 
@@ -384,7 +414,7 @@ impl VulkanBackend {
         Ok(())
     }
 
-    pub fn draw_frame(&mut self, _delta_time: f32, render_data: &RenderData) -> HellResult<bool> {
+    pub fn draw_frame(&mut self, _delta_time: f32, render_data: &RenderData, resources: &ResourceManager) -> HellResult<bool> {
         let core = &self.core;
         let device = &core.device.device;
         let render_pass_data = &self.render_pass_data;
@@ -406,7 +436,8 @@ impl VulkanBackend {
             core,
             render_pass_data,
             curr_swap_idx as usize,
-            render_data
+            render_data,
+            resources
         )?;
 
         // delay resetting the fence until we know for sure we will be submitting work with it (not return early)
@@ -428,7 +459,7 @@ impl VulkanBackend {
         Ok(is_resized)
     }
 
-    fn record_cmd_buffer(&self, core: &VulkanCore, render_pass_data: &VulkanRenderPassData, swap_img_idx: usize, render_data: &RenderData) -> HellResult<()> {
+    fn record_cmd_buffer(&self, core: &VulkanCore, render_pass_data: &VulkanRenderPassData, swap_img_idx: usize, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
         let begin_info = vk::CommandBufferBeginInfo::default();
         let device = &core.device.device;
         let cmd_buffer = self.frame_data.get_cmd_buffer(self.curr_frame_idx)?;
@@ -461,7 +492,7 @@ impl VulkanBackend {
         unsafe { device.cmd_begin_render_pass(cmd_buffer, &render_pass_info, vk::SubpassContents::INLINE); }
 
         // record commands
-        self.record_scene_cmd_buffer(device, cmd_buffer, render_data)?;
+        self.record_scene_cmd_buffer(device, cmd_buffer, render_data, resources)?;
 
         unsafe {
             device.cmd_end_render_pass(cmd_buffer);
@@ -474,15 +505,18 @@ impl VulkanBackend {
         Ok(())
     }
 
-    fn record_scene_cmd_buffer(&self, device: &ash::Device, cmd_buffer: vk::CommandBuffer, render_data: &RenderData) -> HellResult<()> {
+    fn record_scene_cmd_buffer(&self, device: &ash::Device, cmd_buffer: vk::CommandBuffer, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
         unsafe {
-            let mut curr_pipeline_idx = usize::MAX;
-            let mut curr_mat_idx = usize::MAX;
+            // let mut curr_pipeline_idx = usize::MAX;
+            let mut curr_mat_handle = ResourceHandle::MAX;
             let mut curr_mesh_idx = usize::MAX;
 
-            let mut curr_mat = &self.materials[0];
-            let mut curr_pipeline = &self.pipelines[0];
+            // let mut curr_mat = &self.materials[0];
+            let mut curr_mat = resources.material_at(0).unwrap();
+            let mut curr_pipeline = self.pipelines.get(&curr_mat.shader).unwrap();
             let mut curr_mesh = &self.meshes[0];
+
+            let mut curr_pipeline_idx: &str = "";
 
 
 
@@ -499,23 +533,24 @@ impl VulkanBackend {
 
             device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline_layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
 
-            println!("MAT: {:?}", &self.materials);
-
             // draw each object
             for (idx, rd) in render_data.iter().enumerate() {
-                if curr_mat_idx != rd.material_idx {
-                    curr_mat_idx = rd.material_idx;
-                    curr_mat = &self.materials[curr_mat_idx];
+                if curr_mat_handle != rd.material {
+                    curr_mat_handle = rd.material;
+                    // curr_mat = &self.materials[curr_mat];
+                    curr_mat = resources.material_at(curr_mat_handle.id).to_hell_err(HellErrorKind::RenderError)?;
 
                     // bind material descriptors
-                    let descriptor_set = [ self.descriptor_manager.get_material_set(rd.material_idx)? ];
+                    let descriptor_set = [ self.descriptor_manager.get_material_set(rd.material.id)? ];
                     device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline_layout, 2, &descriptor_set, &[]);
                 }
 
                 // bind pipeline
-                if curr_pipeline_idx != curr_mat.pipeline_idx {
-                    curr_pipeline_idx = curr_mat.pipeline_idx;
-                    curr_pipeline = &self.pipelines[curr_pipeline_idx];
+                if curr_pipeline_idx != curr_mat.shader {
+                    curr_pipeline_idx = &curr_mat.shader;
+                    // curr_pipeline = &self.pipelines[curr_pipeline_idx];
+                    // TODO: pipeline
+                    curr_pipeline = self.pipelines.get("shaders/sprite").unwrap();
                     device.cmd_bind_pipeline(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline);
                 }
 

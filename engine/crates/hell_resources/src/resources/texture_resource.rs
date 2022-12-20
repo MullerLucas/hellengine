@@ -4,13 +4,39 @@ use hell_error::HellResult;
 use image::{DynamicImage, RgbaImage};
 
 
+// ----------------------------------------------------------------------------
+// info
+// ----------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+pub struct TextureInfo {
+    pub id_internal: Option<u64>,
+    pub name: String,
+    pub path: String,
+}
+
+impl TextureInfo {
+    pub fn new(name: String, path: String) -> Self {
+        Self {
+            id_internal: None,
+            name,
+            path,
+        }
+    }
+}
 
 
-pub struct ImageResource {
+
+// ----------------------------------------------------------------------------
+// resource
+// ----------------------------------------------------------------------------
+
+pub struct TextureResource {
+    id_internal: Option<u64>,
     rgba_img: RgbaImage,
 }
 
-impl ImageResource {
+impl TextureResource {
     pub fn load_from_disk(path: &str, flipv: bool, fliph: bool) -> HellResult<Self> {
         let dyn_img = {
             let i = image::open(Path::new(path))?;
@@ -26,6 +52,7 @@ impl ImageResource {
         };
 
         Ok(Self {
+            id_internal: None,
             rgba_img,
         })
     }
