@@ -30,5 +30,5 @@ pub const FRAME_BUFFER_LAYER_COUNT: u32 = 1;
 
 pub const CLEAR_COLOR: [f32; 4] = [0.3, 0.2, 0.8, 1.0];
 
-pub const IMG_FLIP_V: bool = true;
-pub const IMG_FLIP_H: bool = true;
+pub const IMG_FLIP_V: bool = false;
+pub const IMG_FLIP_H: bool = false;

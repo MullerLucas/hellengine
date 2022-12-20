@@ -19,12 +19,30 @@ use super::vertext::Vertex;
 use super::vulkan_core::VulkanCore;
 
 
+/// Vulkan:
+///      -1
+///      |
+/// -1 ----- +1
+///      |
+///      +1
 
 static QUAD_VERTS: &[Vertex] = &[
-    Vertex::from_arrays([-1.0, -1.0,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [1.0, 0.0]),
-    Vertex::from_arrays([ 1.0, -1.0,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0]),
-    Vertex::from_arrays([ 1.0,  1.0,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 1.0]),
-    Vertex::from_arrays([-1.0,  1.0,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
+    // Vertex::from_arrays([-1.0, -1.0,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [1.0, 0.0]),
+    // Vertex::from_arrays([ 1.0, -1.0,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0]),
+    // Vertex::from_arrays([ 1.0,  1.0,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 1.0]),
+    // Vertex::from_arrays([-1.0,  1.0,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
+
+    // Counter-Clockwise
+    // Vertex::from_arrays([-1.0,  1.0,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [1.0, 0.0]),
+    // Vertex::from_arrays([ 1.0,  1.0,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0]),
+    // Vertex::from_arrays([ 1.0, -1.0,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 1.0]),
+    // Vertex::from_arrays([-1.0, -1.0,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
+
+    // Clockwise
+    Vertex::from_arrays([ 0.5,  0.5,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [1.0, 0.0]),
+    Vertex::from_arrays([-0.5,  0.5,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0]),
+    Vertex::from_arrays([-0.5, -0.5,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 1.0]),
+    Vertex::from_arrays([ 0.5, -0.5,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
 ];
 
 static QUAD_INDICES: &[u32] = &[
@@ -76,6 +94,7 @@ impl VulkanMesh {
 // render data
 // ----------------------------------------------------------------------------
 
+#[derive(Debug)]
 pub struct VulkanMaterial {
     pub pipeline_idx: usize,
     pub texture_idx: usize,
@@ -286,10 +305,12 @@ impl VulkanBackend {
         let default_pipeline = VulkanPipeline::new(&core, &render_pass_data, descriptor_manager.get_layouts())?;
         let pipelines = vec![default_pipeline];
 
+        // TODO:softcode
         let materials = vec![
             VulkanMaterial::new(0, 0, 0),
             VulkanMaterial::new(0, 1, 1),
             VulkanMaterial::new(0, 2, 2),
+            VulkanMaterial::new(0, 3, 3),
         ];
 
 
@@ -324,6 +345,8 @@ impl VulkanBackend {
         let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[0], &self.sampler).to_render_hell_err()?;
         let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[1], &self.sampler).to_render_hell_err()?;
         let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[2], &self.sampler).to_render_hell_err()?;
+        // TODO: softcode
+        let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[3], &self.sampler).to_render_hell_err()?;
 
         Ok(())
     }
@@ -476,6 +499,7 @@ impl VulkanBackend {
 
             device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline_layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
 
+            println!("MAT: {:?}", &self.materials);
 
             // draw each object
             for (idx, rd) in render_data.iter().enumerate() {

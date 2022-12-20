@@ -14,7 +14,9 @@ impl HellFont {
     }
 }
 
+// ----------------------------------------------------------------------------
 
+#[derive(Clone)]
 pub struct TextMesh {
     font: Option<HellFont>,
     transform: Transform,
@@ -34,6 +36,10 @@ impl TextMesh {
             char_transforms: vec![],
             txt: None,
         }
+    }
+
+    pub fn char_transforms(&self) -> &[Transform] {
+        &self.char_transforms
     }
 
     pub fn transform_mut(&mut self) -> &mut Transform {
