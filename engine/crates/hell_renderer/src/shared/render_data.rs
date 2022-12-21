@@ -10,22 +10,55 @@ pub trait HellRenderable {
 
 
 // ----------------------------------------------------------------------------
-// CameraData
+// NEW
 // ----------------------------------------------------------------------------
 
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 #[repr(C)]
-pub struct CameraData {
-    pub view: glam::Mat4,
-    pub proj: glam::Mat4,
-    pub view_proj: glam::Mat4,
+pub struct ObjectUniform {
+    pub model: glam::Mat4,     // 64 bytes
+    pub reserve_0: glam::Mat4, // 64 bytes
+    pub reserve_1: glam::Mat4, // 64 bytes
+    pub reserve_2: glam::Mat4, // 64 bytes
 }
 
-impl CameraData {
-    pub fn new(aspect_ratio: f32) -> Self {
-        // let aspect_ratio = core.swapchain.aspect_ratio();
 
+// ----------------------------------------------------------------------------
+// GLOBAL
+// ----------------------------------------------------------------------------
+
+//apparentyl some nvidia cards require the ubo to be 265 bytes?
+#[derive(Debug, Clone, Default)]
+#[repr(C)]
+pub struct GlobalUniformObject {
+    pub view: glam::Mat4,      // 64 bytes
+    pub proj: glam::Mat4,      // 64 bytes
+    pub view_proj: glam::Mat4, // 64 bytes
+    pub reserve_0: glam::Mat4, // 64 bytes
+}
+
+impl GlobalUniformObject {
+    pub fn new(view: glam::Mat4, proj: glam::Mat4, view_proj: glam::Mat4) -> Self {
+        Self {
+            view,
+            proj,
+            view_proj,
+            reserve_0: glam::Mat4::ZERO
+        }
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub struct TmpCamera {
+    pub view: glam::Mat4,      // 64 bytes
+    pub proj: glam::Mat4,      // 64 bytes
+    pub view_proj: glam::Mat4, // 64 bytes
+}
+
+impl TmpCamera {
+    pub fn new(aspect_ratio: f32) -> Self {
         let view = glam::Mat4::look_at_lh(glam::Vec3::new(0.0, 0.0, -2.0), glam::Vec3::new(0.0, 0.0, 0.0), glam::Vec3::new(0.0, 1.0, 0.0));
         let mut proj = glam::Mat4::perspective_lh(90.0, aspect_ratio, 0.1, 10.0);
         proj.y_axis.y *= -1.0;
@@ -33,17 +66,12 @@ impl CameraData {
         let view_proj = view * proj;
 
         Self {
-            view, proj, view_proj
+            view,
+            proj,
+            view_proj,
         }
     }
 }
-
-impl CameraData {
-    pub fn update_view_proj(&mut self) {
-        self.view_proj = self.proj * self.view;
-    }
-}
-
 
 
 

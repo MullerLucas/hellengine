@@ -1,5 +1,5 @@
 use ash::vk;
-use crate::shared::render_data::{SceneData, CameraData, ObjectData};
+use crate::{shared::render_data::{SceneData, ObjectData}, render_data::GlobalUniformObject};
 
 
 
@@ -22,7 +22,7 @@ pub trait VulkanUboData {
 // camera data
 // ----------------------------------------------------------------------------
 
-impl VulkanUboData for CameraData {
+impl VulkanUboData for GlobalUniformObject {
     fn device_size() -> vk::DeviceSize {
         std::mem::size_of::<Self>() as vk::DeviceSize
     }

@@ -53,3 +53,5 @@ mod descriptors;
 mod sampler;
 
 pub use sampler::VulkanSampler;
+
+pub mod shader;

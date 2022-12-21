@@ -6,17 +6,15 @@ use hell_common::window::HellWindowExtent;
 use hell_core::config;
 use hell_error::{HellResult, HellError, HellErrorKind, ErrToHellErr, OptToHellErr};
 use hell_resources::{ResourceManager, ResourceHandle};
-use crate::error::err_invalid_frame_idx;
-use crate::render_data::{CameraData, SceneData, ObjectData};
+use crate::render_data::{SceneData, ObjectData, GlobalUniformObject, TmpCamera};
 use crate::vulkan::image::TextureImage;
-use crate::vulkan::{VulkanLogicDevice, VulkanSampler};
-use crate::vulkan::descriptors::VulkanDescriptorManager;
+use crate::vulkan::VulkanLogicDevice;
 
 use super::buffer::VulkanBuffer;
 use super::frame::VulkanFrameData;
-use super::pipeline::VulkanPipeline;
 use super::pipeline::shader_data::VulkanUboData;
 use super::render_pass::VulkanRenderPassData;
+use super::shader::VulkanSpriteShader;
 use super::vertext::Vertex;
 use super::vulkan_core::VulkanCore;
 
@@ -219,81 +217,17 @@ pub struct MeshPushConstants {
 // renderer
 // ----------------------------------------------------------------------------
 
-pub struct VulkanResourceManager {
-    camera_buffers: Vec<VulkanBuffer>,
-    scene_buffers: VulkanBuffer, // one ubo for all frames
-    object_buffers: Vec<VulkanBuffer>,
-}
-
-impl VulkanResourceManager {
-    pub fn new(core: &VulkanCore) -> Self {
-        let camera_buffer_size = CameraData::device_size();
-        let camera_buffers: Vec<_> = (0..config::MAX_FRAMES_IN_FLIGHT).into_iter()
-            .map(|_| VulkanBuffer::from_uniform(core, camera_buffer_size))
-            .collect();
-
-        let scene_ubo_size = SceneData::total_size(core.phys_device.device_props.limits.min_uniform_buffer_offset_alignment, config::MAX_FRAMES_IN_FLIGHT as u64);
-        let scene_ubo = VulkanBuffer::from_uniform(core, scene_ubo_size);
-
-        let object_ubo_size = ObjectData::total_size();
-        let object_ubos: Vec<_> = (0..config::MAX_FRAMES_IN_FLIGHT).into_iter()
-            .map(|_| VulkanBuffer::from_storage(core, object_ubo_size))
-            .collect();
-
-
-        Self {
-            camera_buffers,
-            scene_buffers: scene_ubo,
-            object_buffers: object_ubos,
-        }
-    }
-
-    pub fn drop_manaual(&self, device: &ash::Device) {
-        self.camera_buffers.iter().for_each(|p| p.drop_manual(device));
-        self.scene_buffers.drop_manual(device);
-        self.object_buffers.iter().for_each(|p| p.drop_manual(device));
-    }
-}
-
-impl VulkanResourceManager {
-    pub fn get_all_camera_buffer(&self) -> &[VulkanBuffer] {
-        &self.camera_buffers
-    }
-
-    pub fn get_camera_buffer(&self, frame_idx: usize) -> HellResult<&VulkanBuffer> {
-        self.camera_buffers.get(frame_idx).ok_or_else(|| err_invalid_frame_idx(frame_idx))
-    }
-
-    pub fn get_scene_buffer(&self) -> &VulkanBuffer {
-        &self.scene_buffers
-    }
-
-    pub fn get_all_object_buffers(&self) -> &[VulkanBuffer] {
-        &self.object_buffers
-    }
-
-    pub fn get_object_buffer(&self, frame_idx: usize) -> HellResult<&VulkanBuffer> {
-        self.object_buffers.get(frame_idx).ok_or_else(|| err_invalid_frame_idx(frame_idx))
-    }
-}
-
-// ----------------------------------------------------------------------------
-// renderer
-// ----------------------------------------------------------------------------
-
 pub struct VulkanBackend {
-    pub curr_frame_idx: usize,
+    pub frame_idx: usize,
     pub frame_data: VulkanFrameData,
 
     // pub pipelines: Vec<VulkanPipeline>,
-    pub pipelines: HashMap<String, VulkanPipeline>,
+    // pub pipelines: HashMap<String, VulkanPipeline>,
+    pub shaders: HashMap<String, VulkanSpriteShader>,
     pub meshes: Vec<VulkanMesh>,
-    pub texture: Vec<TextureImage>,
-    pub sampler: VulkanSampler,
     // pub materials: Vec<VulkanMaterial>,
 
-    pub gpu_resource_manager: VulkanResourceManager,
-    pub descriptor_manager: VulkanDescriptorManager,
+    // pub descriptor_manager: VulkanDescriptorManager,
 
     pub render_pass_data: VulkanRenderPassData,
     pub core: VulkanCore,
@@ -302,65 +236,21 @@ pub struct VulkanBackend {
 impl VulkanBackend {
     pub fn new(core: VulkanCore) -> HellResult<Self> {
         let frame_data = VulkanFrameData::new(&core)?;
-
         let quad_mesh = VulkanMesh::new_quad(&core)?;
         let meshes = vec![quad_mesh];
-        let sampler = VulkanSampler::new(&core).to_render_hell_err()?;
-
-        let gpu_resource_manager = VulkanResourceManager::new(&core);
-
-        let device = &core.device.device;
-        let descriptor_manager = VulkanDescriptorManager::new(device).to_render_hell_err()?;
-
         let render_pass_data = VulkanRenderPassData::new(&core)?;
-        // let default_pipeline = VulkanPipeline::new(&core, &render_pass_data, descriptor_manager.get_layouts())?;
-        // let pipelines = vec![default_pipeline];
-        let pipelines = HashMap::new();
-
-        // TODO:softcode
-        // let materials = vec![
-        //     VulkanMaterial::new(0, 0, 0),
-        //     VulkanMaterial::new(0, 1, 1),
-        //     VulkanMaterial::new(0, 2, 2),
-        //     VulkanMaterial::new(0, 3, 3),
-        // ];
+        let shaders = HashMap::new();
 
 
         Ok(Self {
-            curr_frame_idx: 0,
+            frame_idx: 0,
             frame_data,
 
-            gpu_resource_manager,
-
-            pipelines,
+            shaders,
             meshes,
-            texture: Vec::new(),
-            sampler,
-            // materials,
-            descriptor_manager,
-
             render_pass_data,
             core,
         })
-    }
-
-    pub fn upload_resources(&mut self, resource_manager: &ResourceManager) -> HellResult<()> {
-        let device = &self.core.device.device;
-
-        let texture: HellResult<Vec<_>> = resource_manager.get_all_images().iter()
-            .map(|i| TextureImage::from(&self.core, i))
-            .collect();
-        self.texture = texture?;
-
-        let _ = self.descriptor_manager.add_global_descriptor_sets(device, self.gpu_resource_manager.get_all_camera_buffer(), self.gpu_resource_manager.get_scene_buffer(), config::MAX_FRAMES_IN_FLIGHT as usize).unwrap();
-        let _ = self.descriptor_manager.add_object_descriptor_set(device, self.gpu_resource_manager.get_all_object_buffers(), config::MAX_FRAMES_IN_FLIGHT as usize).to_render_hell_err()?;
-        let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[0], &self.sampler).to_render_hell_err()?;
-        let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[1], &self.sampler).to_render_hell_err()?;
-        let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[2], &self.sampler).to_render_hell_err()?;
-        // TODO: softcode
-        let _ = self.descriptor_manager.add_material_descriptor_sets(device, &self.texture[3], &self.sampler).to_render_hell_err()?;
-
-        Ok(())
     }
 }
 
@@ -372,23 +262,22 @@ impl Drop for VulkanBackend {
 
         self.meshes.iter_mut().for_each(|m| m.drop_manual(&self.core.device));
 
-        self.texture.iter().for_each(|t| t.drop_manual(device));
-        self.sampler.drop_manual(device);
-
-        self.gpu_resource_manager.drop_manaual(device);
-        self.descriptor_manager.drop_manual(device);
-
         self.frame_data.drop_manual(device);
         self.render_pass_data.drop_manual(&self.core.device.device);
-        self.pipelines.iter_mut().for_each(|(_, p)| { p.drop_manual(&self.core.device.device) });
+        self.shaders.iter_mut().for_each(|(_, s)| { s.drop_manual(&self.core.device.device) });
     }
 }
 
 impl VulkanBackend {
-    pub fn create_pipelines(&mut self, shader_paths: HashSet<String>) -> HellResult<()>{
+    pub fn create_shaders(&mut self, shader_paths: HashSet<String>, resource_manager: &ResourceManager) -> HellResult<()>{
+        let texture: HellResult<Vec<_>> = resource_manager.get_all_images().iter()
+            .map(|i| TextureImage::from(&self.core, i))
+            .collect();
+        let texture = texture?;
+
         for path in shader_paths {
-            let pipeline = VulkanPipeline::new(&self.core, &path, &self.render_pass_data, &self.descriptor_manager.get_layouts())?;
-            self.pipelines.insert(path, pipeline);
+            let shader = VulkanSpriteShader::new(&self.core, &path, &self.render_pass_data, texture.clone())?;
+            self.shaders.insert(path, shader);
         }
 
         Ok(())
@@ -413,8 +302,8 @@ impl VulkanBackend {
         let render_pass_data = &self.render_pass_data;
 
         // let frame_data = &self.frame_data[frame_idx];
-        let cmd_pool = &self.frame_data.graphics_cmd_pools.get(self.curr_frame_idx).to_render_hell_err()?;
-        self.frame_data.wait_for_in_flight(&self.core.device.device, self.curr_frame_idx)?;
+        let cmd_pool = &self.frame_data.graphics_cmd_pools.get(self.frame_idx).to_render_hell_err()?;
+        self.frame_data.wait_for_in_flight(&self.core.device.device, self.frame_idx)?;
 
         // TODO: check
         // let swap_img_idx = match self.swapchain.aquire_next_image(frame_data.img_available_sem[0]) {
@@ -422,7 +311,7 @@ impl VulkanBackend {
         //     Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => { return true },
         //     _ => { panic!("failed to aquire next image") }
         // };
-        let (curr_swap_idx, _is_suboptimal) = core.swapchain.aquire_next_image(self.frame_data.img_available_semaphors[self.curr_frame_idx])?;
+        let (curr_swap_idx, _is_suboptimal) = core.swapchain.aquire_next_image(self.frame_data.img_available_semaphors[self.frame_idx])?;
 
         cmd_pool.reset_cmd_buffer(device, 0)?;
         self.record_cmd_buffer(
@@ -434,10 +323,10 @@ impl VulkanBackend {
         )?;
 
         // delay resetting the fence until we know for sure we will be submitting work with it (not return early)
-        self.frame_data.reset_in_flight_fence(device, self.curr_frame_idx)?;
-        self.frame_data.submit_queue(device, core.device.queues.graphics.queue, &[cmd_pool.get_buffer(0)], self.curr_frame_idx)?;
+        self.frame_data.reset_in_flight_fence(device, self.frame_idx)?;
+        self.frame_data.submit_queue(device, core.device.queues.graphics.queue, &[cmd_pool.get_buffer(0)], self.frame_idx)?;
 
-        let present_result = self.frame_data.present_queue(core.device.queues.present.queue, &core.swapchain, &[curr_swap_idx], self.curr_frame_idx);
+        let present_result = self.frame_data.present_queue(core.device.queues.present.queue, &core.swapchain, &[curr_swap_idx], self.frame_idx);
 
         // TODO: check
         // do this after queue-present to ensure that the semaphores are in a consistent state - otherwise a signaled semaphore may never be properly waited upon
@@ -447,7 +336,7 @@ impl VulkanBackend {
             _ => { return Err(HellError::from_msg(HellErrorKind::RenderError, "failed to aquire next image".to_owned())) }
         };
 
-        self.curr_frame_idx = (self.curr_frame_idx + 1) % config::MAX_FRAMES_IN_FLIGHT as usize;
+        self.frame_idx = (self.frame_idx + 1) % config::FRAMES_IN_FLIGHT as usize;
 
         Ok(is_resized)
     }
@@ -455,7 +344,7 @@ impl VulkanBackend {
     fn record_cmd_buffer(&self, core: &VulkanCore, render_pass_data: &VulkanRenderPassData, swap_img_idx: usize, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
         let begin_info = vk::CommandBufferBeginInfo::default();
         let device = &core.device.device;
-        let cmd_buffer = self.frame_data.get_cmd_buffer(self.curr_frame_idx)?;
+        let cmd_buffer = self.frame_data.get_cmd_buffer(self.frame_idx)?;
 
         unsafe { device.begin_command_buffer(cmd_buffer, &begin_info).to_render_hell_err()?; }
 
@@ -500,31 +389,28 @@ impl VulkanBackend {
 
     fn record_scene_cmd_buffer(&self, device: &ash::Device, cmd_buffer: vk::CommandBuffer, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
         unsafe {
-            // let mut curr_pipeline_idx = usize::MAX;
             let mut curr_mat_handle = ResourceHandle::MAX;
             let mut curr_mesh_idx = usize::MAX;
 
-            // let mut curr_mat = &self.materials[0];
             let mut curr_mat = resources.material_at(0).unwrap();
-            let mut curr_pipeline = self.pipelines.get(&curr_mat.shader).unwrap();
+            let mut curr_shader = self.shaders.get(&curr_mat.shader).unwrap();
             let mut curr_mesh = &self.meshes[0];
 
-            let mut curr_pipeline_idx: &str = "";
-
+            let mut curr_shader_key: &str = "";
 
 
             // bind static descriptor sets once
             let descriptor_set = [
-                self.descriptor_manager.get_global_set(0, self.curr_frame_idx)?,
-                self.descriptor_manager.get_object_set(0, self.curr_frame_idx)?,
+                curr_shader.get_global_set(0, self.frame_idx)?,
+                curr_shader.get_object_set(0, self.frame_idx)?,
             ];
 
             let min_ubo_alignment = self.core.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
             let dynamic_descriptor_offsets = [
-                SceneData::padded_device_size(min_ubo_alignment) as u32 * self.curr_frame_idx as u32,
+                SceneData::padded_device_size(min_ubo_alignment) as u32 * self.frame_idx as u32,
             ];
 
-            device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline_layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
+            device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
 
             // draw each object
             for (idx, rd) in render_data.iter().enumerate() {
@@ -534,16 +420,16 @@ impl VulkanBackend {
                     curr_mat = resources.material_at(curr_mat_handle.id).to_hell_err(HellErrorKind::RenderError)?;
 
                     // bind material descriptors
-                    let descriptor_set = [ self.descriptor_manager.get_material_set(rd.material.id)? ];
-                    device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline_layout, 2, &descriptor_set, &[]);
+                    let descriptor_set = [ curr_shader.get_material_set(rd.material.id)? ];
+                    device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 2, &descriptor_set, &[]);
                 }
 
                 // bind pipeline
-                if curr_pipeline_idx != curr_mat.shader {
-                    curr_pipeline_idx = &curr_mat.shader;
+                if curr_shader_key != curr_mat.shader {
+                    curr_shader_key = &curr_mat.shader;
                     // curr_pipeline = &self.pipelines[curr_pipeline_idx];
-                    curr_pipeline = self.pipelines.get(curr_pipeline_idx).unwrap();
-                    device.cmd_bind_pipeline(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline);
+                    curr_shader = self.shaders.get(curr_shader_key).unwrap();
+                    device.cmd_bind_pipeline(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.pipeline);
                 }
 
                 // bind mesh
@@ -564,7 +450,7 @@ impl VulkanBackend {
                 ];
 
                 let push_const_bytes = std::slice::from_raw_parts(push_constants.as_ptr() as *const u8, std::mem::size_of_val(&push_constants));
-                device.cmd_push_constants(cmd_buffer, curr_pipeline.pipeline_layout, vk::ShaderStageFlags::VERTEX, 0, push_const_bytes);
+                device.cmd_push_constants(cmd_buffer, curr_shader.pipeline.layout, vk::ShaderStageFlags::VERTEX, 0, push_const_bytes);
 
                 // draw
                 // value of 'first_instance' is used in the vertex shader to index into the object storage
@@ -577,10 +463,43 @@ impl VulkanBackend {
 }
 
 impl VulkanBackend {
-    pub fn update_camera_buffer(&self, frame_idx: usize, camera: &CameraData) -> HellResult<()> {
-        let buffer = self.gpu_resource_manager.get_camera_buffer(frame_idx)?;
-        buffer.upload_data_buffer(&self.core.device.device, camera)?;
+    pub fn update_global_state(&mut self, camera: TmpCamera) -> HellResult<()> {
+        let global_uo = GlobalUniformObject::new(camera.view, camera.proj, camera.view_proj);
+
+        for (_, sh) in &mut self.shaders {
+            sh.update_global_uo(global_uo.to_owned(), &self.core, self.frame_idx)?;
+        }
 
         Ok(())
     }
+
+    pub fn update_scene_buffer(&self, scene_data: &SceneData) -> HellResult<()> {
+        let min_ubo_alignment = self.core.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
+        for (_, sh) in &self.shaders {
+            let buffer = sh.get_scene_buffer();
+            buffer.upload_data_buffer_array(&self.core.device.device, min_ubo_alignment, scene_data, self.frame_idx)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn update_object_buffer(&self, render_data: &RenderData) -> HellResult<()> {
+        for (_, sh) in &self.shaders {
+            let buffer = sh.get_object_buffer(self.frame_idx);
+
+            let object_data: Vec<_> = render_data.iter()
+                .map(|r| ObjectData {
+                    model: r.transform.create_model_mat()
+                })
+                .collect();
+
+            unsafe {
+                // TODO: try to write diretly into the buffer
+                buffer.upload_data_storage_buffer(&self.core.device.device, object_data.as_ptr(), object_data.len())?;
+            }
+        }
+
+        Ok(())
+    }
+
 }

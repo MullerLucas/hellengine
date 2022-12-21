@@ -13,6 +13,7 @@ use super::vulkan_core::VulkanCore;
 // buffer
 // ----------------------------------------------------------------------------
 
+#[derive(Default)]
 pub struct VulkanBuffer {
     pub buffer: vk::Buffer,
     pub mem: vk::DeviceMemory,

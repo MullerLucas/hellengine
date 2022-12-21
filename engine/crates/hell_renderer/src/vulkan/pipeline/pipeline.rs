@@ -5,12 +5,13 @@ use crate::vulkan::{vulkan_backend::MeshPushConstants, VulkanCore, VulkanRenderP
 use super::shader::VulkanShader;
 
 
-pub struct VulkanPipeline { pub pipeline_layout: vk::PipelineLayout,
+pub struct VulkanPipeline {
+    pub layout: vk::PipelineLayout,
     pub pipeline: vk::Pipeline,
 }
 
 impl VulkanPipeline {
-    pub fn new(core: &VulkanCore, shader_path: &str, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout]) -> HellResult<Self> {
+    pub fn new(core: &VulkanCore, shader: &VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout]) -> HellResult<Self> {
         let device = &core.device.device;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 
@@ -18,10 +19,6 @@ impl VulkanPipeline {
 
         // shader
         // ------
-        let shader = VulkanShader::from_file(
-            &core.device.device,
-            shader_path,
-        )?;
         let shader_stages = shader.get_stage_create_infos();
 
         // vertices
@@ -150,7 +147,7 @@ impl VulkanPipeline {
         shader.drop_manual(&core.device.device);
 
         Ok(Self {
-            pipeline_layout,
+            layout: pipeline_layout,
             pipeline,
         })
     }
@@ -162,7 +159,7 @@ impl VulkanPipeline {
 
         unsafe {
             device.destroy_pipeline(self.pipeline, None);
-            device.destroy_pipeline_layout(self.pipeline_layout, None);
+            device.destroy_pipeline_layout(self.layout, None);
         }
     }
 }

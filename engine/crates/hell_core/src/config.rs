@@ -15,7 +15,7 @@ pub const DEVICE_EXTENSION_NAMES: &[&str] = &[
 pub const VERT_SHADER_PATH: &str = "shaders/sprite.vert.spv";
 pub const FRAG_SHADER_PATH: &str = "shaders/sprite.frag.spv";
 
-pub const MAX_FRAMES_IN_FLIGHT: usize = 3;
+pub const FRAMES_IN_FLIGHT: usize = 3;
 
 pub const DYNAMIC_UNIFORM_DESCRIPTOR_COUNT: u32 = 10;
 pub const DYNAMIC_STORAGE_DESCRIPTOR_COUNT: u32 = 10;

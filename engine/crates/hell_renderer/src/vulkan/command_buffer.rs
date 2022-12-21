@@ -17,7 +17,7 @@ pub struct VulkanCommandPool {
 impl VulkanCommandPool {
     pub fn new(device: &ash::Device, queue_family_idx: u32, pool_flags: vk::CommandPoolCreateFlags) -> HellResult<Self> {
         let pool = create_pool(device, queue_family_idx, pool_flags)?;
-        let buffers = create_buffers(pool, device, config::MAX_FRAMES_IN_FLIGHT as u32)?;
+        let buffers = create_buffers(pool, device, config::FRAMES_IN_FLIGHT as u32)?;
 
         Ok(Self {
             pool,

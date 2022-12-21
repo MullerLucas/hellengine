@@ -9,6 +9,7 @@ use super::RawImage;
 
 
 
+#[derive(Clone)]
 pub struct TextureImage {
     pub img: RawImage,
 }

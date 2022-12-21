@@ -32,17 +32,17 @@ impl VulkanFrameData {
             .build();
 
         // TODO: error handling
-        let img_available_sem: HellResult<Vec<_>> = (0..config::MAX_FRAMES_IN_FLIGHT).into_iter()
+        let img_available_sem: HellResult<Vec<_>> = (0..config::FRAMES_IN_FLIGHT).into_iter()
             .map(|_| unsafe { device.create_semaphore(&semaphore_info, None).to_render_hell_err() })
             .collect();
-        let render_finished_sem: HellResult<Vec<_>> = (0..config::MAX_FRAMES_IN_FLIGHT).into_iter()
+        let render_finished_sem: HellResult<Vec<_>> = (0..config::FRAMES_IN_FLIGHT).into_iter()
             .map(|_| unsafe { device.create_semaphore(&semaphore_info, None).to_render_hell_err() })
             .collect();
-        let in_flight_fence: HellResult<Vec<_>> = (0..config::MAX_FRAMES_IN_FLIGHT).into_iter()
+        let in_flight_fence: HellResult<Vec<_>> = (0..config::FRAMES_IN_FLIGHT).into_iter()
             .map(|_| unsafe { device.create_fence(&fence_info, None).to_render_hell_err() })
             .collect();
 
-        let graphics_cmd_pool: HellResult<Vec<_>> = (0..config::MAX_FRAMES_IN_FLIGHT).into_iter()
+        let graphics_cmd_pool: HellResult<Vec<_>> = (0..config::FRAMES_IN_FLIGHT).into_iter()
             .map(|_| VulkanCommandPool::default_for_graphics(&core.device))
             .collect();
         let graphics_cmd_pool = graphics_cmd_pool?;

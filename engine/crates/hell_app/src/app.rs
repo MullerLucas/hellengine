@@ -45,7 +45,7 @@ impl HellApp {
         let window_extent = window.get_window_extent();
 
         let info = HellRendererInfo {
-            max_frames_in_flight: config::MAX_FRAMES_IN_FLIGHT,
+            max_frames_in_flight: config::FRAMES_IN_FLIGHT,
             surface_info,
             window_extent,
         };
@@ -102,11 +102,8 @@ impl HellApp {
         self.update_game(delta_time)?;
 
         let scene_data = self.game.scene_data();
-        self.renderer.update_scene_buffer(scene_data)?;
-
         let render_data = self.game.render_data();
-        self.renderer.update_object_buffer(render_data)?;
 
-        self.renderer.draw_frame(delta_time, render_data, &self.resource_manager)
+        self.renderer.draw_frame(delta_time, scene_data, render_data, &self.resource_manager)
     }
 }

@@ -10,6 +10,7 @@ use crate::vulkan::{VulkanCore, buffer, VulkanQueue, VulkanCommandPool};
 
 
 
+#[derive(Clone)]
 pub struct RawImage {
     pub img: vk::Image,
     pub view: vk::ImageView,
