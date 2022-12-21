@@ -31,6 +31,7 @@ impl TextureInfo {
 // resource
 // ----------------------------------------------------------------------------
 
+#[allow(dead_code)]
 pub struct TextureResource {
     id_internal: Option<u64>,
     rgba_img: RgbaImage,

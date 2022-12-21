@@ -1,3 +1,9 @@
+// crate-config: start
+#![deny(warnings)]
+// crate-config: end
+
+
+
 mod vec;
 mod mat;
 

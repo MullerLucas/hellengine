@@ -1,3 +1,9 @@
+// crate-config: start
+#![deny(warnings)]
+// crate-config: end
+
+
+
 pub mod vulkan;
 mod shared;
 pub use shared::render_data;

@@ -1,5 +1,6 @@
 use hell_common::transform::Transform;
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 pub struct HellFont {
     mesh: usize,
