@@ -15,8 +15,8 @@ pub struct VulkanShader {
 
 impl VulkanShader {
     pub fn from_file(device: &ash::Device, path: &str) -> HellResult<Self> {
-        let vert_path = format!("{}.vert", path);
-        let frag_path = format!("{}.frag", path);
+        let vert_path = format!("{}.vert.spv", path);
+        let frag_path = format!("{}.frag.spv", path);
 
         let vert_module = VulkanShaderModule::new(device, &vert_path)?;
         let frag_module = VulkanShaderModule::new(device, &frag_path)?;

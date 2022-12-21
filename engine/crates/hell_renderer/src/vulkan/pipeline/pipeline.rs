@@ -5,8 +5,7 @@ use crate::vulkan::{vulkan_backend::MeshPushConstants, VulkanCore, VulkanRenderP
 use super::shader::VulkanShader;
 
 
-pub struct VulkanPipeline {
-    pub pipeline_layout: vk::PipelineLayout,
+pub struct VulkanPipeline { pub pipeline_layout: vk::PipelineLayout,
     pub pipeline: vk::Pipeline,
 }
 

@@ -542,8 +542,7 @@ impl VulkanBackend {
                 if curr_pipeline_idx != curr_mat.shader {
                     curr_pipeline_idx = &curr_mat.shader;
                     // curr_pipeline = &self.pipelines[curr_pipeline_idx];
-                    // TODO: pipeline
-                    curr_pipeline = self.pipelines.get("shaders/sprite").unwrap();
+                    curr_pipeline = self.pipelines.get(curr_pipeline_idx).unwrap();
                     device.cmd_bind_pipeline(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_pipeline.pipeline);
                 }
 
