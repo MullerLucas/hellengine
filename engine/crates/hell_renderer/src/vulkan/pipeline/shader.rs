@@ -14,9 +14,12 @@ pub struct VulkanShader {
 }
 
 impl VulkanShader {
-    pub fn new(device: &ash::Device, vert_path: &str, frag_path: &str) -> HellResult<Self> {
-        let vert_module = VulkanShaderModule::new(device, vert_path)?;
-        let frag_module = VulkanShaderModule::new(device, frag_path)?;
+    pub fn from_file(device: &ash::Device, path: &str) -> HellResult<Self> {
+        let vert_path = format!("{}.vert", path);
+        let frag_path = format!("{}.frag", path);
+
+        let vert_module = VulkanShaderModule::new(device, &vert_path)?;
+        let frag_module = VulkanShaderModule::new(device, &frag_path)?;
 
         let stage_create_infos = [
             vert_module.stage_create_info(vk::ShaderStageFlags::VERTEX),
@@ -44,6 +47,8 @@ impl VulkanShader {
     }
 }
 
+
+// ----------------------------------------------
 
 
 pub struct VulkanShaderModule {

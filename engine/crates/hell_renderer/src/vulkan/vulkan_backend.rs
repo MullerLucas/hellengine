@@ -7,15 +7,15 @@ use hell_core::config;
 use hell_error::{HellResult, HellError, HellErrorKind, ErrToHellErr, OptToHellErr};
 use hell_resources::{ResourceManager, ResourceHandle};
 use crate::error::err_invalid_frame_idx;
-use crate::shared::render_data::{CameraData, SceneData, ObjectData};
+use crate::render_data::{CameraData, SceneData, ObjectData};
 use crate::vulkan::image::TextureImage;
 use crate::vulkan::{VulkanLogicDevice, VulkanSampler};
 use crate::vulkan::descriptors::VulkanDescriptorManager;
 
 use super::buffer::VulkanBuffer;
-use super::{VulkanUboData, VulkanShader};
 use super::frame::VulkanFrameData;
 use super::pipeline::VulkanPipeline;
+use super::pipeline::shader_data::VulkanUboData;
 use super::render_pass::VulkanRenderPassData;
 use super::vertext::Vertex;
 use super::vulkan_core::VulkanCore;
@@ -385,17 +385,10 @@ impl Drop for VulkanBackend {
 }
 
 impl VulkanBackend {
-    pub fn create_pipelines(&mut self, shader_key: HashSet<String>) -> HellResult<()>{
-        for key in shader_key {
-
-            let shader = VulkanShader::new(
-                &self.core.device.device,
-                config::VERT_SHADER_PATH,
-                config::FRAG_SHADER_PATH
-            )?;
-
-            let pipeline = VulkanPipeline::new(&self.core, shader, &self.render_pass_data, &self.descriptor_manager.get_layouts())?;
-            self.pipelines.insert(key, pipeline);
+    pub fn create_pipelines(&mut self, shader_paths: HashSet<String>) -> HellResult<()>{
+        for path in shader_paths {
+            let pipeline = VulkanPipeline::new(&self.core, &path, &self.render_pass_data, &self.descriptor_manager.get_layouts())?;
+            self.pipelines.insert(path, pipeline);
         }
 
         Ok(())

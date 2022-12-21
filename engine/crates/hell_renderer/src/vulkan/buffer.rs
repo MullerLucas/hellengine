@@ -2,8 +2,8 @@ use ash::prelude::VkResult;
 use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
 
-use super::VulkanUboData;
 use super::command_buffer::VulkanCommandPool;
+use super::pipeline::shader_data::VulkanUboData;
 use super::vertext::Vertex;
 use super::vulkan_core::VulkanCore;
 

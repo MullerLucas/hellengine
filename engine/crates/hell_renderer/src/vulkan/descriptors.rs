@@ -7,7 +7,8 @@ use crate::error::{err_invalid_frame_idx, err_invalid_set_idx};
 use crate::shared::render_data::{CameraData, SceneData, ObjectData};
 
 use super::image::TextureImage;
-use super::{VulkanBuffer, VulkanSampler, VulkanUboData};
+use super::pipeline::shader_data::VulkanUboData;
+use super::{VulkanBuffer, VulkanSampler};
 
 
 

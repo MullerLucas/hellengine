@@ -37,14 +37,10 @@ pub use framebuffer::VulkanFramebuffer;
 mod frame;
 pub use frame::VulkanFrameData;
 
-mod pipeline;
-pub use pipeline::VulkanPipeline;
-
-mod shader;
-pub use shader::VulkanShader;
+pub mod pipeline;
 
 mod vertext;
-pub use vertext::{Vertex, VertexInfo};
+pub use vertext::Vertex;
 
 mod vulkan_backend;
 pub use vulkan_backend::{VulkanBackend, RenderData};
@@ -55,7 +51,5 @@ pub use instance::VulkanInstance;
 mod descriptors;
 
 mod sampler;
-mod shader_data;
-pub use shader_data::*;
 
 pub use sampler::VulkanSampler;

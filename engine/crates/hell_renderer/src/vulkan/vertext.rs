@@ -41,33 +41,3 @@ impl Vertex {
         mem::size_of::<Self>() as vk::DeviceSize
     }
 }
-
-
-
-
-pub struct VertexInfo {
-    binding_desc: [vk::VertexInputBindingDescription; 1],
-    attr_desc: Vec<vk::VertexInputAttributeDescription>,
-}
-
-impl VertexInfo {
-    pub fn new() -> Self {
-        Self {
-            binding_desc: [Vertex::get_binding_desc()],
-            attr_desc: Vertex::get_attribute_desc(),
-        }
-    }
-
-    pub fn create_input_info(&self) -> vk::PipelineVertexInputStateCreateInfo {
-        vk::PipelineVertexInputStateCreateInfo::builder()
-            .vertex_binding_descriptions(&self.binding_desc)
-            .vertex_attribute_descriptions(&self.attr_desc)
-            .build()
-    }
-}
-
-impl Default for VertexInfo {
-    fn default() -> Self {
-        Self::new()
-    }
-}
