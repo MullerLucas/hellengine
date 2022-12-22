@@ -58,10 +58,24 @@ pub struct TmpCamera {
 }
 
 impl TmpCamera {
+    // TODO:
     pub fn new(aspect_ratio: f32) -> Self {
-        let view = glam::Mat4::look_at_lh(glam::Vec3::new(0.0, 0.0, -2.0), glam::Vec3::new(0.0, 0.0, 0.0), glam::Vec3::new(0.0, 1.0, 0.0));
-        let mut proj = glam::Mat4::perspective_lh(90.0, aspect_ratio, 0.1, 10.0);
-        proj.y_axis.y *= -1.0;
+
+        // let view = glam::Mat4::look_at_lh(glam::Vec3::new(0.0, 0.0, -2.0), glam::Vec3::new(0.0, 0.0, 0.0), glam::Vec3::new(0.0, 1.0, 0.0));
+        let view = glam::Mat4::from_scale(glam::vec3(0.2, 0.2, 0.2));
+        // let proj = glam::Mat4::IDENTITY;
+
+        let height = 2.0;
+        let width = height * aspect_ratio;
+        let proj = glam::Mat4::orthographic_lh(
+            -width / 2.0,
+             width / 2.0,
+            -height / 2.0,
+             height / 2.0,
+            0.0,
+            100.0
+        );
+        // proj.y_axis.y *= -1.0;
 
         let view_proj = view * proj;
 

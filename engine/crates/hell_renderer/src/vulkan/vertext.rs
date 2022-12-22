@@ -3,7 +3,7 @@ use std::mem;
 use ash::vk;
 use memoffset::offset_of;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Vertex {
     pub pos: glam::Vec4,
     pub color: glam::Vec4,

@@ -11,7 +11,7 @@ pub struct VulkanPipeline {
 }
 
 impl VulkanPipeline {
-    pub fn new(core: &VulkanCore, shader: &VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout]) -> HellResult<Self> {
+    pub fn new(core: &VulkanCore, shader: VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout]) -> HellResult<Self> {
         let device = &core.device.device;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 

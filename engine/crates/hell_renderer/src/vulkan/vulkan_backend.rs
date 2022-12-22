@@ -27,22 +27,14 @@ use super::vulkan_core::VulkanCore;
 ///      +1
 
 static QUAD_VERTS: &[Vertex] = &[
-    // Vertex::from_arrays([-1.0, -1.0,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [1.0, 0.0]),
-    // Vertex::from_arrays([ 1.0, -1.0,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0]),
-    // Vertex::from_arrays([ 1.0,  1.0,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 1.0]),
-    // Vertex::from_arrays([-1.0,  1.0,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
-
-    // Counter-Clockwise
-    // Vertex::from_arrays([-1.0,  1.0,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [1.0, 0.0]),
-    // Vertex::from_arrays([ 1.0,  1.0,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0]),
-    // Vertex::from_arrays([ 1.0, -1.0,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 1.0]),
-    // Vertex::from_arrays([-1.0, -1.0,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
-
-    // Clockwise
-    Vertex::from_arrays([ 0.5,  0.5,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [1.0, 0.0]),
-    Vertex::from_arrays([-0.5,  0.5,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0]),
-    Vertex::from_arrays([-0.5, -0.5,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 1.0]),
-    Vertex::from_arrays([ 0.5, -0.5,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
+    // Top-Left
+    Vertex::from_arrays([-0.5, -0.5,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [0.0, 0.0]),
+    // Bottom-Left
+    Vertex::from_arrays([-0.5,  0.5,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0]),
+    // Bottom-Right
+    Vertex::from_arrays([ 0.5,  0.5,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [1.0, 1.0]),
+    // Top-Right
+    Vertex::from_arrays([ 0.5, -0.5,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
 ];
 
 static QUAD_INDICES: &[u32] = &[
@@ -56,6 +48,7 @@ static QUAD_INDICES: &[u32] = &[
 // mesh
 // ----------------------------------------------------------------------------
 
+#[derive(Debug)]
 pub struct VulkanMesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
@@ -270,13 +263,13 @@ impl Drop for VulkanBackend {
 
 impl VulkanBackend {
     pub fn create_shaders(&mut self, shader_paths: HashSet<String>, resource_manager: &ResourceManager) -> HellResult<()>{
-        let texture: HellResult<Vec<_>> = resource_manager.get_all_images().iter()
-            .map(|i| TextureImage::from(&self.core, i))
-            .collect();
-        let texture = texture?;
-
         for path in shader_paths {
-            let shader = VulkanSpriteShader::new(&self.core, &path, &self.render_pass_data, texture.clone())?;
+            let texture: HellResult<Vec<_>> = resource_manager.get_all_images().iter()
+                .map(|i| TextureImage::from(&self.core, i))
+                .collect();
+            let texture = texture?;
+
+            let shader = VulkanSpriteShader::new(&self.core, &path, &self.render_pass_data, texture)?;
             self.shaders.insert(path, shader);
         }
 
@@ -452,6 +445,7 @@ impl VulkanBackend {
                 let push_const_bytes = std::slice::from_raw_parts(push_constants.as_ptr() as *const u8, std::mem::size_of_val(&push_constants));
                 device.cmd_push_constants(cmd_buffer, curr_shader.pipeline.layout, vk::ShaderStageFlags::VERTEX, 0, push_const_bytes);
 
+                println!("draw-frame: {} -- {}", curr_shader_key, curr_mat_handle.id);
                 // draw
                 // value of 'first_instance' is used in the vertex shader to index into the object storage
                 device.cmd_draw_indexed(cmd_buffer, curr_mesh.indices_count() as u32, 1, 0, 0, idx as u32);
@@ -466,8 +460,12 @@ impl VulkanBackend {
     pub fn update_global_state(&mut self, camera: TmpCamera) -> HellResult<()> {
         let global_uo = GlobalUniformObject::new(camera.view, camera.proj, camera.view_proj);
 
+        println!("UPDATE-GLOBALS-VIEW: {:?}", global_uo.view);
+        println!("UPDATE-GLOBALS-PROJ: {:?}", global_uo.proj);
+        println!("UPDATE-GLOBALS-VP: {:?}", global_uo.view_proj);
+
         for (_, sh) in &mut self.shaders {
-            sh.update_global_uo(global_uo.to_owned(), &self.core, self.frame_idx)?;
+            sh.update_global_uo(global_uo.clone(), &self.core, self.frame_idx)?;
         }
 
         Ok(())

@@ -26,10 +26,10 @@ pub struct VulkanSpriteShader {
     pub global_desc_group: VulkanDescriptorSetGroup,
     pub object_desc_group: VulkanDescriptorSetGroup,
     pub material_desc_group: VulkanDescriptorSetGroup,
-    layouts: [vk::DescriptorSetLayout; 3],
+    desc_layouts: [vk::DescriptorSetLayout; 3],
 
     // pipeline
-    pub shader: VulkanShader,
+    // pub shader: VulkanShader,
     pub pipeline: VulkanPipeline,
 
 }
@@ -117,7 +117,6 @@ impl VulkanSpriteShader {
             material_desc_group.layout,
         ];
 
-
         // pipeline
         // --------
         let shader = VulkanShader::from_file(
@@ -125,11 +124,11 @@ impl VulkanSpriteShader {
             shader_path,
         )?;
 
-        let pipeline = VulkanPipeline::new(core, &shader, render_pass_data, &desc_layouts)?;
+        let pipeline = VulkanPipeline::new(core, shader, render_pass_data, &desc_layouts)?;
 
 
         Ok(Self {
-            shader,
+            // shader,
             pipeline,
 
             global_uo,
@@ -144,7 +143,7 @@ impl VulkanSpriteShader {
             global_desc_group,
             object_desc_group,
             material_desc_group,
-            layouts: desc_layouts,
+            desc_layouts,
         })
     }
 
@@ -169,10 +168,15 @@ impl VulkanSpriteShader {
         self.object_ubos.get_all().iter().for_each(|p| p.drop_manual(device));
         self.scene_ubo.drop_manual(device);
         self.global_ubos.get_all().iter() .for_each(|u| u.drop_manual(device));
+
+        // pipeline
+        // --------
+        self.pipeline.drop_manual(device);
     }
 
     pub fn update_global_uo(&mut self, global_uo: GlobalUniformObject, core: &VulkanCore, frame_idx: usize) -> HellResult<()> {
         self.global_uo = global_uo;
+
         let buffer = self.global_ubos.get(frame_idx);
         buffer.upload_data_buffer(&core.device.device, &self.global_uo)?;
 
@@ -183,7 +187,7 @@ impl VulkanSpriteShader {
 
 impl VulkanSpriteShader {
     pub fn get_layouts(&self) -> &[vk::DescriptorSetLayout] {
-        &self.layouts
+        &self.desc_layouts
     }
 
     pub fn get_global_set(&self, set_idx: usize, frame_idx: usize) -> HellResult<vk::DescriptorSet> {
