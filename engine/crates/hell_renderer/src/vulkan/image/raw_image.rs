@@ -2,8 +2,9 @@ use ash::vk;
 use hell_error::HellResult;
 use std::ptr;
 
+
 use crate::vulkan::phys_device::has_stencil_component;
-use crate::vulkan::{VulkanCore, buffer, VulkanQueue, VulkanCommandPool};
+use crate::vulkan::{VulkanQueue, VulkanCommandPool, VulkanCtxRef, buffer};
 
 
 
@@ -22,7 +23,7 @@ pub struct RawImage {
 impl RawImage {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        core: &VulkanCore,
+        ctx: &VulkanCtxRef,
         width: u32,
         height: u32,
         num_samples: vk::SampleCountFlags,
@@ -32,7 +33,7 @@ impl RawImage {
         properties: vk::MemoryPropertyFlags,
         aspect_mask: vk::ImageAspectFlags,
     ) -> Self {
-        let device = &core.device.device;
+        let device = &ctx.device.device;
 
         let img_info = vk::ImageCreateInfo {
             s_type: vk::StructureType::IMAGE_CREATE_INFO,
@@ -64,8 +65,8 @@ impl RawImage {
         let mem_requirements = unsafe { device.get_image_memory_requirements(img) };
 
         let memory_type_index = buffer::find_memory_type(
-            &core.instance.instance,
-            core.phys_device.phys_device,
+            &ctx.instance.instance,
+            ctx.phys_device.phys_device,
             mem_requirements.memory_type_bits,
             properties,
         );

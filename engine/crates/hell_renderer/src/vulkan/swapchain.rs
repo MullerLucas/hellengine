@@ -1,10 +1,10 @@
 use ash::vk;
+use hell_common::window::HellWindowExtent;
 use hell_error::{HellResult, ErrToHellErr, OptToHellErr};
 
 use crate::vulkan::image;
 
-use super::logic_device::VulkanLogicDevice;
-use super::phys_device::VulkanPhysDevice;
+use super::VulkanCtx;
 use super::surface::VulkanSurface;
 
 
@@ -135,20 +135,20 @@ pub struct VulkanSwapchain {
 
 
 impl VulkanSwapchain {
-    pub fn new(instance: &ash::Instance, phys_device: &VulkanPhysDevice, device: &VulkanLogicDevice, surface: &VulkanSurface, window_width: u32, window_height: u32) -> HellResult<VulkanSwapchain> {
-        let swapchain_support = VulkanSwapchainSupport::new(phys_device.phys_device, surface)?;
+    pub fn new(ctx: &VulkanCtx, window_extent: HellWindowExtent) -> HellResult<VulkanSwapchain> {
+        let swapchain_support = VulkanSwapchainSupport::new(ctx.phys_device.phys_device, &ctx.surface)?;
 
         let surface_format = swapchain_support.choose_swap_surface_format()?;
         let swap_present_mode = swapchain_support.choose_swap_present_mode();
-        let extent = swapchain_support.choose_swap_extend(window_width, window_height);
+        let extent = swapchain_support.choose_swap_extend(window_extent.width, window_extent.height);
         let swap_img_count = swapchain_support.choose_img_count();
 
-        let is_single_queue = phys_device.queue_support.single_queue()?;
-        let queue_indices: Vec<_> = phys_device.queue_support.indices().into_iter().collect();
+        let is_single_queue = ctx.phys_device.queue_support.single_queue()?;
+        let queue_indices: Vec<_> = ctx.phys_device.queue_support.indices().into_iter().collect();
 
 
         let create_info = vk::SwapchainCreateInfoKHR::builder()
-            .surface(surface.surface)
+            .surface(ctx.surface.surface)
             .min_image_count(swap_img_count)
             .image_format(surface_format.format)
             .image_color_space(surface_format.color_space)
@@ -164,11 +164,11 @@ impl VulkanSwapchain {
             .old_swapchain(vk::SwapchainKHR::null())
             .build();
 
-        let swapchain_loader = ash::extensions::khr::Swapchain::new(instance, &device.device);
+        let swapchain_loader = ash::extensions::khr::Swapchain::new(&ctx.instance.instance, &ctx.device.device);
         let swapchain = unsafe { swapchain_loader .create_swapchain(&create_info, None) .expect("failed to create swapchain") };
 
         let imgs = unsafe { swapchain_loader.get_swapchain_images(swapchain).to_render_hell_err()? };
-        let views = image::create_img_views(&device.device, &imgs, surface_format.format, vk::ImageAspectFlags::COLOR);
+        let views = image::create_img_views(&ctx.device.device, &imgs, surface_format.format, vk::ImageAspectFlags::COLOR);
 
         let viewport = [
             vk::Viewport {

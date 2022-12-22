@@ -26,7 +26,7 @@ impl HellSurfaceInfo {
 
 
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct HellWindowExtent {
     pub width: u32,
     pub height: u32,

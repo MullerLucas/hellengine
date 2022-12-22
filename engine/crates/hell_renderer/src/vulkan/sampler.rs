@@ -1,7 +1,7 @@
 use ash::prelude::VkResult;
 pub use ash::vk;
 
-use super::VulkanCore;
+use super::VulkanCtx;
 
 pub struct VulkanSampler {
     pub sampler: vk::Sampler,
@@ -10,7 +10,7 @@ pub struct VulkanSampler {
 
 
 impl VulkanSampler {
-    pub fn new(core: &VulkanCore) -> VkResult<Self> {
+    pub fn new(core: &VulkanCtx) -> VkResult<Self> {
 
         // enabled ansiotropy if the physical device supports it
         let (ansiotropy_enabled, max_ansiotropy) = if core.phys_device.features.sampler_anisotropy == vk::TRUE {

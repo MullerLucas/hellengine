@@ -1,8 +1,8 @@
 use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
+use super::{VulkanCtxRef, VulkanSwapchain};
 use super::framebuffer::VulkanFramebuffer;
 use super::image::DepthImage;
-use super::vulkan_core::VulkanCore;
 
 
 
@@ -13,8 +13,8 @@ pub struct VulkanRenderPass {
 }
 
 impl VulkanRenderPass {
-    pub fn new(core: &VulkanCore) -> HellResult<Self> {
-        let swap_format = core.swapchain.surface_format.format;
+    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain) -> HellResult<Self> {
+        let swap_format = swapchain.surface_format.format;
         let msaa_samples = vk::SampleCountFlags::TYPE_1;
 
         // color attachments
@@ -40,7 +40,7 @@ impl VulkanRenderPass {
         // depth attachments
         // -----------------
         let depth_attachment = vk::AttachmentDescription::builder()
-            .format(core.phys_device.depth_format)
+            .format(ctx.phys_device.depth_format)
             .samples(msaa_samples)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::DONT_CARE)
@@ -91,7 +91,7 @@ impl VulkanRenderPass {
             .dependencies(&subpass_dependencies)
             .build();
 
-        let pass = unsafe { core.device.device.create_render_pass(&render_pass_info, None).to_render_hell_err()? };
+        let pass = unsafe { ctx.device.device.create_render_pass(&render_pass_info, None).to_render_hell_err()? };
 
         Ok(Self { render_pass: pass })
     }
@@ -117,10 +117,10 @@ pub struct VulkanRenderPassData {
 }
 
 impl VulkanRenderPassData {
-    pub fn new(core: &VulkanCore) -> HellResult<Self> {
-        let depth_img = DepthImage::new(core)?;
-        let render_pass = VulkanRenderPass::new(core)?;
-        let framebuffer = VulkanFramebuffer::new(&core.device.device, &core.swapchain, &render_pass, &depth_img)?;
+    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain) -> HellResult<Self> {
+        let depth_img = DepthImage::new(ctx, swapchain)?;
+        let render_pass = VulkanRenderPass::new(ctx, swapchain)?;
+        let framebuffer = VulkanFramebuffer::new(&ctx.device.device, &swapchain, &render_pass, &depth_img)?;
 
         Ok(Self {
             depth_img,
@@ -129,11 +129,11 @@ impl VulkanRenderPassData {
         })
     }
 
-    pub fn recreate_framebuffer(&mut self, core: &VulkanCore) -> HellResult<()> {
-        self.drop_before_recreate(&core.device.device);
+    pub fn recreate_framebuffer(&mut self, ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain) -> HellResult<()> {
+        self.drop_before_recreate(&ctx.device.device);
 
-        self.depth_img = DepthImage::new(core)?;
-        self.framebuffer = VulkanFramebuffer::new(&core.device.device, &core.swapchain, &self.render_pass, &self.depth_img)?;
+        self.depth_img = DepthImage::new(ctx, swapchain)?;
+        self.framebuffer = VulkanFramebuffer::new(&ctx.device.device, swapchain, &self.render_pass, &self.depth_img)?;
 
         Ok(())
     }

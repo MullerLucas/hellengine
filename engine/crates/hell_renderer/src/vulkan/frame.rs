@@ -5,7 +5,7 @@ use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
 use hell_core::config;
 
-use super::VulkanCore;
+use super::VulkanCtxRef;
 use super::swapchain::VulkanSwapchain;
 
 
@@ -21,7 +21,7 @@ pub struct VulkanFrameData {
 }
 
 impl VulkanFrameData {
-    pub fn new(core: &VulkanCore) -> HellResult<Self> {
+    pub fn new(core: &VulkanCtxRef) -> HellResult<Self> {
         let device = &core.device.device;
 
         let semaphore_info = vk::SemaphoreCreateInfo::default();

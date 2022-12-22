@@ -2,8 +2,7 @@ use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
 use hell_resources::resources::TextureResource;
 
-use crate::vulkan::buffer::copy_buffer_to_img;
-use crate::vulkan::{VulkanCore, VulkanBuffer};
+use crate::vulkan::{VulkanCtxRef, buffer::{VulkanBuffer, copy_buffer_to_img}};
 
 use super::RawImage;
 
@@ -15,8 +14,8 @@ pub struct TextureImage {
 }
 
 impl TextureImage {
-    pub fn from(core: &VulkanCore, img_res: &TextureResource) -> HellResult<Self> {
-        let device = &core.device.device;
+    pub fn from(ctx: &VulkanCtxRef, img_res: &TextureResource) -> HellResult<Self> {
+        let device = &ctx.device.device;
 
         let img = img_res.get_img();
         let img_data = img.as_raw();
@@ -31,7 +30,7 @@ impl TextureImage {
             panic!("failed to load image at");
         }
 
-        let staging_buffer = VulkanBuffer::from_texture_staging(core, img_size);
+        let staging_buffer = VulkanBuffer::from_texture_staging(ctx, img_size);
 
         unsafe {
             let data_ptr = device.map_memory(staging_buffer.mem, 0, img_size, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut u8;
@@ -40,7 +39,7 @@ impl TextureImage {
         }
 
         let raw_img = RawImage::new(
-            core,
+            ctx,
             img_width,
             img_height,
             vk::SampleCountFlags::TYPE_1,
@@ -54,27 +53,24 @@ impl TextureImage {
         // prepare for being copied into
         raw_img.transition_image_layout(
             device,
-            &core.graphics_cmd_pool,
-            &core.device.queues.graphics,
+            &ctx.graphics_cmd_pool,
+            &ctx.device.queues.graphics,
             vk::Format::R8G8B8A8_SRGB,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL
         )?;
 
-        copy_buffer_to_img(core, staging_buffer.buffer, raw_img.img, img_width, img_height)?;
+        copy_buffer_to_img(ctx, staging_buffer.buffer, raw_img.img, img_width, img_height)?;
 
         // prepare for being read by shader
         raw_img.transition_image_layout(
             device,
-            &core.graphics_cmd_pool,
-            &core.device.queues.graphics,
+            &ctx.graphics_cmd_pool,
+            &ctx.device.queues.graphics,
             vk::Format::R8G8B8A8_SRGB,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
         )?;
-
-        staging_buffer.drop_manual(device);
-
 
         Ok(Self { img: raw_img })
     }

@@ -1,12 +1,15 @@
+use std::array;
+
 use ash::vk;
 use hell_core::config;
 use hell_error::HellResult;
 use crate::error::{err_invalid_frame_idx, err_invalid_set_idx};
 
 use crate::render_data::{SceneData, ObjectData};
-use crate::vulkan::VulkanSampler;
+use crate::vulkan::buffer::VulkanBuffer;
+use crate::vulkan::{VulkanSampler, VulkanCtxRef, VulkanSwapchain};
 use crate::vulkan::image::TextureImage;
-use crate::{vulkan::{pipeline::{VulkanPipeline, VulkanShader, shader_data::VulkanUboData}, VulkanCore, VulkanRenderPassData, VulkanBuffer, descriptors::VulkanDescriptorSetGroup}, render_data::GlobalUniformObject, shared::collections::PerFrame};
+use crate::{vulkan::{pipeline::{VulkanPipeline, VulkanShader, shader_data::VulkanUboData}, VulkanCtx, VulkanRenderPassData, descriptors::VulkanDescriptorSetGroup}, render_data::GlobalUniformObject, shared::collections::PerFrame};
 
 
 
@@ -35,36 +38,29 @@ pub struct VulkanSpriteShader {
 }
 
 impl VulkanSpriteShader {
-    pub fn new(core: &VulkanCore, shader_path: &str, render_pass_data: &VulkanRenderPassData, textures: Vec<TextureImage>) -> HellResult<Self> {
-        let device = &core.device.device;
+    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, shader_path: &str, render_pass_data: &VulkanRenderPassData, textures: Vec<TextureImage>) -> HellResult<Self> {
+        let device = &ctx.device.device;
 
         // global uniform
         // --------------
         let global_uo = GlobalUniformObject::default();
 
-        let mut global_ubo: [VulkanBuffer; config::FRAMES_IN_FLIGHT] = Default::default();
-        for ubo in &mut global_ubo {
-            *ubo = VulkanBuffer::from_uniform(core, GlobalUniformObject::device_size())
-        }
-        let global_ubos = PerFrame::new(global_ubo);
+        let global_ubos = array::from_fn(|_| VulkanBuffer::from_uniform(ctx, GlobalUniformObject::device_size()));
+        let global_ubos = PerFrame::new(global_ubos);
 
         // scene uniform
         // --------------
-        let scene_ubo_size = SceneData::total_size(core.phys_device.device_props.limits.min_uniform_buffer_offset_alignment, config::FRAMES_IN_FLIGHT as u64);
-        let scene_ubo = VulkanBuffer::from_uniform(core, scene_ubo_size);
+        let scene_ubo_size = SceneData::total_size(ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment, config::FRAMES_IN_FLIGHT as u64);
+        let scene_ubo = VulkanBuffer::from_uniform(ctx, scene_ubo_size);
 
         // object uniform
         // --------------
-        let object_ubo_size = ObjectData::total_size();
-        let mut object_ubos: [VulkanBuffer; config::FRAMES_IN_FLIGHT] = Default::default();
-        for ubo in &mut object_ubos {
-            *ubo = VulkanBuffer::from_storage(core, object_ubo_size);
-        }
+        let object_ubos = array::from_fn(|_| VulkanBuffer::from_storage(ctx, ObjectData::total_size()));
         let object_ubos = PerFrame::new(object_ubos);
 
         // texture data
         // ------------
-        let sampler = VulkanSampler::new(&core)?;
+        let sampler = VulkanSampler::new(&ctx)?;
 
         // descriptor pool
         // ---------------
@@ -120,11 +116,11 @@ impl VulkanSpriteShader {
         // pipeline
         // --------
         let shader = VulkanShader::from_file(
-            &core.device.device,
+            &ctx.device.device,
             shader_path,
         )?;
 
-        let pipeline = VulkanPipeline::new(core, shader, render_pass_data, &desc_layouts)?;
+        let pipeline = VulkanPipeline::new(ctx, swapchain, shader, render_pass_data, &desc_layouts)?;
 
 
         Ok(Self {
@@ -163,18 +159,12 @@ impl VulkanSpriteShader {
         self.textures.iter().for_each(|t| t.drop_manual(device));
         self.sampler.drop_manual(device);
 
-        // ubos
-        // ----
-        self.object_ubos.get_all().iter().for_each(|p| p.drop_manual(device));
-        self.scene_ubo.drop_manual(device);
-        self.global_ubos.get_all().iter() .for_each(|u| u.drop_manual(device));
-
         // pipeline
         // --------
         self.pipeline.drop_manual(device);
     }
 
-    pub fn update_global_uo(&mut self, global_uo: GlobalUniformObject, core: &VulkanCore, frame_idx: usize) -> HellResult<()> {
+    pub fn update_global_uo(&mut self, global_uo: GlobalUniformObject, core: &VulkanCtx, frame_idx: usize) -> HellResult<()> {
         self.global_uo = global_uo;
 
         let buffer = self.global_ubos.get(frame_idx);

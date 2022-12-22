@@ -1,6 +1,6 @@
 use ash::vk;
 use hell_error::{HellResult, HellError, HellErrorKind, ErrToHellErr};
-use crate::vulkan::{vulkan_backend::MeshPushConstants, VulkanCore, VulkanRenderPassData, Vertex};
+use crate::vulkan::{vulkan_backend::MeshPushConstants, VulkanCtx, VulkanRenderPassData, Vertex, VulkanSwapchain};
 
 use super::shader::VulkanShader;
 
@@ -11,7 +11,7 @@ pub struct VulkanPipeline {
 }
 
 impl VulkanPipeline {
-    pub fn new(core: &VulkanCore, shader: VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout]) -> HellResult<Self> {
+    pub fn new(core: &VulkanCtx, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout]) -> HellResult<Self> {
         let device = &core.device.device;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 
@@ -39,7 +39,7 @@ impl VulkanPipeline {
 
         // viewport
         // --------
-        let viewport_state_info = core.swapchain.create_pipeline_viewport_data();
+        let viewport_state_info = swapchain.create_pipeline_viewport_data();
 
         // rasterizer
         // ----------

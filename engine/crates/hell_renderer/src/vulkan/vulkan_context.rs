@@ -1,4 +1,6 @@
-use hell_common::window::{HellSurfaceInfo, HellWindowExtent};
+use std::sync::Arc;
+
+use hell_common::window::HellSurfaceInfo;
 use hell_error::HellResult;
 
 use super::command_buffer::VulkanCommandPool;
@@ -7,30 +9,43 @@ use super::instance::VulkanInstance;
 use super::logic_device::VulkanLogicDevice;
 use super::phys_device::VulkanPhysDevice;
 use super::surface::VulkanSurface;
-use super::swapchain::VulkanSwapchain;
 use hell_core::config;
 
 
 
+pub type VulkanCtxRef = Arc<VulkanCtx>;
 
-pub struct VulkanCore {
+pub struct VulkanCtx {
     pub debug_data: VulkanDebugData,
-
     pub surface: VulkanSurface,
 
     pub phys_device: VulkanPhysDevice,
     pub device: VulkanLogicDevice,
 
-    pub swapchain: VulkanSwapchain,
-
+    // pub swapchain: VulkanSwapchain,
     pub graphics_cmd_pool: VulkanCommandPool,
     pub transfer_cmd_pool: VulkanCommandPool,
 
     pub instance: VulkanInstance,
 }
 
-impl VulkanCore {
-    pub fn new(surface_info: &HellSurfaceInfo, windwow_extent: &HellWindowExtent) -> HellResult<Self> {
+impl std::fmt::Debug for VulkanCtx {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // f.debug_struct("VulkanCtx")
+        //     .field("debug_data", &self.debug_data)
+        //     .field("surface", &self.surface)
+        //     .field("phys_device", &self.phys_device)
+        //     .field("device", &self.device)
+        //     .field("graphics_cmd_pool", &self.graphics_cmd_pool)
+        //     .field("transfer_cmd_pool", &self.transfer_cmd_pool)
+        //     .field("instance", &self.instance).finish()
+
+        write!(f, "VulkanCtx")
+    }
+}
+
+impl VulkanCtx {
+    pub fn new(surface_info: &HellSurfaceInfo) -> HellResult<Self> {
         let instance = VulkanInstance::new(config::APP_NAME)?;
 
         let debug_data = VulkanDebugData::new(&instance.entry, &instance.instance);
@@ -41,9 +56,6 @@ impl VulkanCore {
 
         let graphics_cmd_pool = VulkanCommandPool::default_for_graphics(&device)?;
         let transfer_cmd_pool = VulkanCommandPool::default_for_transfer(&device)?;
-
-        let swapchain = VulkanSwapchain::new(&instance.instance, &phys_device, &device, &surface, windwow_extent.width, windwow_extent.height)?;
-
 
         Ok(Self {
             instance,
@@ -56,21 +68,8 @@ impl VulkanCore {
             graphics_cmd_pool,
             transfer_cmd_pool,
 
-            swapchain,
-
             debug_data,
         })
-    }
-
-    pub fn recreate_swapchain(&mut self, window_extent: HellWindowExtent) -> HellResult<()> {
-        println!("> recreating swapchain...");
-
-        self.swapchain.drop_manual(&self.device.device);
-
-        let swapchain = VulkanSwapchain::new(&self.instance.instance, &self.phys_device, &self.device, &self.surface, window_extent.width, window_extent.height)?;
-        self.swapchain = swapchain;
-
-        Ok(())
     }
 
     pub fn wait_device_idle(&self) -> HellResult<()> {
@@ -82,13 +81,12 @@ impl VulkanCore {
     }
 }
 
-impl Drop for VulkanCore {
+impl Drop for VulkanCtx {
     fn drop(&mut self) {
         println!("> dropping Core");
         let device = &self.device.device;
 
         self.graphics_cmd_pool.drop_manual(device);
         self.transfer_cmd_pool.drop_manual(device);
-        self.swapchain.drop_manual(device);
     }
 }

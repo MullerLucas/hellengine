@@ -2,10 +2,8 @@ use ash::prelude::VkResult;
 use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
 
-use super::command_buffer::VulkanCommandPool;
-use super::pipeline::shader_data::VulkanUboData;
-use super::vertext::Vertex;
-use super::vulkan_core::VulkanCore;
+use crate::vulkan::{VulkanCtxRef, Vertex, pipeline::shader_data::VulkanUboData, VulkanCommandPool};
+
 
 
 
@@ -13,17 +11,30 @@ use super::vulkan_core::VulkanCore;
 // buffer
 // ----------------------------------------------------------------------------
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct VulkanBuffer {
+    ctx: VulkanCtxRef,
     pub buffer: vk::Buffer,
     pub mem: vk::DeviceMemory,
     pub size: vk::DeviceSize,
 }
 
+impl Drop for VulkanBuffer {
+    fn drop(&mut self) {
+        println!("> dropping VulkanBuffer...");
+
+        unsafe {
+            let device = &self.ctx.device.device;
+            device.destroy_buffer(self.buffer, None);
+            device.free_memory(self.mem, None);
+        }
+    }
+}
+
 impl VulkanBuffer {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(core: &VulkanCore, size: vk::DeviceSize, usage: vk::BufferUsageFlags, properties: vk::MemoryPropertyFlags, sharing_mode: vk::SharingMode, queue_family_indices: Option<&[u32]>) -> Self {
-        let device = &core.device.device;
+    pub fn new(ctx: &VulkanCtxRef, size: vk::DeviceSize, usage: vk::BufferUsageFlags, properties: vk::MemoryPropertyFlags, sharing_mode: vk::SharingMode, queue_family_indices: Option<&[u32]>) -> Self {
+        let device = &ctx.device.device;
 
         let mut buffer_info = vk::BufferCreateInfo {
             s_type: vk::StructureType::BUFFER_CREATE_INFO,
@@ -47,8 +58,8 @@ impl VulkanBuffer {
         let mem_requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
 
         let mem_type_idx = find_memory_type(
-            &core.instance.instance,
-            core.phys_device.phys_device,
+            &ctx.instance.instance,
+            ctx.phys_device.phys_device,
             mem_requirements.memory_type_bits,
             properties,
         );
@@ -64,20 +75,21 @@ impl VulkanBuffer {
         unsafe { device.bind_buffer_memory(buffer, mem, 0) }.expect("failed to bind vertex-buffer");
 
         Self {
+            ctx: ctx.clone(),
             buffer,
             mem,
             size
         }
     }
 
-    pub fn from_vertices(core: &VulkanCore, vertices: &[Vertex]) -> HellResult<Self> {
-        let device = &core.device.device;
+    pub fn from_vertices(ctx: &VulkanCtxRef, vertices: &[Vertex]) -> HellResult<Self> {
+        let device = &ctx.device.device;
 
         let buffer_size = std::mem::size_of_val(vertices) as vk::DeviceSize;
         println!("VERT-SIZE: {}", buffer_size);
 
         let staging_buffer = VulkanBuffer::new(
-            core,
+            ctx,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
@@ -92,35 +104,29 @@ impl VulkanBuffer {
         }
 
         let device_buffer = VulkanBuffer::new(
-            core,
+            ctx,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
             vk::SharingMode::CONCURRENT, // TODO: not optimal
-            Some(&[core.device.queues.graphics.family_idx, core.device.queues.transfer.family_idx])
+            Some(&[ctx.device.queues.graphics.family_idx, ctx.device.queues.transfer.family_idx])
         );
 
         copy_buffer(
-            device, &core.transfer_cmd_pool, core.device.queues.transfer.queue,
+            device, &ctx.transfer_cmd_pool, ctx.device.queues.transfer.queue,
             &staging_buffer, &device_buffer
         )?;
-
-        unsafe {
-            // TODO: implement drop for VulkanBuffer
-            device.destroy_buffer(staging_buffer.buffer, None);
-            device.free_memory(staging_buffer.mem, None);
-        }
 
         Ok(device_buffer)
     }
 
-    pub fn from_indices(core: &VulkanCore, indices: &[u32]) -> HellResult<Self> {
-        let device = &core.device.device;
+    pub fn from_indices(ctx: &VulkanCtxRef, indices: &[u32]) -> HellResult<Self> {
+        let device = &ctx.device.device;
 
         let buffer_size = std::mem::size_of_val(indices) as vk::DeviceSize;
 
         let staging_buffer = VulkanBuffer::new(
-            core,
+            ctx,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
@@ -135,30 +141,22 @@ impl VulkanBuffer {
         }
 
         let device_buffer = VulkanBuffer::new(
-            core,
+            ctx,
             buffer_size,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
             vk::SharingMode::CONCURRENT,
-            Some(&[core.device.queues.graphics.family_idx, core.device.queues.transfer.family_idx])
+            Some(&[ctx.device.queues.graphics.family_idx, ctx.device.queues.transfer.family_idx])
         );
 
-        copy_buffer(device, &core.transfer_cmd_pool, core.device.queues.transfer.queue, &staging_buffer, &device_buffer)?;
-
-        unsafe {
-            // TODO: implement Drop for VulkanBuffer
-            device.destroy_buffer(staging_buffer.buffer, None);
-            device.free_memory(staging_buffer.mem, None);
-        }
-
-
+        copy_buffer(device, &ctx.transfer_cmd_pool, ctx.device.queues.transfer.queue, &staging_buffer, &device_buffer)?;
 
         Ok(device_buffer)
     }
 
-    pub fn from_uniform(core: &VulkanCore, size: vk::DeviceSize) -> Self {
+    pub fn from_uniform(ctx: &VulkanCtxRef, size: vk::DeviceSize) -> Self {
         VulkanBuffer::new(
-            core,
+            ctx,
             size,
             vk::BufferUsageFlags::UNIFORM_BUFFER,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
@@ -167,9 +165,9 @@ impl VulkanBuffer {
         )
     }
 
-    pub fn from_storage(core: &VulkanCore, size: vk::DeviceSize) -> Self {
+    pub fn from_storage(ctx: &VulkanCtxRef, size: vk::DeviceSize) -> Self {
         VulkanBuffer::new(
-            core,
+            ctx,
             size,
             vk::BufferUsageFlags::STORAGE_BUFFER,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
@@ -178,9 +176,9 @@ impl VulkanBuffer {
         )
     }
 
-    pub fn from_texture_staging(core: &VulkanCore, img_size: u64) -> Self {
+    pub fn from_texture_staging(ctx: &VulkanCtxRef, img_size: u64) -> Self {
         VulkanBuffer::new(
-            core,
+            ctx,
             img_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
@@ -191,16 +189,7 @@ impl VulkanBuffer {
 }
 
 
-impl VulkanBuffer {
-    pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> dropping Buffer...");
 
-        unsafe {
-            device.destroy_buffer(self.buffer, None);
-            device.free_memory(self.mem, None);
-        }
-    }
-}
 
 impl VulkanBuffer {
     pub fn upload_data_buffer<T: VulkanUboData>(&self, device: &ash::Device, data: &T) -> HellResult<()> {
@@ -278,9 +267,9 @@ fn copy_buffer(device: &ash::Device, cmd_pool: &VulkanCommandPool, queue: vk::Qu
     Ok(())
 }
 
-pub fn copy_buffer_to_img(core: &VulkanCore, buffer: vk::Buffer, img: vk::Image, width: u32, height: u32) -> HellResult<()> {
-    let device = &core.device.device;
-    let cmd_buffer = core.transfer_cmd_pool.begin_single_time_commands(device);
+pub fn copy_buffer_to_img(ctx: &VulkanCtxRef, buffer: vk::Buffer, img: vk::Image, width: u32, height: u32) -> HellResult<()> {
+    let device = &ctx.device.device;
+    let cmd_buffer = ctx.transfer_cmd_pool.begin_single_time_commands(device);
 
     let img_subresource = vk::ImageSubresourceLayers::builder()
         .aspect_mask(vk::ImageAspectFlags::COLOR)
@@ -305,7 +294,7 @@ pub fn copy_buffer_to_img(core: &VulkanCore, buffer: vk::Buffer, img: vk::Image,
         device.cmd_copy_buffer_to_image(cmd_buffer, buffer, img, vk::ImageLayout::TRANSFER_DST_OPTIMAL, &[region]);
     }
 
-    core.transfer_cmd_pool.end_single_time_commands(device, cmd_buffer, core.device.queues.transfer.queue)?;
+    ctx.transfer_cmd_pool.end_single_time_commands(device, cmd_buffer, ctx.device.queues.transfer.queue)?;
 
     Ok(())
 }

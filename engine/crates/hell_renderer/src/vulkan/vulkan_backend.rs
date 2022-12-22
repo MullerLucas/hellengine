@@ -1,86 +1,25 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use ash::vk;
 use hell_common::transform::Transform;
 use hell_common::window::HellWindowExtent;
 use hell_core::config;
-use hell_error::{HellResult, HellError, HellErrorKind, ErrToHellErr, OptToHellErr};
+use hell_error::{HellResult, HellError, HellErrorKind, OptToHellErr};
 use hell_resources::{ResourceManager, ResourceHandle};
 use crate::render_data::{SceneData, ObjectData, GlobalUniformObject, TmpCamera};
 use crate::vulkan::image::TextureImage;
-use crate::vulkan::VulkanLogicDevice;
 
-use super::buffer::VulkanBuffer;
+use super::{VulkanCtxRef, VulkanCtx, VulkanSwapchain};
 use super::frame::VulkanFrameData;
-use super::pipeline::shader_data::VulkanUboData;
+use super::pipeline::shader_data::{VulkanUboData, VulkanMesh};
 use super::render_pass::VulkanRenderPassData;
 use super::shader::VulkanSpriteShader;
-use super::vertext::Vertex;
-use super::vulkan_core::VulkanCore;
-
-
-/// Vulkan:
-///      -1
-///      |
-/// -1 ----- +1
-///      |
-///      +1
-
-static QUAD_VERTS: &[Vertex] = &[
-    // Top-Left
-    Vertex::from_arrays([-0.5, -0.5,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [0.0, 0.0]),
-    // Bottom-Left
-    Vertex::from_arrays([-0.5,  0.5,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0]),
-    // Bottom-Right
-    Vertex::from_arrays([ 0.5,  0.5,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [1.0, 1.0]),
-    // Top-Right
-    Vertex::from_arrays([ 0.5, -0.5,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
-];
-
-static QUAD_INDICES: &[u32] = &[
-    0, 1, 2,
-    2, 3, 0,
-];
 
 
 
-// ----------------------------------------------------------------------------
-// mesh
-// ----------------------------------------------------------------------------
 
-#[derive(Debug)]
-pub struct VulkanMesh {
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u32>,
 
-    pub vertex_buffer: VulkanBuffer,
-    pub index_buffer: VulkanBuffer,
-}
-
-impl VulkanMesh {
-    pub const INDEX_TYPE: vk::IndexType = vk::IndexType::UINT32;
-
-    pub fn new_quad(core: &VulkanCore) -> HellResult<Self> {
-        Ok(Self {
-            vertices: QUAD_VERTS.to_vec(),
-            indices: QUAD_INDICES.to_vec(),
-
-            vertex_buffer: VulkanBuffer::from_vertices(core, QUAD_VERTS)?,
-            index_buffer: VulkanBuffer::from_indices(core, QUAD_INDICES)?,
-        })
-    }
-
-    pub fn indices_count(&self) -> usize {
-        self.indices.len()
-    }
-}
-
-impl VulkanMesh {
-    fn drop_manual(&mut self, device: &VulkanLogicDevice) {
-        self.vertex_buffer.drop_manual(&device.device);
-        self.index_buffer.drop_manual(&device.device);
-    }
-}
 
 
 // ----------------------------------------------------------------------------
@@ -214,26 +153,26 @@ pub struct VulkanBackend {
     pub frame_idx: usize,
     pub frame_data: VulkanFrameData,
 
-    // pub pipelines: Vec<VulkanPipeline>,
-    // pub pipelines: HashMap<String, VulkanPipeline>,
     pub shaders: HashMap<String, VulkanSpriteShader>,
     pub meshes: Vec<VulkanMesh>,
-    // pub materials: Vec<VulkanMaterial>,
 
-    // pub descriptor_manager: VulkanDescriptorManager,
-
+    pub swapchain: VulkanSwapchain,
     pub render_pass_data: VulkanRenderPassData,
-    pub core: VulkanCore,
+    pub ctx: VulkanCtxRef,
 }
 
 impl VulkanBackend {
-    pub fn new(core: VulkanCore) -> HellResult<Self> {
-        let frame_data = VulkanFrameData::new(&core)?;
-        let quad_mesh = VulkanMesh::new_quad(&core)?;
+    pub fn new(ctx: VulkanCtx, swapchain: VulkanSwapchain) -> HellResult<Self> {
+        let ctx = Arc::new(ctx);
+        let frame_data = VulkanFrameData::new(&ctx)?;
+        let quad_mesh = VulkanMesh::new_quad(&ctx)?;
         let meshes = vec![quad_mesh];
-        let render_pass_data = VulkanRenderPassData::new(&core)?;
+        let render_pass_data = VulkanRenderPassData::new(&ctx, &swapchain)?;
         let shaders = HashMap::new();
 
+        // let swapchain = Mutex::new(
+        //     VulkanSwapchain::new(&instance.instance, &phys_device, &device, &surface, windwow_extent.width, windwow_extent.height)?
+        // );
 
         Ok(Self {
             frame_idx: 0,
@@ -241,8 +180,10 @@ impl VulkanBackend {
 
             shaders,
             meshes,
+
+            swapchain,
             render_pass_data,
-            core,
+            ctx,
         })
     }
 }
@@ -251,25 +192,37 @@ impl Drop for VulkanBackend {
     fn drop(&mut self) {
         println!("> dropping Renerer2D...");
 
-        let device = &self.core.device.device;
+        let device = &self.ctx.device.device;
 
-        self.meshes.iter_mut().for_each(|m| m.drop_manual(&self.core.device));
+        self.shaders.iter_mut().for_each(|(_, s)| { s.drop_manual(&self.ctx.device.device) });
+        // self.meshes.iter_mut().for_each(|m| m.drop_manual(&self.ctx.device));
 
         self.frame_data.drop_manual(device);
-        self.render_pass_data.drop_manual(&self.core.device.device);
-        self.shaders.iter_mut().for_each(|(_, s)| { s.drop_manual(&self.core.device.device) });
+        self.swapchain.drop_manual(device);
+        self.render_pass_data.drop_manual(&self.ctx.device.device);
     }
 }
 
 impl VulkanBackend {
+    pub fn recreate_swapchain(&mut self, window_extent: HellWindowExtent) -> HellResult<()> {
+        println!("> recreating swapchain...");
+
+        self.swapchain.drop_manual(&self.ctx.device.device);
+
+        let swapchain_new = VulkanSwapchain::new(&self.ctx, window_extent)?;
+        self.swapchain = swapchain_new;
+
+        Ok(())
+    }
+
     pub fn create_shaders(&mut self, shader_paths: HashSet<String>, resource_manager: &ResourceManager) -> HellResult<()>{
         for path in shader_paths {
             let texture: HellResult<Vec<_>> = resource_manager.get_all_images().iter()
-                .map(|i| TextureImage::from(&self.core, i))
+                .map(|i| TextureImage::from(&self.ctx, i))
                 .collect();
             let texture = texture?;
 
-            let shader = VulkanSpriteShader::new(&self.core, &path, &self.render_pass_data, texture)?;
+            let shader = VulkanSpriteShader::new(&self.ctx, &self.swapchain, &path, &self.render_pass_data, texture)?;
             self.shaders.insert(path, shader);
         }
 
@@ -279,24 +232,23 @@ impl VulkanBackend {
 
 impl VulkanBackend {
     pub fn wait_idle(&self) -> HellResult<()> {
-        self.core.wait_device_idle()?;
+        self.ctx.wait_device_idle()?;
         Ok(())
     }
 
     pub fn on_window_changed(&mut self, window_extent: HellWindowExtent) -> HellResult<()> {
-        self.core.recreate_swapchain(window_extent)?;
-        self.render_pass_data.recreate_framebuffer(&self.core)?;
+        self.recreate_swapchain(window_extent)?;
+        self.render_pass_data.recreate_framebuffer(&self.ctx, &self.swapchain)?;
         Ok(())
     }
 
     pub fn draw_frame(&mut self, _delta_time: f32, render_data: &RenderData, resources: &ResourceManager) -> HellResult<bool> {
-        let core = &self.core;
-        let device = &core.device.device;
+        let device = &self.ctx.device.device;
         let render_pass_data = &self.render_pass_data;
 
         // let frame_data = &self.frame_data[frame_idx];
         let cmd_pool = &self.frame_data.graphics_cmd_pools.get(self.frame_idx).to_render_hell_err()?;
-        self.frame_data.wait_for_in_flight(&self.core.device.device, self.frame_idx)?;
+        self.frame_data.wait_for_in_flight(&self.ctx.device.device, self.frame_idx)?;
 
         // TODO: check
         // let swap_img_idx = match self.swapchain.aquire_next_image(frame_data.img_available_sem[0]) {
@@ -304,11 +256,11 @@ impl VulkanBackend {
         //     Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => { return true },
         //     _ => { panic!("failed to aquire next image") }
         // };
-        let (curr_swap_idx, _is_suboptimal) = core.swapchain.aquire_next_image(self.frame_data.img_available_semaphors[self.frame_idx])?;
+        let (curr_swap_idx, _is_suboptimal) = self.swapchain.aquire_next_image(self.frame_data.img_available_semaphors[self.frame_idx])?;
 
         cmd_pool.reset_cmd_buffer(device, 0)?;
         self.record_cmd_buffer(
-            core,
+            &self.ctx,
             render_pass_data,
             curr_swap_idx as usize,
             render_data,
@@ -317,9 +269,9 @@ impl VulkanBackend {
 
         // delay resetting the fence until we know for sure we will be submitting work with it (not return early)
         self.frame_data.reset_in_flight_fence(device, self.frame_idx)?;
-        self.frame_data.submit_queue(device, core.device.queues.graphics.queue, &[cmd_pool.get_buffer(0)], self.frame_idx)?;
+        self.frame_data.submit_queue(device, self.ctx.device.queues.graphics.queue, &[cmd_pool.get_buffer(0)], self.frame_idx)?;
 
-        let present_result = self.frame_data.present_queue(core.device.queues.present.queue, &core.swapchain, &[curr_swap_idx], self.frame_idx);
+        let present_result = self.frame_data.present_queue(self.ctx.device.queues.present.queue, &self.swapchain, &[curr_swap_idx], self.frame_idx);
 
         // TODO: check
         // do this after queue-present to ensure that the semaphores are in a consistent state - otherwise a signaled semaphore may never be properly waited upon
@@ -334,12 +286,12 @@ impl VulkanBackend {
         Ok(is_resized)
     }
 
-    fn record_cmd_buffer(&self, core: &VulkanCore, render_pass_data: &VulkanRenderPassData, swap_img_idx: usize, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
+    fn record_cmd_buffer(&self, ctx: &VulkanCtxRef, render_pass_data: &VulkanRenderPassData, swap_img_idx: usize, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
         let begin_info = vk::CommandBufferBeginInfo::default();
-        let device = &core.device.device;
+        let device = &ctx.device.device;
         let cmd_buffer = self.frame_data.get_cmd_buffer(self.frame_idx)?;
 
-        unsafe { device.begin_command_buffer(cmd_buffer, &begin_info).to_render_hell_err()?; }
+        unsafe { device.begin_command_buffer(cmd_buffer, &begin_info)?; }
 
         // one clear-color per attachment with load-op-clear - order should be identical
         let clear_values = [
@@ -354,7 +306,7 @@ impl VulkanBackend {
 
         let render_area = vk::Rect2D {
             offset: vk::Offset2D::default(),
-            extent: core.swapchain.extent
+            extent: self.swapchain.extent
         };
 
         let render_pass_info = vk::RenderPassBeginInfo::builder()
@@ -374,7 +326,7 @@ impl VulkanBackend {
         }
 
         unsafe {
-            device.end_command_buffer(cmd_buffer).to_render_hell_err()?;
+            device.end_command_buffer(cmd_buffer)?;
         }
 
         Ok(())
@@ -398,7 +350,7 @@ impl VulkanBackend {
                 curr_shader.get_object_set(0, self.frame_idx)?,
             ];
 
-            let min_ubo_alignment = self.core.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
+            let min_ubo_alignment = self.ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
             let dynamic_descriptor_offsets = [
                 SceneData::padded_device_size(min_ubo_alignment) as u32 * self.frame_idx as u32,
             ];
@@ -445,7 +397,6 @@ impl VulkanBackend {
                 let push_const_bytes = std::slice::from_raw_parts(push_constants.as_ptr() as *const u8, std::mem::size_of_val(&push_constants));
                 device.cmd_push_constants(cmd_buffer, curr_shader.pipeline.layout, vk::ShaderStageFlags::VERTEX, 0, push_const_bytes);
 
-                println!("draw-frame: {} -- {}", curr_shader_key, curr_mat_handle.id);
                 // draw
                 // value of 'first_instance' is used in the vertex shader to index into the object storage
                 device.cmd_draw_indexed(cmd_buffer, curr_mesh.indices_count() as u32, 1, 0, 0, idx as u32);
@@ -460,22 +411,18 @@ impl VulkanBackend {
     pub fn update_global_state(&mut self, camera: TmpCamera) -> HellResult<()> {
         let global_uo = GlobalUniformObject::new(camera.view, camera.proj, camera.view_proj);
 
-        println!("UPDATE-GLOBALS-VIEW: {:?}", global_uo.view);
-        println!("UPDATE-GLOBALS-PROJ: {:?}", global_uo.proj);
-        println!("UPDATE-GLOBALS-VP: {:?}", global_uo.view_proj);
-
         for (_, sh) in &mut self.shaders {
-            sh.update_global_uo(global_uo.clone(), &self.core, self.frame_idx)?;
+            sh.update_global_uo(global_uo.clone(), &self.ctx, self.frame_idx)?;
         }
 
         Ok(())
     }
 
     pub fn update_scene_buffer(&self, scene_data: &SceneData) -> HellResult<()> {
-        let min_ubo_alignment = self.core.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
+        let min_ubo_alignment = self.ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
         for (_, sh) in &self.shaders {
             let buffer = sh.get_scene_buffer();
-            buffer.upload_data_buffer_array(&self.core.device.device, min_ubo_alignment, scene_data, self.frame_idx)?;
+            buffer.upload_data_buffer_array(&self.ctx.device.device, min_ubo_alignment, scene_data, self.frame_idx)?;
         }
 
         Ok(())
@@ -493,7 +440,7 @@ impl VulkanBackend {
 
             unsafe {
                 // TODO: try to write diretly into the buffer
-                buffer.upload_data_storage_buffer(&self.core.device.device, object_data.as_ptr(), object_data.len())?;
+                buffer.upload_data_storage_buffer(&self.ctx.device.device, object_data.as_ptr(), object_data.len())?;
             }
         }
 

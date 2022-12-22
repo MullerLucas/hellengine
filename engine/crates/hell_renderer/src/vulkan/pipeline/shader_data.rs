@@ -1,6 +1,63 @@
 use ash::vk;
-use crate::{shared::render_data::{SceneData, ObjectData}, render_data::GlobalUniformObject};
+use hell_error::HellResult;
+use crate::{shared::render_data::{SceneData, ObjectData}, render_data::GlobalUniformObject, vulkan::{Vertex, VulkanCtxRef, buffer::VulkanBuffer}};
 
+
+/// Vulkan:
+///      -1
+///      |
+/// -1 ----- +1
+///      |
+///      +1
+
+static QUAD_VERTS: &[Vertex] = &[
+    // Top-Left
+    Vertex::from_arrays([-0.5, -0.5,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [0.0, 0.0]),
+    // Bottom-Left
+    Vertex::from_arrays([-0.5,  0.5,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0]),
+    // Bottom-Right
+    Vertex::from_arrays([ 0.5,  0.5,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [1.0, 1.0]),
+    // Top-Right
+    Vertex::from_arrays([ 0.5, -0.5,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
+];
+
+static QUAD_INDICES: &[u32] = &[
+    0, 1, 2,
+    2, 3, 0,
+];
+
+
+
+// ----------------------------------------------------------------------------
+// mesh
+// ----------------------------------------------------------------------------
+
+#[derive(Debug)]
+pub struct VulkanMesh {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+
+    pub vertex_buffer: VulkanBuffer,
+    pub index_buffer: VulkanBuffer,
+}
+
+impl VulkanMesh {
+    pub const INDEX_TYPE: vk::IndexType = vk::IndexType::UINT32;
+
+    pub fn new_quad(ctx: &VulkanCtxRef) -> HellResult<Self> {
+        Ok(Self {
+            vertices: QUAD_VERTS.to_vec(),
+            indices: QUAD_INDICES.to_vec(),
+
+            vertex_buffer: VulkanBuffer::from_vertices(&ctx, QUAD_VERTS)?,
+            index_buffer: VulkanBuffer::from_indices(&ctx, QUAD_INDICES)?,
+        })
+    }
+
+    pub fn indices_count(&self) -> usize {
+        self.indices.len()
+    }
+}
 
 
 

@@ -1,5 +1,5 @@
-mod vulkan_core;
-pub use vulkan_core::VulkanCore;
+mod vulkan_context;
+pub use vulkan_context::*;
 
 mod validation_layers;
 mod platforms;
@@ -24,9 +24,6 @@ mod render_pass;
 pub use render_pass::{VulkanRenderPass, VulkanRenderPassData};
 
 mod image;
-
-mod buffer;
-pub use buffer::VulkanBuffer;
 
 mod command_buffer;
 pub use command_buffer::VulkanCommandPool;
@@ -55,3 +52,5 @@ mod sampler;
 pub use sampler::VulkanSampler;
 
 pub mod shader;
+
+pub mod buffer;
