@@ -4,6 +4,9 @@ use hell_error::{HellResult, ErrToHellErr};
 
 use crate::vulkan::{VulkanCtxRef, Vertex, pipeline::shader_data::VulkanUboData, VulkanCommandPool};
 
+use super::command_buffer::VulkanCommands;
+
+
 
 
 
@@ -82,7 +85,7 @@ impl VulkanBuffer {
         }
     }
 
-    pub fn from_vertices(ctx: &VulkanCtxRef, vertices: &[Vertex]) -> HellResult<Self> {
+    pub fn from_vertices(ctx: &VulkanCtxRef, cmds: &VulkanCommands, vertices: &[Vertex]) -> HellResult<Self> {
         let device = &ctx.device.device;
 
         let buffer_size = std::mem::size_of_val(vertices) as vk::DeviceSize;
@@ -113,14 +116,14 @@ impl VulkanBuffer {
         );
 
         copy_buffer(
-            device, &ctx.transfer_cmd_pool, ctx.device.queues.transfer.queue,
+            device, &cmds.transfer_pool, ctx.device.queues.transfer.queue,
             &staging_buffer, &device_buffer
         )?;
 
         Ok(device_buffer)
     }
 
-    pub fn from_indices(ctx: &VulkanCtxRef, indices: &[u32]) -> HellResult<Self> {
+    pub fn from_indices(ctx: &VulkanCtxRef, cmds: &VulkanCommands, indices: &[u32]) -> HellResult<Self> {
         let device = &ctx.device.device;
 
         let buffer_size = std::mem::size_of_val(indices) as vk::DeviceSize;
@@ -149,7 +152,7 @@ impl VulkanBuffer {
             Some(&[ctx.device.queues.graphics.family_idx, ctx.device.queues.transfer.family_idx])
         );
 
-        copy_buffer(device, &ctx.transfer_cmd_pool, ctx.device.queues.transfer.queue, &staging_buffer, &device_buffer)?;
+        copy_buffer(device, &cmds.transfer_pool, ctx.device.queues.transfer.queue, &staging_buffer, &device_buffer)?;
 
         Ok(device_buffer)
     }
@@ -267,9 +270,9 @@ fn copy_buffer(device: &ash::Device, cmd_pool: &VulkanCommandPool, queue: vk::Qu
     Ok(())
 }
 
-pub fn copy_buffer_to_img(ctx: &VulkanCtxRef, buffer: vk::Buffer, img: vk::Image, width: u32, height: u32) -> HellResult<()> {
+pub fn copy_buffer_to_img(ctx: &VulkanCtxRef, cmds: &VulkanCommands, buffer: vk::Buffer, img: vk::Image, width: u32, height: u32) -> HellResult<()> {
     let device = &ctx.device.device;
-    let cmd_buffer = ctx.transfer_cmd_pool.begin_single_time_commands(device);
+    let cmd_buffer = cmds.transfer_pool.begin_single_time_commands(device);
 
     let img_subresource = vk::ImageSubresourceLayers::builder()
         .aspect_mask(vk::ImageAspectFlags::COLOR)
@@ -294,7 +297,7 @@ pub fn copy_buffer_to_img(ctx: &VulkanCtxRef, buffer: vk::Buffer, img: vk::Image
         device.cmd_copy_buffer_to_image(cmd_buffer, buffer, img, vk::ImageLayout::TRANSFER_DST_OPTIMAL, &[region]);
     }
 
-    ctx.transfer_cmd_pool.end_single_time_commands(device, cmd_buffer, ctx.device.queues.transfer.queue)?;
+    cmds.transfer_pool.end_single_time_commands(device, cmd_buffer, ctx.device.queues.transfer.queue)?;
 
     Ok(())
 }

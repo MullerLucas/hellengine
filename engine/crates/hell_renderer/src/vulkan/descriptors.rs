@@ -1,6 +1,8 @@
 use ash::prelude::VkResult;
 use ash::vk;
 
+use super::VulkanCtxRef;
+
 
 
 
@@ -13,34 +15,47 @@ use ash::vk;
 // ----------------------------------------------------------------------------
 
 pub struct VulkanDescriptorSetGroup {
+    ctx: VulkanCtxRef,
     pub layout: vk::DescriptorSetLayout,
     pub sets: Vec<Vec<vk::DescriptorSet>>, // per frame
 }
 
+impl Drop for VulkanDescriptorSetGroup {
+    fn drop(&mut self) {
+        println!("> dropping VulkanDescriptorSetLayoutGroup...");
+
+        unsafe {
+            let device = &self.ctx.device.device;
+            device.destroy_descriptor_set_layout(self.layout, None);
+        }
+    }
+}
+
 impl VulkanDescriptorSetGroup {
-    pub fn new(layout: vk::DescriptorSetLayout) -> Self {
+    pub fn new(ctx: &VulkanCtxRef, layout: vk::DescriptorSetLayout) -> Self {
         Self {
+            ctx: ctx.clone(),
             layout,
             sets: vec![]
         }
     }
 
-    pub fn new_global_group(device: &ash::Device) -> VkResult<Self> {
+    pub fn new_global_group(ctx: &VulkanCtxRef, device: &ash::Device) -> VkResult<Self> {
         let layout = Self::create_global_set_layout(device)?;
 
-        Ok(Self::new(layout))
+        Ok(Self::new(ctx, layout))
     }
 
-    pub fn new_object_group(device: &ash::Device) -> VkResult<Self> {
+    pub fn new_object_group(ctx: &VulkanCtxRef, device: &ash::Device) -> VkResult<Self> {
         let layout = Self::create_object_set_layout(device)?;
 
-        Ok(Self::new(layout))
+        Ok(Self::new(ctx, layout))
     }
 
-    pub fn new_material_group(device: &ash::Device) -> VkResult<Self> {
+    pub fn new_material_group(ctx: &VulkanCtxRef, device: &ash::Device) -> VkResult<Self> {
         let layout = Self::create_material_set_layout(device)?;
 
-        Ok(Self::new(layout))
+        Ok(Self::new(ctx, layout))
     }
 
     fn create_global_set_layout(device: &ash::Device) -> VkResult<vk::DescriptorSetLayout> {
@@ -100,16 +115,6 @@ impl VulkanDescriptorSetGroup {
         Ok(unsafe {
             device.create_descriptor_set_layout(&layout_info, None)?
         })
-    }
-}
-
-impl VulkanDescriptorSetGroup {
-    pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> dropping VulkanDescriptorSetLayoutGroup...");
-
-        unsafe {
-            device.destroy_descriptor_set_layout(self.layout, None);
-        }
     }
 }
 

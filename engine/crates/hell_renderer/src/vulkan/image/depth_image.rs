@@ -1,7 +1,7 @@
 use ash::vk;
 use hell_error::HellResult;
 
-use crate::vulkan::{VulkanCtxRef, VulkanSwapchain};
+use crate::vulkan::{VulkanCtxRef, VulkanSwapchain, command_buffer::VulkanCommands};
 
 use super::RawImage;
 
@@ -10,7 +10,7 @@ pub struct DepthImage {
 }
 
 impl DepthImage {
-    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain) -> HellResult<Self> {
+    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, cmds: &VulkanCommands) -> HellResult<Self> {
         let depth_format = ctx.phys_device.depth_format;
         let extent = swapchain.extent;
 
@@ -29,7 +29,7 @@ impl DepthImage {
         // Not required: Layout will be transitioned in the renderpass
         img.transition_image_layout(
             &ctx.device.device,
-            &ctx.graphics_cmd_pool,
+            &cmds.graphics_pool,
             &ctx.device.queues.graphics,
             depth_format,
             vk::ImageLayout::UNDEFINED,
@@ -37,13 +37,5 @@ impl DepthImage {
         )?;
 
         Ok(Self { img })
-    }
-}
-
-impl DepthImage {
-    pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> dropping DepthImage...");
-
-        self.img.drop_manual(device);
     }
 }

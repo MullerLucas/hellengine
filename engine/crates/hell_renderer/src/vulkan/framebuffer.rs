@@ -2,6 +2,7 @@ use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
 use hell_core::config;
 
+use super::VulkanCtxRef;
 use super::image::DepthImage;
 use super::render_pass::VulkanRenderPass;
 use super::swapchain::VulkanSwapchain;
@@ -9,12 +10,26 @@ use super::swapchain::VulkanSwapchain;
 
 
 pub struct VulkanFramebuffer {
+    ctx: VulkanCtxRef,
     buffers: Vec<vk::Framebuffer>,
+}
+
+impl Drop for VulkanFramebuffer {
+    fn drop(&mut self) {
+        println!("> dropping Framebuffer...");
+
+        unsafe {
+            let device = &self.ctx.device.device;
+            self.buffers.iter().for_each(|b| {
+                device.destroy_framebuffer(*b, None);
+            });
+        }
+    }
 }
 
 impl VulkanFramebuffer {
 
-    pub fn new(device: &ash::Device, swapchain: &VulkanSwapchain, render_pass: &VulkanRenderPass, depth_buffer: &DepthImage,) -> HellResult<Self> {
+    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, render_pass: &VulkanRenderPass, depth_buffer: &DepthImage,) -> HellResult<Self> {
 
         let buffers: Result<Vec<_>, _> = swapchain.views
             .iter()
@@ -30,27 +45,16 @@ impl VulkanFramebuffer {
                     .layers(config::FRAME_BUFFER_LAYER_COUNT)
                     .build();
 
-                unsafe { device.create_framebuffer(&buffer_info, None).to_render_hell_err() }
+                unsafe { ctx.device.device.create_framebuffer(&buffer_info, None).to_render_hell_err() }
 
             })
             .collect();
 
 
         Ok(Self {
+            ctx: ctx.clone(),
             buffers: buffers?
         })
-    }
-}
-
-impl VulkanFramebuffer {
-    pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> dropping Framebuffer...");
-
-        unsafe {
-            self.buffers.iter().for_each(|b| {
-                device.destroy_framebuffer(*b, None);
-            });
-        }
     }
 }
 

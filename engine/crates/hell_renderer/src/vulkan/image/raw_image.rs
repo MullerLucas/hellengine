@@ -13,12 +13,24 @@ use crate::vulkan::{VulkanQueue, VulkanCommandPool, VulkanCtxRef, buffer};
 
 #[derive(Clone)]
 pub struct RawImage {
+    ctx: VulkanCtxRef,
     pub img: vk::Image,
     pub view: vk::ImageView,
     pub mem: vk::DeviceMemory,
 }
 
+impl Drop for RawImage {
+    fn drop(&mut self) {
+        println!("> dropping Image...");
 
+        unsafe {
+            let device = &self.ctx.device.device;
+            device.destroy_image_view(self.view, None);
+            device.destroy_image(self.img, None);
+            device.free_memory(self.mem, None);
+        }
+    }
+}
 
 impl RawImage {
     #[allow(clippy::too_many_arguments)]
@@ -93,6 +105,7 @@ impl RawImage {
         let view = create_img_view(device, img, format, aspect_mask);
 
         RawImage {
+            ctx: ctx.clone(),
             img,
             mem,
             view,
@@ -101,19 +114,6 @@ impl RawImage {
 }
 
 
-
-impl RawImage {
-    #[allow(dead_code)]
-    pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> dropping Image...");
-
-        unsafe {
-            device.destroy_image_view(self.view, None);
-            device.destroy_image(self.img, None);
-            device.free_memory(self.mem, None);
-        }
-    }
-}
 
 impl RawImage {
     pub fn transition_image_layout(&self, device: &ash::Device, cmd_pool: &VulkanCommandPool, queue: &VulkanQueue, format: vk::Format, old_layout: vk::ImageLayout, new_layout: vk::ImageLayout) -> HellResult<()> {

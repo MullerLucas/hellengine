@@ -2,7 +2,7 @@ use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
 use hell_resources::resources::TextureResource;
 
-use crate::vulkan::{VulkanCtxRef, buffer::{VulkanBuffer, copy_buffer_to_img}};
+use crate::vulkan::{VulkanCtxRef, buffer::{VulkanBuffer, copy_buffer_to_img}, command_buffer::VulkanCommands};
 
 use super::RawImage;
 
@@ -14,7 +14,7 @@ pub struct TextureImage {
 }
 
 impl TextureImage {
-    pub fn from(ctx: &VulkanCtxRef, img_res: &TextureResource) -> HellResult<Self> {
+    pub fn from(ctx: &VulkanCtxRef, cmds: &VulkanCommands, img_res: &TextureResource) -> HellResult<Self> {
         let device = &ctx.device.device;
 
         let img = img_res.get_img();
@@ -22,9 +22,6 @@ impl TextureImage {
         let img_width = img.width();
         let img_height = img.height();
         let img_size = (std::mem::size_of::<u8>() as u32 * img_width * img_height * 4) as vk::DeviceSize;
-
-
-
 
         if img_size == 0 {
             panic!("failed to load image at");
@@ -53,19 +50,19 @@ impl TextureImage {
         // prepare for being copied into
         raw_img.transition_image_layout(
             device,
-            &ctx.graphics_cmd_pool,
+            &cmds.graphics_pool,
             &ctx.device.queues.graphics,
             vk::Format::R8G8B8A8_SRGB,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL
         )?;
 
-        copy_buffer_to_img(ctx, staging_buffer.buffer, raw_img.img, img_width, img_height)?;
+        copy_buffer_to_img(ctx, cmds, staging_buffer.buffer, raw_img.img, img_width, img_height)?;
 
         // prepare for being read by shader
         raw_img.transition_image_layout(
             device,
-            &ctx.graphics_cmd_pool,
+            &cmds.graphics_pool,
             &ctx.device.queues.graphics,
             vk::Format::R8G8B8A8_SRGB,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -75,18 +72,3 @@ impl TextureImage {
         Ok(Self { img: raw_img })
     }
 }
-
-impl TextureImage {
-    pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> dropping VulkanTextureImage");
-
-        self.img.drop_manual(device);
-    }
-}
-
-
-
-// ------------------------------------------------------------------------------------------------
-// image
-// ------------------------------------------------------------------------------------------------
-

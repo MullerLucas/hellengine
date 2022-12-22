@@ -11,6 +11,7 @@ use super::swapchain::VulkanSwapchain;
 
 
 pub struct VulkanFrameData {
+    ctx: VulkanCtxRef,
     pub img_available_semaphors: Vec<vk::Semaphore>,
     pub render_finished_semaphors: Vec<vk::Semaphore>,
     pub in_flight_fences: Vec<vk::Fence>,
@@ -20,9 +21,22 @@ pub struct VulkanFrameData {
 
 }
 
+impl Drop for VulkanFrameData {
+    fn drop(&mut self) {
+        println!("> dropping FrameData...");
+
+        unsafe {
+            let device = &self.ctx.device.device;
+            self.img_available_semaphors.iter().for_each(|s| device.destroy_semaphore(*s, None));
+            self.render_finished_semaphors.iter().for_each(|s| device.destroy_semaphore(*s, None));
+            self.in_flight_fences.iter().for_each(|f| device.destroy_fence(*f, None));
+        }
+    }
+}
+
 impl VulkanFrameData {
-    pub fn new(core: &VulkanCtxRef) -> HellResult<Self> {
-        let device = &core.device.device;
+    pub fn new(ctx: &VulkanCtxRef) -> HellResult<Self> {
+        let device = &ctx.device.device;
 
         let semaphore_info = vk::SemaphoreCreateInfo::default();
 
@@ -43,34 +57,20 @@ impl VulkanFrameData {
             .collect();
 
         let graphics_cmd_pool: HellResult<Vec<_>> = (0..config::FRAMES_IN_FLIGHT).into_iter()
-            .map(|_| VulkanCommandPool::default_for_graphics(&core.device))
+            .map(|_| VulkanCommandPool::default_for_graphics(&ctx))
             .collect();
         let graphics_cmd_pool = graphics_cmd_pool?;
 
 
 
         Ok(Self {
+            ctx: ctx.clone(),
             img_available_semaphors: img_available_sem?,
             render_finished_semaphors: render_finished_sem?,
             in_flight_fences: in_flight_fence?,
             wait_stages: [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
             graphics_cmd_pools: graphics_cmd_pool,
         })
-    }
-}
-
-impl VulkanFrameData {
-    // TODO: impl Drop
-    pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> dropping FrameData...");
-
-        self.graphics_cmd_pools.iter().for_each(|p| p.drop_manual(device));
-
-        unsafe {
-            self.img_available_semaphors.iter().for_each(|s| device.destroy_semaphore(*s, None));
-            self.render_finished_semaphors.iter().for_each(|s| device.destroy_semaphore(*s, None));
-            self.in_flight_fences.iter().for_each(|f| device.destroy_fence(*f, None));
-        }
     }
 }
 

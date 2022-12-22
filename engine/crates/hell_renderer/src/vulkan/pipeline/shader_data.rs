@@ -1,6 +1,6 @@
 use ash::vk;
 use hell_error::HellResult;
-use crate::{shared::render_data::{SceneData, ObjectData}, render_data::GlobalUniformObject, vulkan::{Vertex, VulkanCtxRef, buffer::VulkanBuffer}};
+use crate::{shared::render_data::{SceneData, ObjectData}, render_data::GlobalUniformObject, vulkan::{Vertex, VulkanCtxRef, buffer::VulkanBuffer, command_buffer::VulkanCommands}};
 
 
 /// Vulkan:
@@ -44,19 +44,31 @@ pub struct VulkanMesh {
 impl VulkanMesh {
     pub const INDEX_TYPE: vk::IndexType = vk::IndexType::UINT32;
 
-    pub fn new_quad(ctx: &VulkanCtxRef) -> HellResult<Self> {
+    pub fn new_quad(ctx: &VulkanCtxRef, cmds: &VulkanCommands) -> HellResult<Self> {
         Ok(Self {
             vertices: QUAD_VERTS.to_vec(),
             indices: QUAD_INDICES.to_vec(),
 
-            vertex_buffer: VulkanBuffer::from_vertices(&ctx, QUAD_VERTS)?,
-            index_buffer: VulkanBuffer::from_indices(&ctx, QUAD_INDICES)?,
+            vertex_buffer: VulkanBuffer::from_vertices(&ctx, cmds, QUAD_VERTS)?,
+            index_buffer: VulkanBuffer::from_indices(&ctx, cmds, QUAD_INDICES)?,
         })
     }
 
     pub fn indices_count(&self) -> usize {
         self.indices.len()
     }
+}
+
+
+
+
+// ----------------------------------------------------------------------------
+// push-constants
+// ----------------------------------------------------------------------------
+
+#[derive(Debug)]
+pub struct MeshPushConstants {
+    pub model: glam::Mat4,
 }
 
 
@@ -126,18 +138,6 @@ impl ObjectData {
 
 
 
-
-// ----------------------------------------------------------------------------
-// push-constants
-// ----------------------------------------------------------------------------
-
-#[derive(Debug)]
-pub struct MeshPushConstants {
-    pub model: glam::Mat4,
-}
-
-
-
 // ----------------------------------------------------------------------------
 // utils
 // ----------------------------------------------------------------------------
@@ -146,4 +146,3 @@ pub fn calculate_aligned_size(min_alignment: u64, orig_size: u64) -> u64 {
     if min_alignment == 0 { return orig_size; }
     (orig_size + min_alignment - 1) & !(min_alignment - 1)
 }
-

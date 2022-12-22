@@ -4,7 +4,7 @@ use hell_error::{HellResult, ErrToHellErr, OptToHellErr};
 
 use crate::vulkan::image;
 
-use super::VulkanCtx;
+use super::VulkanCtxRef;
 use super::surface::VulkanSurface;
 
 
@@ -117,6 +117,8 @@ impl VulkanSwapchainSupport {
 
 
 pub struct VulkanSwapchain {
+    ctx: VulkanCtxRef,
+
     pub vk_swapchain: vk::SwapchainKHR,
     pub swapchain_loader: ash::extensions::khr::Swapchain,
     pub swapchain_support: VulkanSwapchainSupport,
@@ -131,11 +133,23 @@ pub struct VulkanSwapchain {
     pub sissor: [vk::Rect2D; 1],
 }
 
+impl Drop for VulkanSwapchain {
+    fn drop(&mut self) {
+        println!("> dropping Swapchain...");
 
-
+        unsafe {
+            let device = &self.ctx.device.device;
+            self.views.iter().for_each(|&v| {
+                device.destroy_image_view(v, None);
+            });
+            // cleans up all swapchain images
+            self.swapchain_loader.destroy_swapchain(self.vk_swapchain, None);
+        }
+    }
+}
 
 impl VulkanSwapchain {
-    pub fn new(ctx: &VulkanCtx, window_extent: HellWindowExtent) -> HellResult<VulkanSwapchain> {
+    pub fn new(ctx: &VulkanCtxRef, window_extent: HellWindowExtent) -> HellResult<VulkanSwapchain> {
         let swapchain_support = VulkanSwapchainSupport::new(ctx.phys_device.phys_device, &ctx.surface)?;
 
         let surface_format = swapchain_support.choose_swap_surface_format()?;
@@ -191,6 +205,8 @@ impl VulkanSwapchain {
         println!("swapchain created with {} images...", imgs.len());
 
         Ok(VulkanSwapchain {
+            ctx: ctx.clone(),
+
             vk_swapchain: swapchain,
             swapchain_loader,
             swapchain_support,
@@ -204,21 +220,6 @@ impl VulkanSwapchain {
             viewport,
             sissor,
         })
-    }
-}
-
-impl VulkanSwapchain {
-    // TODO: impl Drop
-    pub fn drop_manual(&mut self, device: &ash::Device) {
-        println!("> dropping Swapchain...");
-
-        unsafe {
-            self.views.iter().for_each(|&v| {
-                device.destroy_image_view(v, None);
-            });
-            // cleans up all swapchain images
-            self.swapchain_loader.destroy_swapchain(self.vk_swapchain, None);
-        }
     }
 }
 

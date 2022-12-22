@@ -15,6 +15,8 @@ use crate::{vulkan::{pipeline::{VulkanPipeline, VulkanShader, shader_data::Vulka
 
 
 pub struct VulkanSpriteShader {
+    ctx: VulkanCtxRef,
+
     // data
     pub global_uo: GlobalUniformObject,
     pub global_ubos: PerFrame<VulkanBuffer>,
@@ -35,6 +37,16 @@ pub struct VulkanSpriteShader {
     // pub shader: VulkanShader,
     pub pipeline: VulkanPipeline,
 
+}
+
+impl Drop for VulkanSpriteShader {
+    fn drop(&mut self) {
+        unsafe {
+            let device = &self.ctx.device.device;
+            // automatically cleans up all associated sets
+            device.destroy_descriptor_pool(self.desc_set_pool, None);
+        }
+    }
 }
 
 impl VulkanSpriteShader {
@@ -96,13 +108,13 @@ impl VulkanSpriteShader {
 
         // descirptor set groups
         // ---------------------
-        let mut global_desc_group = VulkanDescriptorSetGroup::new_global_group(device)?;
+        let mut global_desc_group = VulkanDescriptorSetGroup::new_global_group(ctx, device)?;
         let _ = Self::add_global_descriptor_sets(device, desc_set_pool, &mut global_desc_group, global_ubos.get_all(), &scene_ubo, config::FRAMES_IN_FLIGHT)?;
 
-        let mut object_desc_group = VulkanDescriptorSetGroup::new_object_group(device)?;
+        let mut object_desc_group = VulkanDescriptorSetGroup::new_object_group(ctx, device)?;
         let _ = Self::add_object_descriptor_set(device, desc_set_pool, &mut object_desc_group, object_ubos.get_all(), config::FRAMES_IN_FLIGHT)?;
 
-        let mut material_desc_group = VulkanDescriptorSetGroup::new_material_group(device)?;
+        let mut material_desc_group = VulkanDescriptorSetGroup::new_material_group(ctx, device)?;
         for tex in &textures {
             let _ = Self::add_material_descriptor_sets(device, desc_set_pool, &mut material_desc_group, tex, &sampler)?;
         }
@@ -115,15 +127,12 @@ impl VulkanSpriteShader {
 
         // pipeline
         // --------
-        let shader = VulkanShader::from_file(
-            &ctx.device.device,
-            shader_path,
-        )?;
-
+        let shader = VulkanShader::from_file(ctx, shader_path)?;
         let pipeline = VulkanPipeline::new(ctx, swapchain, shader, render_pass_data, &desc_layouts)?;
 
-
         Ok(Self {
+            ctx: ctx.clone(),
+
             // shader,
             pipeline,
 
@@ -141,27 +150,6 @@ impl VulkanSpriteShader {
             material_desc_group,
             desc_layouts,
         })
-    }
-
-    pub fn drop_manual(&self, device: &ash::Device) {
-        // descriptor sets
-        // ---------------
-        self.material_desc_group.drop_manual(device);
-        self.object_desc_group.drop_manual(device);
-        self.global_desc_group.drop_manual(device);
-
-        unsafe {
-            // automatically cleans up all associated sets
-            device.destroy_descriptor_pool(self.desc_set_pool, None);
-        }
-
-
-        self.textures.iter().for_each(|t| t.drop_manual(device));
-        self.sampler.drop_manual(device);
-
-        // pipeline
-        // --------
-        self.pipeline.drop_manual(device);
     }
 
     pub fn update_global_uo(&mut self, global_uo: GlobalUniformObject, core: &VulkanCtx, frame_idx: usize) -> HellResult<()> {

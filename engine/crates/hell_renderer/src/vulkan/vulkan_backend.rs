@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 use ash::vk;
 use hell_common::transform::Transform;
@@ -10,9 +9,10 @@ use hell_resources::{ResourceManager, ResourceHandle};
 use crate::render_data::{SceneData, ObjectData, GlobalUniformObject, TmpCamera};
 use crate::vulkan::image::TextureImage;
 
-use super::{VulkanCtxRef, VulkanCtx, VulkanSwapchain};
+use super::command_buffer::VulkanCommands;
+use super::{VulkanCtxRef, VulkanSwapchain};
 use super::frame::VulkanFrameData;
-use super::pipeline::shader_data::{VulkanUboData, VulkanMesh};
+use super::pipeline::shader_data::{VulkanUboData, VulkanMesh, MeshPushConstants};
 use super::render_pass::VulkanRenderPassData;
 use super::shader::VulkanSpriteShader;
 
@@ -21,27 +21,6 @@ use super::shader::VulkanSpriteShader;
 
 
 
-
-// ----------------------------------------------------------------------------
-// render data
-// ----------------------------------------------------------------------------
-
-// #[derive(Debug)]
-// pub struct VulkanMaterial {
-//     pub pipeline_idx: usize,
-//     pub texture_idx: usize,
-//     pub descriptor_set_idx: usize,
-// }
-//
-// impl VulkanMaterial {
-//     pub fn new(pipeline_idx: usize, texture_idx: usize, descriptor_set_idx: usize) -> Self {
-//         Self {
-//             pipeline_idx,
-//             texture_idx,
-//             descriptor_set_idx,
-//         }
-//     }
-// }
 
 // ----------------------------------------------------------------------------
 // render data
@@ -136,14 +115,6 @@ impl<'a> Iterator for RenderDataIter<'a> {
 
 
 
-// ----------------------------------------------------------------------------
-// push-constants
-// ----------------------------------------------------------------------------
-
-#[derive(Debug)]
-pub struct MeshPushConstants {
-    pub model: glam::Mat4,
-}
 
 // ----------------------------------------------------------------------------
 // renderer
@@ -152,54 +123,33 @@ pub struct MeshPushConstants {
 pub struct VulkanBackend {
     pub frame_idx: usize,
     pub frame_data: VulkanFrameData,
-
-    pub shaders: HashMap<String, VulkanSpriteShader>,
+    pub cmd_pools: VulkanCommands,
     pub meshes: Vec<VulkanMesh>,
-
     pub swapchain: VulkanSwapchain,
     pub render_pass_data: VulkanRenderPassData,
+    pub shaders: HashMap<String, VulkanSpriteShader>,
     pub ctx: VulkanCtxRef,
 }
 
 impl VulkanBackend {
-    pub fn new(ctx: VulkanCtx, swapchain: VulkanSwapchain) -> HellResult<Self> {
-        let ctx = Arc::new(ctx);
+    pub fn new(ctx: VulkanCtxRef, swapchain: VulkanSwapchain) -> HellResult<Self> {
         let frame_data = VulkanFrameData::new(&ctx)?;
-        let quad_mesh = VulkanMesh::new_quad(&ctx)?;
+        let cmds = VulkanCommands::new(&ctx)?;
+        let quad_mesh = VulkanMesh::new_quad(&ctx, &cmds)?;
         let meshes = vec![quad_mesh];
-        let render_pass_data = VulkanRenderPassData::new(&ctx, &swapchain)?;
+        let render_pass_data = VulkanRenderPassData::new(&ctx, &swapchain, &cmds)?;
         let shaders = HashMap::new();
-
-        // let swapchain = Mutex::new(
-        //     VulkanSwapchain::new(&instance.instance, &phys_device, &device, &surface, windwow_extent.width, windwow_extent.height)?
-        // );
 
         Ok(Self {
             frame_idx: 0,
             frame_data,
-
             shaders,
             meshes,
-
             swapchain,
             render_pass_data,
+            cmd_pools: cmds,
             ctx,
         })
-    }
-}
-
-impl Drop for VulkanBackend {
-    fn drop(&mut self) {
-        println!("> dropping Renerer2D...");
-
-        let device = &self.ctx.device.device;
-
-        self.shaders.iter_mut().for_each(|(_, s)| { s.drop_manual(&self.ctx.device.device) });
-        // self.meshes.iter_mut().for_each(|m| m.drop_manual(&self.ctx.device));
-
-        self.frame_data.drop_manual(device);
-        self.swapchain.drop_manual(device);
-        self.render_pass_data.drop_manual(&self.ctx.device.device);
     }
 }
 
@@ -207,8 +157,7 @@ impl VulkanBackend {
     pub fn recreate_swapchain(&mut self, window_extent: HellWindowExtent) -> HellResult<()> {
         println!("> recreating swapchain...");
 
-        self.swapchain.drop_manual(&self.ctx.device.device);
-
+        // self.swapchain.drop_manual(&self.ctx.device.device);
         let swapchain_new = VulkanSwapchain::new(&self.ctx, window_extent)?;
         self.swapchain = swapchain_new;
 
@@ -218,7 +167,7 @@ impl VulkanBackend {
     pub fn create_shaders(&mut self, shader_paths: HashSet<String>, resource_manager: &ResourceManager) -> HellResult<()>{
         for path in shader_paths {
             let texture: HellResult<Vec<_>> = resource_manager.get_all_images().iter()
-                .map(|i| TextureImage::from(&self.ctx, i))
+                .map(|i| TextureImage::from(&self.ctx, &self.cmd_pools, i))
                 .collect();
             let texture = texture?;
 
@@ -238,7 +187,7 @@ impl VulkanBackend {
 
     pub fn on_window_changed(&mut self, window_extent: HellWindowExtent) -> HellResult<()> {
         self.recreate_swapchain(window_extent)?;
-        self.render_pass_data.recreate_framebuffer(&self.ctx, &self.swapchain)?;
+        self.render_pass_data.recreate_framebuffer(&self.ctx, &self.swapchain, &self.cmd_pools)?;
         Ok(())
     }
 

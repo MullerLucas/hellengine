@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use hell_common::window::{HellSurfaceInfo, HellWindowExtent};
 use hell_error::HellResult;
 use hell_resources::ResourceManager;
@@ -25,7 +27,7 @@ pub struct HellRenderer {
 
 impl HellRenderer {
     pub fn new(info: HellRendererInfo) -> HellResult<Self> {
-        let ctx = VulkanCtx::new(&info.surface_info)?;
+        let ctx = Arc::new(VulkanCtx::new(&info.surface_info)?);
         let swapchain = VulkanSwapchain::new(&ctx, info.window_extent)?;
         let aspect_ratio = swapchain.aspect_ratio();
         let backend = VulkanBackend::new(ctx, swapchain)?;

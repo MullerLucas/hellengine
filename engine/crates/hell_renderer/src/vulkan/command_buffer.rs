@@ -1,55 +1,81 @@
 use std::ptr;
-
 use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
 use hell_core::config;
-
-use super::logic_device::VulkanLogicDevice;
-
+use super::VulkanCtxRef;
 
 
+
+// ----------------------------------------------------------------------------
+// command-pools
+// ----------------------------------------------------------------------------
+
+pub struct VulkanCommands {
+    pub graphics_pool: VulkanCommandPool,
+    pub transfer_pool: VulkanCommandPool,
+}
+
+impl VulkanCommands {
+    pub fn new(ctx: &VulkanCtxRef) -> HellResult<Self> {
+        let graphics_cmd_pool = VulkanCommandPool::default_for_graphics(ctx)?;
+        let transfer_cmd_pool = VulkanCommandPool::default_for_transfer(ctx)?;
+
+        Ok(Self {
+            graphics_pool: graphics_cmd_pool,
+            transfer_pool: transfer_cmd_pool,
+        })
+    }
+}
+
+
+
+
+// ----------------------------------------------------------------------------
+// command-pool
+// ----------------------------------------------------------------------------
 
 pub struct VulkanCommandPool {
+    ctx: VulkanCtxRef,
     pub pool: vk::CommandPool,
     pub cmd_buffers: Vec<vk::CommandBuffer>
 }
 
-impl VulkanCommandPool {
-    pub fn new(device: &ash::Device, queue_family_idx: u32, pool_flags: vk::CommandPoolCreateFlags) -> HellResult<Self> {
-        let pool = create_pool(device, queue_family_idx, pool_flags)?;
-        let buffers = create_buffers(pool, device, config::FRAMES_IN_FLIGHT as u32)?;
-
-        Ok(Self {
-            pool,
-            cmd_buffers: buffers,
-        })
-    }
-
-    pub fn default_for_graphics(device: &VulkanLogicDevice) -> HellResult<Self> {
-        VulkanCommandPool::new(&device.device, device.queues.graphics.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
-    }
-
-    pub fn default_for_transfer(device: &VulkanLogicDevice) -> HellResult<Self> {
-        VulkanCommandPool::new(&device.device, device.queues.transfer.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER | vk::CommandPoolCreateFlags::TRANSIENT)
-    }
-
-    pub fn get_buffer(&self, idx: usize) -> vk::CommandBuffer {
-        self.cmd_buffers[idx]
-    }
-}
-
-impl VulkanCommandPool {
-    // TODO: impl Drop
-    pub fn drop_manual(&self, device: &ash::Device) {
+impl Drop for VulkanCommandPool {
+    fn drop(&mut self) {
         println!("> dropping CommandPool...");
 
         unsafe {
+            let device = &self.ctx.device.device;
             // destroys all associated command buffers
             device.destroy_command_pool(self.pool, None);
         }
     }
 }
 
+impl VulkanCommandPool {
+    pub fn new(ctx: &VulkanCtxRef, queue_family_idx: u32, pool_flags: vk::CommandPoolCreateFlags) -> HellResult<Self> {
+        let pool = create_pool(&ctx.device.device, queue_family_idx, pool_flags)?;
+        let buffers = create_buffers(pool, &ctx.device.device, config::FRAMES_IN_FLIGHT as u32)?;
+
+        Ok(Self {
+            ctx: ctx.clone(),
+            pool,
+            cmd_buffers: buffers,
+        })
+    }
+
+    pub fn default_for_graphics(ctx: &VulkanCtxRef) -> HellResult<Self> {
+        VulkanCommandPool::new(ctx, ctx.device.queues.graphics.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+    }
+
+    pub fn default_for_transfer(ctx: &VulkanCtxRef) -> HellResult<Self> {
+        VulkanCommandPool::new(ctx, ctx.device.queues.transfer.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER | vk::CommandPoolCreateFlags::TRANSIENT)
+    }
+
+    pub fn get_buffer(&self, idx: usize) -> vk::CommandBuffer {
+        self.cmd_buffers[idx]
+    }
+}
 
 fn create_pool(device: &ash::Device, queue_family_idx: u32, flags: vk::CommandPoolCreateFlags) -> HellResult<vk::CommandPool> {
     let pool_info = vk::CommandPoolCreateInfo::builder()

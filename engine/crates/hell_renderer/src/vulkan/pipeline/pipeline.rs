@@ -1,18 +1,37 @@
 use ash::vk;
 use hell_error::{HellResult, HellError, HellErrorKind, ErrToHellErr};
-use crate::vulkan::{vulkan_backend::MeshPushConstants, VulkanCtx, VulkanRenderPassData, Vertex, VulkanSwapchain};
+use crate::vulkan::{VulkanRenderPassData, Vertex, VulkanSwapchain, VulkanCtxRef};
+use super::{shader::VulkanShader, shader_data::MeshPushConstants};
 
-use super::shader::VulkanShader;
 
+
+
+
+// ----------------------------------------------------------------------------
+// command-pools
+// ----------------------------------------------------------------------------
 
 pub struct VulkanPipeline {
+    ctx: VulkanCtxRef,
     pub layout: vk::PipelineLayout,
     pub pipeline: vk::Pipeline,
 }
 
+impl Drop for VulkanPipeline {
+    fn drop(&mut self) {
+        println!("> dropping GraphicsPipeline...");
+
+        unsafe {
+            let device = &self.ctx.device.device;
+            device.destroy_pipeline(self.pipeline, None);
+            device.destroy_pipeline_layout(self.layout, None);
+        }
+    }
+}
+
 impl VulkanPipeline {
-    pub fn new(core: &VulkanCtx, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout]) -> HellResult<Self> {
-        let device = &core.device.device;
+    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout]) -> HellResult<Self> {
+        let device = &ctx.device.device;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 
         // let render_pass_data = VulkanRenderPassData::new(core);
@@ -142,24 +161,10 @@ impl VulkanPipeline {
                 [0]
         };
 
-        // cleanup
-        // -------
-        shader.drop_manual(&core.device.device);
-
         Ok(Self {
+            ctx: ctx.clone(),
             layout: pipeline_layout,
             pipeline,
         })
-    }
-}
-
-impl VulkanPipeline {
-    pub fn drop_manual(&self, device: &ash::Device) {
-        println!("> dropping GraphicsPipeline...");
-
-        unsafe {
-            device.destroy_pipeline(self.pipeline, None);
-            device.destroy_pipeline_layout(self.layout, None);
-        }
     }
 }
