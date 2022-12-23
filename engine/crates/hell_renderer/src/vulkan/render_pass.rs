@@ -1,5 +1,6 @@
 use ash::vk;
-use hell_error::{HellResult, ErrToHellErr};
+use hell_collections::DynArray;
+use hell_error::HellResult;
 use super::command_buffer::VulkanCommands;
 use super::{VulkanCtxRef, VulkanSwapchain};
 use super::framebuffer::VulkanFramebuffer;
@@ -7,11 +8,31 @@ use super::image::DepthImage;
 
 
 
+bitflags::bitflags! {
+    pub struct RenderPassClearFlags: u32 {
+        const NONE          = 0x00;
+        const COLORBUFFER   = 0x01;
+        const DEPTHBUFFER   = 0x02;
+        const STENCILBUFFER = 0x04;
+    }
+}
 
+
+pub enum BultinRenderPassType {
+    World,
+    Ui,
+}
 
 pub struct VulkanRenderPass {
     ctx: VulkanCtxRef,
-    pub render_pass: vk::RenderPass,
+    pub handle: vk::RenderPass,
+
+    pub depth: f32,
+    pub stencil: u32,
+
+    pub clear_flags: RenderPassClearFlags,
+    pub has_next: bool,
+    pub has_prev: bool,
 }
 
 impl Drop for VulkanRenderPass {
@@ -20,27 +41,41 @@ impl Drop for VulkanRenderPass {
 
         unsafe {
             let device = &self.ctx.device.device;
-            device.destroy_render_pass(self.render_pass, None);
+            device.destroy_render_pass(self.handle, None);
         }
     }
 }
 
 impl VulkanRenderPass {
-    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain) -> HellResult<Self> {
+    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, clear_flags: RenderPassClearFlags, has_prev: bool, has_next: bool) -> HellResult<Self> {
         let swap_format = swapchain.surface_format.format;
         let msaa_samples = vk::SampleCountFlags::TYPE_1;
 
+        // subpass start
+        // -------------
+        let mut subpass = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS);
+
+        // attachments
+        // -----------
+        const MAX_ATTACHMENT_COUNT: usize = 2;
+        let mut attachments = DynArray::<vk::AttachmentDescription, MAX_ATTACHMENT_COUNT>::from_default();
+
         // color attachments
         // -----------------
+        let color_attachment_load_op        = if clear_flags.contains(RenderPassClearFlags::COLORBUFFER) { vk::AttachmentLoadOp::CLEAR } else { vk::AttachmentLoadOp::LOAD };
+        let color_attachment_initial_layout = if has_prev { vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL } else { vk::ImageLayout::UNDEFINED };
+        let color_attachment_final_layout   = if has_next { vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL } else { vk::ImageLayout::PRESENT_SRC_KHR };
+
         let color_attachment = vk::AttachmentDescription::builder()
             .format(swap_format)
             .samples(msaa_samples)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .load_op(color_attachment_load_op)
             .store_op(vk::AttachmentStoreOp::STORE)
             .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
             .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .initial_layout(vk::ImageLayout::UNDEFINED)
-            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+            .initial_layout(color_attachment_initial_layout)
+            .final_layout(color_attachment_final_layout)
             .build();
 
         let color_attachment_refs = [
@@ -50,33 +85,45 @@ impl VulkanRenderPass {
                 .build()
         ];
 
+        attachments.push(color_attachment);
+        subpass = subpass.color_attachments(&color_attachment_refs);
+
         // depth attachments
         // -----------------
-        let depth_attachment = vk::AttachmentDescription::builder()
-            .format(ctx.phys_device.depth_format)
-            .samples(msaa_samples)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
-            .store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
-            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .initial_layout(vk::ImageLayout::UNDEFINED)
-            .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-            .build();
+        let should_clear_depth = clear_flags.contains(RenderPassClearFlags::DEPTHBUFFER);
+        let use_depth = should_clear_depth; // TODO:
 
-        let depth_attachment_ref = vk::AttachmentReference::builder()
-            .attachment(1)
-            .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-            .build();
+        #[allow(unused)] let mut depth_attachment = Default::default();
+        #[allow(unused)] let mut depth_attachment_ref = Default::default();
 
-        // subpass
-        // -------
-        let subpasses = [
-            vk::SubpassDescription::builder()
-                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-                .color_attachments(&color_attachment_refs)
-                .depth_stencil_attachment(&depth_attachment_ref)
-                .build()
-        ];
+        if use_depth {
+
+            let depth_attachment_load_op = if should_clear_depth { vk::AttachmentLoadOp::CLEAR } else { vk::AttachmentLoadOp::LOAD };
+
+            depth_attachment = vk::AttachmentDescription::builder()
+                .format(ctx.phys_device.depth_format)
+                .samples(msaa_samples)
+                .load_op(depth_attachment_load_op)
+                .store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+                .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .initial_layout(vk::ImageLayout::UNDEFINED)
+                .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                .build();
+
+            depth_attachment_ref = vk::AttachmentReference::builder()
+                .attachment(1)
+                .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                .build();
+
+            attachments.push(depth_attachment);
+            subpass = subpass.depth_stencil_attachment(&depth_attachment_ref);
+        }
+
+
+        // subpass start
+        // -------------
+        let subpasses = [subpass.build()];
 
         let subpass_dependencies = [
             vk::SubpassDependency::builder()
@@ -96,19 +143,25 @@ impl VulkanRenderPass {
 
         // render pass
         // -----------
-        let attachments = [color_attachment, depth_attachment];
 
         let render_pass_info = vk::RenderPassCreateInfo::builder()
-            .attachments(&attachments)
+            .attachments(attachments.as_slice())
             .subpasses(&subpasses)
             .dependencies(&subpass_dependencies)
             .build();
 
-        let pass = unsafe { ctx.device.device.create_render_pass(&render_pass_info, None).to_render_hell_err()? };
+        let pass = unsafe { ctx.device.device.create_render_pass(&render_pass_info, None)? };
 
         Ok(Self {
             ctx: ctx.clone(),
-            render_pass: pass
+            handle: pass,
+
+            depth: 1.0,
+            stencil: 0,
+
+            clear_flags,
+            has_next,
+            has_prev,
         })
     }
 }
@@ -120,27 +173,40 @@ impl VulkanRenderPass {
 // ----------------------------------------------------------------------------
 
 pub struct VulkanRenderPassData {
-    pub depth_img: DepthImage,
-    pub render_pass: VulkanRenderPass,
-    pub framebuffer: VulkanFramebuffer,
+    pub world_depth_img: DepthImage,
+    pub world_framebuffer: VulkanFramebuffer,
+    pub world_render_pass: VulkanRenderPass,
+
+    pub ui_framebuffer: VulkanFramebuffer,
+    pub ui_render_pass: VulkanRenderPass,
 }
 
 impl VulkanRenderPassData {
     pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, cmds: &VulkanCommands) -> HellResult<Self> {
-        let depth_img = DepthImage::new(ctx, swapchain, cmds)?;
-        let render_pass = VulkanRenderPass::new(ctx, swapchain)?;
-        let framebuffer = VulkanFramebuffer::new(&ctx, &swapchain, &render_pass, &depth_img)?;
+        let world_clear_flags = RenderPassClearFlags::COLORBUFFER | RenderPassClearFlags::DEPTHBUFFER | RenderPassClearFlags::STENCILBUFFER;
+        let world_depth_img = DepthImage::new(ctx, swapchain, cmds)?;
+        let world_render_pass = VulkanRenderPass::new(ctx, swapchain, world_clear_flags, false, true)?;
+        let world_framebuffer = VulkanFramebuffer::new_world_buffer(&ctx, &swapchain, &world_render_pass, &world_depth_img)?;
+
+        let ui_clear_flags = RenderPassClearFlags::NONE;
+        let ui_render_pass = VulkanRenderPass::new(ctx, swapchain, ui_clear_flags, true, false)?;
+        let ui_framebuffer = VulkanFramebuffer::new_ui_buffer(&ctx, &swapchain, &ui_render_pass)?;
 
         Ok(Self {
-            depth_img,
-            render_pass,
-            framebuffer,
+            world_render_pass,
+            world_depth_img,
+            world_framebuffer,
+
+            ui_framebuffer,
+            ui_render_pass,
         })
     }
 
     pub fn recreate_framebuffer(&mut self, ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, cmds: &VulkanCommands) -> HellResult<()> {
-        self.depth_img = DepthImage::new(ctx, swapchain, cmds)?;
-        self.framebuffer = VulkanFramebuffer::new(&ctx, swapchain, &self.render_pass, &self.depth_img)?;
+        self.world_depth_img = DepthImage::new(ctx, swapchain, cmds)?;
+        self.world_framebuffer = VulkanFramebuffer::new_world_buffer(&ctx, swapchain, &self.world_render_pass, &self.world_depth_img)?;
+
+        self.ui_framebuffer = VulkanFramebuffer::new_ui_buffer(&ctx, swapchain, &self.world_render_pass)?;
 
         Ok(())
     }

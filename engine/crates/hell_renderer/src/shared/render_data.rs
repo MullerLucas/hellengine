@@ -67,7 +67,7 @@ impl TmpCamera {
 
         let height = 2.0;
         let width = height * aspect_ratio;
-        let proj = glam::Mat4::orthographic_lh(
+        let mut proj = glam::Mat4::orthographic_lh(
             -width / 2.0,
              width / 2.0,
             -height / 2.0,
@@ -75,7 +75,7 @@ impl TmpCamera {
             0.0,
             100.0
         );
-        // proj.y_axis.y *= -1.0;
+        proj.y_axis.y *= -1.0;
 
         let view_proj = view * proj;
 

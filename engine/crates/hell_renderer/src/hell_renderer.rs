@@ -65,12 +65,12 @@ impl HellRenderer {
         Ok(())
     }
 
-    pub fn draw_frame(&mut self, delta_time: f32, scene_data: &SceneData, render_data: &RenderData, resources: &ResourceManager) -> HellResult<bool> {
+    pub fn draw_frame(&mut self, delta_time: f32, scene_data: &SceneData, world_render_data: &RenderData, resources: &ResourceManager) -> HellResult<bool> {
         self.backend.update_global_state(self.camera.clone())?;
         self.backend.update_scene_buffer(scene_data)?;
-        self.backend.update_object_buffer(render_data)?;
+        self.backend.update_object_buffer(world_render_data)?;
 
-        let is_resized = self.backend.draw_frame(delta_time, render_data, resources)?;
+        let is_resized = self.backend.draw_frame(delta_time, world_render_data, resources)?;
 
         self.increment_frame_idx();
         Ok(is_resized)

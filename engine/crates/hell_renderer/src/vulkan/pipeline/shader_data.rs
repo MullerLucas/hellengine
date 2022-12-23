@@ -10,15 +10,33 @@ use crate::{shared::render_data::{SceneData, ObjectData}, render_data::GlobalUni
 ///      |
 ///      +1
 
+/// Hell:
+///      +1
+///      |
+/// -1 ----- +1
+///      |
+///      -1
+
 static QUAD_VERTS: &[Vertex] = &[
+    // VULKAN:
+    // // Top-Left
+    // Vertex::from_arrays([-0.5, -0.5,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [0.0, 0.0]),
+    // // Bottom-Left
+    // Vertex::from_arrays([-0.5,  0.5,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0]),
+    // // Bottom-Right
+    // Vertex::from_arrays([ 0.5,  0.5,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [1.0, 1.0]),
+    // // Top-Right
+    // Vertex::from_arrays([ 0.5, -0.5,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
+
+    // HELL:
     // Top-Left
-    Vertex::from_arrays([-0.5, -0.5,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [0.0, 0.0]),
+    Vertex::from_arrays([-0.5,  0.5,  0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [0.0, 0.0]),
     // Bottom-Left
-    Vertex::from_arrays([-0.5,  0.5,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0]),
+    Vertex::from_arrays([-0.5, -0.5,  0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0]),
     // Bottom-Right
-    Vertex::from_arrays([ 0.5,  0.5,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [1.0, 1.0]),
+    Vertex::from_arrays([ 0.5, -0.5,  0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [1.0, 1.0]),
     // Top-Right
-    Vertex::from_arrays([ 0.5, -0.5,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
+    Vertex::from_arrays([ 0.5,  0.5,  0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
 ];
 
 static QUAD_INDICES: &[u32] = &[

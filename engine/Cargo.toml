@@ -8,6 +8,14 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace.dependencies]
+hell_error       = { path = "../hust/crates/hell_error" }
+hell_collections = { path = "../hust/crates/hell_collections" }
+
+hell_core      = { path = "crates/hell_core" }
+hell_common    = { path = "crates/hell_common" }
+hell_utils     = { path = "crates/hell_utils" }
+hell_resources = { path = "crates/hell_resources" }
+
 num = "0.4.0"
 num-traits = "0.2"
 num-derive= "0.3"

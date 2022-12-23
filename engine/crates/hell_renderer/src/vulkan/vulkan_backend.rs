@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use ash::vk;
+use hell_collections::DynArray;
 use hell_common::transform::Transform;
 use hell_common::window::HellWindowExtent;
 use hell_core::config;
@@ -13,7 +14,7 @@ use super::command_buffer::VulkanCommands;
 use super::{VulkanCtxRef, VulkanSwapchain};
 use super::frame::VulkanFrameData;
 use super::pipeline::shader_data::{VulkanUboData, VulkanMesh, MeshPushConstants};
-use super::render_pass::VulkanRenderPassData;
+use super::render_pass::{VulkanRenderPassData, RenderPassClearFlags, BultinRenderPassType};
 use super::shader::VulkanSpriteShader;
 
 
@@ -179,6 +180,61 @@ impl VulkanBackend {
     }
 }
 
+// Render-Passes
+impl VulkanBackend {
+    pub fn begin_render_pass(&self, pass_type: BultinRenderPassType, cmd_buffer: vk::CommandBuffer, swap_img_idx: usize) {
+        let (render_pass, frame_buffer) = match pass_type {
+            BultinRenderPassType::World => (&self.render_pass_data.world_render_pass, &self.render_pass_data.world_framebuffer),
+            BultinRenderPassType::Ui    => (&self.render_pass_data.ui_render_pass, &self.render_pass_data.ui_framebuffer),
+        };
+
+        // clear-values
+        // -----------
+        const MAX_CLEAR_VALUE_COUNT: usize = 2;
+        let mut clear_values = DynArray::<vk::ClearValue, MAX_CLEAR_VALUE_COUNT>::from_default();
+
+        let should_clear_color = render_pass.clear_flags.contains(RenderPassClearFlags::COLORBUFFER);
+        if should_clear_color {
+            clear_values.push(
+                vk::ClearValue { color: vk::ClearColorValue { float32: config::CLEAR_COLOR } }
+            );
+        }
+
+        let should_clear_dpeth = render_pass.clear_flags.contains(RenderPassClearFlags::COLORBUFFER);
+        if should_clear_dpeth {
+            let should_clear_stencil = render_pass.clear_flags.contains(RenderPassClearFlags::STENCILBUFFER);
+            clear_values.push(
+                vk::ClearValue { depth_stencil: vk::ClearDepthStencilValue {
+                    depth: 1.0,
+                    stencil: if should_clear_stencil { render_pass.stencil } else { 0 },
+                } }
+            );
+        }
+
+        // render-area
+        // -----------
+        let render_area = vk::Rect2D {
+            offset: vk::Offset2D::default(),
+            extent: self.swapchain.extent
+        };
+
+        let render_pass_info = vk::RenderPassBeginInfo::builder()
+            .render_pass(render_pass.handle)
+            .framebuffer(frame_buffer.buffer_at(swap_img_idx))
+            .clear_values(clear_values.as_slice())
+            .render_area(render_area)
+            .build();
+
+        unsafe { self.ctx.device.device.cmd_begin_render_pass(cmd_buffer, &render_pass_info, vk::SubpassContents::INLINE); }
+    }
+
+    fn end_renderpass(&self, cmd_buffer: vk::CommandBuffer) {
+        unsafe {
+            self.ctx.device.device.cmd_end_render_pass(cmd_buffer);
+        }
+    }
+}
+
 impl VulkanBackend {
     pub fn wait_idle(&self) -> HellResult<()> {
         self.ctx.wait_device_idle()?;
@@ -191,9 +247,8 @@ impl VulkanBackend {
         Ok(())
     }
 
-    pub fn draw_frame(&mut self, _delta_time: f32, render_data: &RenderData, resources: &ResourceManager) -> HellResult<bool> {
+    pub fn draw_frame(&mut self, _delta_time: f32, world_render_data: &RenderData, resources: &ResourceManager) -> HellResult<bool> {
         let device = &self.ctx.device.device;
-        let render_pass_data = &self.render_pass_data;
 
         // let frame_data = &self.frame_data[frame_idx];
         let cmd_pool = &self.frame_data.graphics_cmd_pools.get(self.frame_idx).to_render_hell_err()?;
@@ -210,9 +265,8 @@ impl VulkanBackend {
         cmd_pool.reset_cmd_buffer(device, 0)?;
         self.record_cmd_buffer(
             &self.ctx,
-            render_pass_data,
             curr_swap_idx as usize,
-            render_data,
+            world_render_data,
             resources
         )?;
 
@@ -235,48 +289,24 @@ impl VulkanBackend {
         Ok(is_resized)
     }
 
-    fn record_cmd_buffer(&self, ctx: &VulkanCtxRef, render_pass_data: &VulkanRenderPassData, swap_img_idx: usize, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
+    // fn record_cmd_buffer(&self, ctx: &VulkanCtxRef, render_pass_data: &VulkanRenderPassData, swap_img_idx: usize, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
+    fn record_cmd_buffer(&self, ctx: &VulkanCtxRef, swap_img_idx: usize, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
         let begin_info = vk::CommandBufferBeginInfo::default();
         let device = &ctx.device.device;
         let cmd_buffer = self.frame_data.get_cmd_buffer(self.frame_idx)?;
 
         unsafe { device.begin_command_buffer(cmd_buffer, &begin_info)?; }
 
-        // one clear-color per attachment with load-op-clear - order should be identical
-        let clear_values = [
-            vk::ClearValue {
-                color: vk::ClearColorValue { float32: config::CLEAR_COLOR }
-            },
-            vk::ClearValue {
-                // range of depth: [0, 1]
-                depth_stencil: vk::ClearDepthStencilValue{ depth: 1.0, stencil: 0 }
-            }
-        ];
-
-        let render_area = vk::Rect2D {
-            offset: vk::Offset2D::default(),
-            extent: self.swapchain.extent
-        };
-
-        let render_pass_info = vk::RenderPassBeginInfo::builder()
-            .render_pass(render_pass_data.render_pass.render_pass)
-            .framebuffer(render_pass_data.framebuffer.buffer_at(swap_img_idx))
-            .clear_values(&clear_values)
-            .render_area(render_area)
-            .build();
-
-        unsafe { device.cmd_begin_render_pass(cmd_buffer, &render_pass_info, vk::SubpassContents::INLINE); }
-
-        // record commands
+        // world render pass
+        self.begin_render_pass(BultinRenderPassType::World, cmd_buffer, swap_img_idx);
         self.record_scene_cmd_buffer(device, cmd_buffer, render_data, resources)?;
+        self.end_renderpass(cmd_buffer);
 
-        unsafe {
-            device.cmd_end_render_pass(cmd_buffer);
-        }
+        // ui render pass
+        self.begin_render_pass(BultinRenderPassType::Ui, cmd_buffer, swap_img_idx);
+        self.end_renderpass(cmd_buffer);
 
-        unsafe {
-            device.end_command_buffer(cmd_buffer)?;
-        }
+        unsafe { device.end_command_buffer(cmd_buffer)?; }
 
         Ok(())
     }

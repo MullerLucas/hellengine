@@ -6,11 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hell_core      = { path = "../hell_core" }
-hell_common    = { path = "../hell_common" }
-hell_error     = { path = "../../../hust/crates/hell_error" }
-hell_utils     = { path = "../hell_utils" }
-hell_resources = { path = "../hell_resources" }
+hell_error.workspace = true
+hell_collections.workspace = true
+
+hell_core.workspace = true
+hell_common.workspace = true
+hell_utils.workspace = true
+hell_resources.workspace = true
 
 num.workspace = true
 glam.workspace = true
@@ -18,3 +20,4 @@ ash.workspace = true
 memoffset.workspace = true
 image .workspace = true
 lazy_static.workspace = true
+bitflags.workspace = true

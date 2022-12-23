@@ -1,5 +1,5 @@
 use ash::vk;
-use hell_error::{HellResult, HellError, HellErrorKind, ErrToHellErr};
+use hell_error::{HellResult, HellError, HellErrorKind};
 use crate::vulkan::{VulkanRenderPassData, Vertex, VulkanSwapchain, VulkanCtxRef};
 use super::{shader::VulkanShader, shader_data::MeshPushConstants};
 
@@ -30,7 +30,7 @@ impl Drop for VulkanPipeline {
 }
 
 impl VulkanPipeline {
-    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout]) -> HellResult<Self> {
+    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout], depth_test_enabled: bool) -> HellResult<Self> {
         let device = &ctx.device.device;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 
@@ -83,18 +83,22 @@ impl VulkanPipeline {
 
         // depth / stancil
         // ---------------
-        let depth_stencil_info = vk::PipelineDepthStencilStateCreateInfo::builder()
-            .depth_test_enable(true)
-            .depth_write_enable(true)
-            .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL)
-            // only keep fragments that fall in a specific range
-            .depth_bounds_test_enable(false)
-            .min_depth_bounds(0.0)
-            .max_depth_bounds(1.0)
-            .stencil_test_enable(false)
-            .front(vk::StencilOpState::default())
-            .back(vk::StencilOpState::default())
-            .build();
+        // TODO: find better pattern to use
+        let mut depth_stencil_info = Default::default();
+        if depth_test_enabled {
+            depth_stencil_info = vk::PipelineDepthStencilStateCreateInfo::builder()
+                .depth_test_enable(true)
+                .depth_write_enable(true)
+                .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL)
+                // only keep fragments that fall in a specific range
+                .depth_bounds_test_enable(false)
+                .min_depth_bounds(0.0)
+                .max_depth_bounds(1.0)
+                .stencil_test_enable(false)
+                .front(vk::StencilOpState::default())
+                .back(vk::StencilOpState::default())
+                .build();
+        }
 
         // blending
         // --------
@@ -135,25 +139,27 @@ impl VulkanPipeline {
             .push_constant_ranges(&push_constants)
             .build();
 
-        let pipeline_layout = unsafe { device.create_pipeline_layout(&pipeline_layout_info, None).to_render_hell_err() }?;
+        let pipeline_layout = unsafe { device.create_pipeline_layout(&pipeline_layout_info, None) }?;
 
         // pipeline creation
         // -----------------
-        let pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
+        let mut pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
             .stages(shader_stages)
             .vertex_input_state(&vertex_input_info)
             .input_assembly_state(&input_assembly)
             .viewport_state(&viewport_state_info)
             .rasterization_state(&rasterization_info)
             .multisample_state(&multisample_state_info)
-            .depth_stencil_state(&depth_stencil_info)
             .color_blend_state(&color_blend_info)
             .layout(pipeline_layout)
-            .render_pass(render_pass_data.render_pass.render_pass)
+            .render_pass(render_pass_data.world_render_pass.handle)
             .subpass(0)
             .base_pipeline_handle(vk::Pipeline::null())
-            .base_pipeline_index(-1)
-            .build();
+            .base_pipeline_index(-1);
+        if depth_test_enabled {
+            pipeline_info = pipeline_info.depth_stencil_state(&depth_stencil_info);
+        }
+        let pipeline_info = pipeline_info.build();
 
         let pipeline = unsafe {
             device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
