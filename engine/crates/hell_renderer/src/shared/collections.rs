@@ -1,6 +1,5 @@
 use hell_core::config;
 
-
 pub struct PerFrame<T> {
     data: [T; config::FRAMES_IN_FLIGHT],
 }

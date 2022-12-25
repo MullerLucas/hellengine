@@ -4,6 +4,8 @@
 
 
 
+mod resource_config;
+
 pub mod resources;
 pub mod fonts;
 

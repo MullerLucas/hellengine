@@ -1,9 +1,9 @@
 use ash::vk;
-use hell_core::config;
 use hell_error::{HellResult, ErrToHellErr};
 use hell_utils::conversion::c_str_from_char_slice;
 use std::ffi::CStr;
 use std::fmt;
+use hell_core::config;
 
 use crate::vulkan::queues::{self, VulkanQueueSupport};
 

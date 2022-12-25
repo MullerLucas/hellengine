@@ -4,18 +4,18 @@ use ash::vk;
 use hell_collections::DynArray;
 use hell_common::transform::Transform;
 use hell_common::window::HellWindowExtent;
-use hell_core::config;
 use hell_error::{HellResult, HellError, HellErrorKind, OptToHellErr};
 use hell_resources::{ResourceManager, ResourceHandle};
 use crate::render_data::{SceneData, ObjectData, GlobalUniformObject, TmpCamera};
 use crate::vulkan::image::TextureImage;
 
-use super::command_buffer::VulkanCommands;
+use super::command_buffer::{VulkanCommands, VulkanCommandBuffer};
 use super::{VulkanCtxRef, VulkanSwapchain};
 use super::frame::VulkanFrameData;
 use super::pipeline::shader_data::{VulkanUboData, VulkanMesh, MeshPushConstants};
 use super::render_pass::{VulkanRenderPassData, RenderPassClearFlags, BultinRenderPassType};
 use super::shader::VulkanSpriteShader;
+use hell_core::config;
 
 
 
@@ -181,7 +181,7 @@ impl VulkanBackend {
 
 // Render-Passes
 impl VulkanBackend {
-    pub fn begin_render_pass(&self, pass_type: BultinRenderPassType, cmd_buffer: vk::CommandBuffer) {
+    pub fn begin_render_pass(&self, pass_type: BultinRenderPassType, cmd_buffer: &VulkanCommandBuffer) {
         let (render_pass, frame_buffer) = match pass_type {
             BultinRenderPassType::World => (&self.render_pass_data.world_render_pass, &self.render_pass_data.world_framebuffer),
             BultinRenderPassType::Ui    => (&self.render_pass_data.ui_render_pass, &self.render_pass_data.ui_framebuffer),
@@ -224,13 +224,11 @@ impl VulkanBackend {
             .render_area(render_area)
             .build();
 
-        unsafe { self.ctx.device.device.cmd_begin_render_pass(cmd_buffer, &render_pass_info, vk::SubpassContents::INLINE); }
+        cmd_buffer.cmd_begin_render_pass(&self.ctx, &render_pass_info, vk::SubpassContents::INLINE);
     }
 
-    fn end_renderpass(&self, cmd_buffer: vk::CommandBuffer) {
-        unsafe {
-            self.ctx.device.device.cmd_end_render_pass(cmd_buffer);
-        }
+    fn end_renderpass(&self, cmd_buffer: &VulkanCommandBuffer) {
+        cmd_buffer.cmd_end_render_pass(&self.ctx);
     }
 }
 
@@ -291,26 +289,27 @@ impl VulkanBackend {
         let device = &ctx.device.device;
         let cmd_buffer = self.frame_data.get_cmd_buffer(self.frame_idx)?;
 
-        cmd_buffer.begin_cmd_buffer(ctx)?;
+        let begin_info = vk::CommandBufferBeginInfo::default();
+        cmd_buffer.begin_cmd_buffer(ctx, begin_info)?;
 
         cmd_buffer.cmd_set_viewport(ctx, 0, &self.swapchain.viewport);
         cmd_buffer.cmd_set_scissor(ctx, 0, &self.swapchain.sissor);
 
         // world render pass
-        self.begin_render_pass(BultinRenderPassType::World, cmd_buffer.handle());
-        self.record_scene_cmd_buffer(device, cmd_buffer.handle(), render_data, resources)?;
-        self.end_renderpass(cmd_buffer.handle());
+        self.begin_render_pass(BultinRenderPassType::World, &cmd_buffer);
+        self.record_scene_cmd_buffer(&cmd_buffer, render_data, resources)?;
+        self.end_renderpass(&cmd_buffer);
 
         // ui render pass
-        self.begin_render_pass(BultinRenderPassType::Ui, cmd_buffer.handle());
-        self.end_renderpass(cmd_buffer.handle());
+        self.begin_render_pass(BultinRenderPassType::Ui, &cmd_buffer);
+        self.end_renderpass(&cmd_buffer);
 
         unsafe { device.end_command_buffer(cmd_buffer.handle())?; }
 
         Ok(())
     }
 
-    fn record_scene_cmd_buffer(&self, device: &ash::Device, cmd_buffer: vk::CommandBuffer, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
+    fn record_scene_cmd_buffer(&self, cmd_buffer: &VulkanCommandBuffer, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
         unsafe {
             let mut curr_mat_handle = ResourceHandle::MAX;
             let mut curr_mesh_idx = usize::MAX;
@@ -333,7 +332,7 @@ impl VulkanBackend {
                 SceneData::padded_device_size(min_ubo_alignment) as u32 * self.frame_idx as u32,
             ];
 
-            device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
+            cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
 
             // draw each object
             for (idx, rd) in render_data.iter().enumerate() {
@@ -344,7 +343,7 @@ impl VulkanBackend {
 
                     // bind material descriptors
                     let descriptor_set = [ curr_shader.get_material_set(rd.material.id)? ];
-                    device.cmd_bind_descriptor_sets(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 2, &descriptor_set, &[]);
+                    cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 2, &descriptor_set, &[]);
                 }
 
                 // bind pipeline
@@ -352,7 +351,7 @@ impl VulkanBackend {
                     curr_shader_key = &curr_mat.shader;
                     // curr_pipeline = &self.pipelines[curr_pipeline_idx];
                     curr_shader = self.shaders.get(curr_shader_key).unwrap();
-                    device.cmd_bind_pipeline(cmd_buffer, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.pipeline);
+                    cmd_buffer.cmd_bind_pipeline(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.pipeline);
                 }
 
                 // bind mesh
@@ -361,8 +360,8 @@ impl VulkanBackend {
                     curr_mesh = &self.meshes[curr_mesh_idx];
 
                     let vertex_buffers = [curr_mesh.vertex_buffer.buffer];
-                    device.cmd_bind_vertex_buffers(cmd_buffer, 0, &vertex_buffers, &[0]);
-                    device.cmd_bind_index_buffer(cmd_buffer, curr_mesh.index_buffer.buffer, 0, VulkanMesh::INDEX_TYPE);
+                    cmd_buffer.cmd_bind_vertex_buffers(&self.ctx, 0, &vertex_buffers, &[0]);
+                    cmd_buffer.cmd_bind_index_buffer(&self.ctx, curr_mesh.index_buffer.buffer, 0, VulkanMesh::INDEX_TYPE);
                 }
 
                 // bind push constants
@@ -373,11 +372,11 @@ impl VulkanBackend {
                 ];
 
                 let push_const_bytes = std::slice::from_raw_parts(push_constants.as_ptr() as *const u8, std::mem::size_of_val(&push_constants));
-                device.cmd_push_constants(cmd_buffer, curr_shader.pipeline.layout, vk::ShaderStageFlags::VERTEX, 0, push_const_bytes);
+                cmd_buffer.cmd_push_constants(&self.ctx, curr_shader.pipeline.layout, vk::ShaderStageFlags::VERTEX, 0, push_const_bytes);
 
                 // draw
                 // value of 'first_instance' is used in the vertex shader to index into the object storage
-                device.cmd_draw_indexed(cmd_buffer, curr_mesh.indices_count() as u32, 1, 0, 0, idx as u32);
+                cmd_buffer.cmd_draw_indexed(&self.ctx, curr_mesh.indices_count() as u32, 1, 0, 0, idx as u32);
             }
         }
 

@@ -1,6 +1,7 @@
 use ash::vk;
 use hell_common::window::HellWindowExtent;
 use hell_error::{HellResult, ErrToHellErr, OptToHellErr};
+use hell_core::config;
 
 use crate::vulkan::image;
 
@@ -73,9 +74,7 @@ impl VulkanSwapchainSupport {
             *desired_mode
         } else {
             // guaranteed to be available
-            // NOTE: changed for testing purposes
-            // vk::PresentModeKHR::FIFO
-            vk::PresentModeKHR::IMMEDIATE
+            config::FALLBACK_PRESENT_MODE
         }
     }
 

@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use hell_error::{HellErrorKind, HellError, HellResult};
+use crate::resource_config;
 
 use crate::resources::{TextureResource, MaterialResource};
 
@@ -160,7 +161,7 @@ impl ResourceManager {
             .collect();
 
         for path in imgs_to_load {
-            self.load_image(path, config::IMG_FLIP_V, config::IMG_FLIP_H)?;
+            self.load_image(path, resource_config::IMG_FLIP_V, resource_config::IMG_FLIP_H)?;
         }
 
         Ok(())
