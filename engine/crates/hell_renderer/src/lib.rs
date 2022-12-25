@@ -4,6 +4,7 @@
 
 
 
+mod config;
 pub mod vulkan;
 mod shared;
 pub use shared::render_data;

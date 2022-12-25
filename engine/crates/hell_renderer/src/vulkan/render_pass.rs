@@ -186,11 +186,11 @@ impl VulkanRenderPassData {
         let world_clear_flags = RenderPassClearFlags::COLORBUFFER | RenderPassClearFlags::DEPTHBUFFER | RenderPassClearFlags::STENCILBUFFER;
         let world_depth_img = DepthImage::new(ctx, swapchain, cmds)?;
         let world_render_pass = VulkanRenderPass::new(ctx, swapchain, world_clear_flags, false, true)?;
-        let world_framebuffer = VulkanFramebuffer::new_world_buffer(&ctx, &swapchain, &world_render_pass, &world_depth_img)?;
+        let world_framebuffer = VulkanFramebuffer::new_world_buffer(ctx, swapchain, &world_render_pass, &world_depth_img)?;
 
         let ui_clear_flags = RenderPassClearFlags::NONE;
         let ui_render_pass = VulkanRenderPass::new(ctx, swapchain, ui_clear_flags, true, false)?;
-        let ui_framebuffer = VulkanFramebuffer::new_ui_buffer(&ctx, &swapchain, &ui_render_pass)?;
+        let ui_framebuffer = VulkanFramebuffer::new_ui_buffer(ctx, swapchain, &ui_render_pass)?;
 
         Ok(Self {
             world_render_pass,
@@ -204,9 +204,9 @@ impl VulkanRenderPassData {
 
     pub fn recreate_framebuffer(&mut self, ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, cmds: &VulkanCommands) -> HellResult<()> {
         self.world_depth_img = DepthImage::new(ctx, swapchain, cmds)?;
-        self.world_framebuffer = VulkanFramebuffer::new_world_buffer(&ctx, swapchain, &self.world_render_pass, &self.world_depth_img)?;
+        self.world_framebuffer = VulkanFramebuffer::new_world_buffer(ctx, swapchain, &self.world_render_pass, &self.world_depth_img)?;
 
-        self.ui_framebuffer = VulkanFramebuffer::new_ui_buffer(&ctx, swapchain, &self.ui_render_pass)?;
+        self.ui_framebuffer = VulkanFramebuffer::new_ui_buffer(ctx, swapchain, &self.ui_render_pass)?;
 
         Ok(())
     }

@@ -6,6 +6,7 @@ use hell_error::{HellResult, ErrToHellErr};
 use hell_core::config;
 
 use super::VulkanCtxRef;
+use super::command_buffer::VulkanCommandBuffer;
 use super::swapchain::VulkanSwapchain;
 
 
@@ -57,7 +58,7 @@ impl VulkanFrameData {
             .collect();
 
         let graphics_cmd_pool: HellResult<Vec<_>> = (0..config::FRAMES_IN_FLIGHT).into_iter()
-            .map(|_| VulkanCommandPool::default_for_graphics(&ctx))
+            .map(|_| VulkanCommandPool::default_for_graphics(ctx))
             .collect();
         let graphics_cmd_pool = graphics_cmd_pool?;
 
@@ -121,7 +122,7 @@ impl VulkanFrameData {
 }
 
 impl VulkanFrameData {
-    pub fn get_cmd_buffer(&self, frame_idx: usize) -> HellResult<vk::CommandBuffer> {
+    pub fn get_cmd_buffer(&self, frame_idx: usize) -> HellResult<VulkanCommandBuffer> {
         Ok(
             self.graphics_cmd_pools
                 .get(frame_idx).ok_or_else(|| err_invalid_frame_idx(frame_idx))?

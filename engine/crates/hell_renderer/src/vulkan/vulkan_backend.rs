@@ -24,7 +24,7 @@ use super::shader::VulkanSpriteShader;
 
 
 // ----------------------------------------------------------------------------
-// render data
+// render data chunk
 // ----------------------------------------------------------------------------
 
 pub struct RenderDataChunk<'a> {
@@ -33,20 +33,17 @@ pub struct RenderDataChunk<'a> {
     pub material: ResourceHandle,
 }
 
+
+
+// ----------------------------------------------------------------------------
+// render data
+// ----------------------------------------------------------------------------
+
+#[derive(Debug, Default)]
 pub struct RenderData {
     pub meshes: Vec<usize>,
     pub transforms: Vec<Transform>,
     pub materials: Vec<ResourceHandle>,
-}
-
-impl Default for RenderData {
-    fn default() -> Self {
-        Self {
-            meshes: Vec::new(),
-            transforms: Vec::new(),
-            materials: Vec::new(),
-        }
-    }
 }
 
 impl RenderData {
@@ -122,8 +119,10 @@ impl<'a> Iterator for RenderDataIter<'a> {
 // ----------------------------------------------------------------------------
 
 pub struct VulkanBackend {
-    pub frame_idx: usize,
     pub frame_data: VulkanFrameData,
+    pub frame_idx: usize,
+    pub curr_swap_idx: usize,
+
     pub cmd_pools: VulkanCommands,
     pub meshes: Vec<VulkanMesh>,
     pub swapchain: VulkanSwapchain,
@@ -142,8 +141,9 @@ impl VulkanBackend {
         let shaders = HashMap::new();
 
         Ok(Self {
-            frame_idx: 0,
             frame_data,
+            frame_idx: 0,
+            curr_swap_idx: usize::MAX,
             shaders,
             meshes,
             swapchain,
@@ -181,7 +181,7 @@ impl VulkanBackend {
 
 // Render-Passes
 impl VulkanBackend {
-    pub fn begin_render_pass(&self, pass_type: BultinRenderPassType, cmd_buffer: vk::CommandBuffer, swap_img_idx: usize) {
+    pub fn begin_render_pass(&self, pass_type: BultinRenderPassType, cmd_buffer: vk::CommandBuffer) {
         let (render_pass, frame_buffer) = match pass_type {
             BultinRenderPassType::World => (&self.render_pass_data.world_render_pass, &self.render_pass_data.world_framebuffer),
             BultinRenderPassType::Ui    => (&self.render_pass_data.ui_render_pass, &self.render_pass_data.ui_framebuffer),
@@ -219,7 +219,7 @@ impl VulkanBackend {
 
         let render_pass_info = vk::RenderPassBeginInfo::builder()
             .render_pass(render_pass.handle)
-            .framebuffer(frame_buffer.buffer_at(swap_img_idx))
+            .framebuffer(frame_buffer.buffer_at(self.curr_swap_idx))
             .clear_values(clear_values.as_slice())
             .render_area(render_area)
             .build();
@@ -234,6 +234,8 @@ impl VulkanBackend {
     }
 }
 
+
+
 impl VulkanBackend {
     pub fn wait_idle(&self) -> HellResult<()> {
         self.ctx.wait_device_idle()?;
@@ -247,6 +249,7 @@ impl VulkanBackend {
     }
 
 
+    #[allow(clippy::modulo_one)]
     pub fn draw_frame(&mut self, _delta_time: f32, world_render_data: &RenderData, resources: &ResourceManager) -> HellResult<bool> {
         let device = &self.ctx.device.device;
 
@@ -254,25 +257,19 @@ impl VulkanBackend {
         let cmd_pool = &self.frame_data.graphics_cmd_pools.get(self.frame_idx).to_render_hell_err()?;
         self.frame_data.wait_for_in_flight(&self.ctx.device.device, self.frame_idx)?;
 
-        // TODO: check
-        // let swap_img_idx = match self.swapchain.aquire_next_image(frame_data.img_available_sem[0]) {
-        //     Ok((idx, _)) => { idx },
-        //     Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => { return true },
-        //     _ => { panic!("failed to aquire next image") }
-        // };
         let (curr_swap_idx, _is_suboptimal) = self.swapchain.aquire_next_image(self.frame_data.img_available_semaphors[self.frame_idx])?;
+        self.curr_swap_idx = curr_swap_idx as usize;
 
         cmd_pool.reset_cmd_buffer(device, 0)?;
         self.record_cmd_buffer(
             &self.ctx,
-            curr_swap_idx as usize,
             world_render_data,
             resources
         )?;
 
         // delay resetting the fence until we know for sure we will be submitting work with it (not return early)
         self.frame_data.reset_in_flight_fence(device, self.frame_idx)?;
-        self.frame_data.submit_queue(device, self.ctx.device.queues.graphics.queue, &[cmd_pool.get_buffer(0)], self.frame_idx)?;
+        self.frame_data.submit_queue(device, self.ctx.device.queues.graphics.queue, &[cmd_pool.get_buffer(0).handle()], self.frame_idx)?;
 
         let present_result = self.frame_data.present_queue(self.ctx.device.queues.present.queue, &self.swapchain, &[curr_swap_idx], self.frame_idx);
 
@@ -284,34 +281,31 @@ impl VulkanBackend {
             _ => { return Err(HellError::from_msg(HellErrorKind::RenderError, "failed to aquire next image".to_owned())) }
         };
 
-        self.frame_idx = (self.frame_idx + 1) % config::FRAMES_IN_FLIGHT as usize;
+        self.frame_idx = (self.frame_idx + 1) % config::FRAMES_IN_FLIGHT;
 
         Ok(is_resized)
     }
 
     // fn record_cmd_buffer(&self, ctx: &VulkanCtxRef, render_pass_data: &VulkanRenderPassData, swap_img_idx: usize, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
-    fn record_cmd_buffer(&self, ctx: &VulkanCtxRef, swap_img_idx: usize, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
-        let begin_info = vk::CommandBufferBeginInfo::default();
+    fn record_cmd_buffer(&self, ctx: &VulkanCtxRef, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
         let device = &ctx.device.device;
         let cmd_buffer = self.frame_data.get_cmd_buffer(self.frame_idx)?;
 
-        unsafe { device.begin_command_buffer(cmd_buffer, &begin_info)?; }
+        cmd_buffer.begin_cmd_buffer(ctx)?;
 
-        let viewport = &self.swapchain.viewport;
-        unsafe { device.cmd_set_viewport(cmd_buffer, 0, viewport); }
-        let scissor = &self.swapchain.sissor;
-        unsafe { device.cmd_set_scissor(cmd_buffer, 0, scissor); }
+        cmd_buffer.cmd_set_viewport(ctx, 0, &self.swapchain.viewport);
+        cmd_buffer.cmd_set_scissor(ctx, 0, &self.swapchain.sissor);
 
         // world render pass
-        self.begin_render_pass(BultinRenderPassType::World, cmd_buffer, swap_img_idx);
-        self.record_scene_cmd_buffer(device, cmd_buffer, render_data, resources)?;
-        self.end_renderpass(cmd_buffer);
+        self.begin_render_pass(BultinRenderPassType::World, cmd_buffer.handle());
+        self.record_scene_cmd_buffer(device, cmd_buffer.handle(), render_data, resources)?;
+        self.end_renderpass(cmd_buffer.handle());
 
         // ui render pass
-        self.begin_render_pass(BultinRenderPassType::Ui, cmd_buffer, swap_img_idx);
-        self.end_renderpass(cmd_buffer);
+        self.begin_render_pass(BultinRenderPassType::Ui, cmd_buffer.handle());
+        self.end_renderpass(cmd_buffer.handle());
 
-        unsafe { device.end_command_buffer(cmd_buffer)?; }
+        unsafe { device.end_command_buffer(cmd_buffer.handle())?; }
 
         Ok(())
     }
@@ -395,7 +389,7 @@ impl VulkanBackend {
     pub fn update_global_state(&mut self, camera: TmpCamera) -> HellResult<()> {
         let global_uo = GlobalUniformObject::new(camera.view, camera.proj, camera.view_proj);
 
-        for (_, sh) in &mut self.shaders {
+        for sh in &mut self.shaders.values_mut() {
             sh.update_global_uo(global_uo.clone(), &self.ctx, self.frame_idx)?;
         }
 
@@ -404,7 +398,7 @@ impl VulkanBackend {
 
     pub fn update_scene_buffer(&self, scene_data: &SceneData) -> HellResult<()> {
         let min_ubo_alignment = self.ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
-        for (_, sh) in &self.shaders {
+        for sh in self.shaders.values() {
             let buffer = sh.get_scene_buffer();
             buffer.upload_data_buffer_array(&self.ctx.device.device, min_ubo_alignment, scene_data, self.frame_idx)?;
         }
@@ -413,7 +407,7 @@ impl VulkanBackend {
     }
 
     pub fn update_object_buffer(&self, render_data: &RenderData) -> HellResult<()> {
-        for (_, sh) in &self.shaders {
+        for sh in self.shaders.values() {
             let buffer = sh.get_object_buffer(self.frame_idx);
 
             let object_data: Vec<_> = render_data.iter()

@@ -67,8 +67,8 @@ impl VulkanMesh {
             vertices: QUAD_VERTS.to_vec(),
             indices: QUAD_INDICES.to_vec(),
 
-            vertex_buffer: VulkanBuffer::from_vertices(&ctx, cmds, QUAD_VERTS)?,
-            index_buffer: VulkanBuffer::from_indices(&ctx, cmds, QUAD_INDICES)?,
+            vertex_buffer: VulkanBuffer::from_vertices(ctx, cmds, QUAD_VERTS)?,
+            index_buffer: VulkanBuffer::from_indices(ctx, cmds, QUAD_INDICES)?,
         })
     }
 
@@ -99,9 +99,8 @@ pub trait VulkanUboData {
     fn device_size() -> vk::DeviceSize;
 
     fn padded_device_size(min_ubo_alignment: u64) -> vk::DeviceSize {
-        calculate_aligned_size(min_ubo_alignment, Self::device_size() as u64)
+        calculate_aligned_size(min_ubo_alignment, Self::device_size())
     }
-
 }
 
 

@@ -7,9 +7,10 @@ use crate::error::{err_invalid_frame_idx, err_invalid_set_idx};
 
 use crate::render_data::{SceneData, ObjectData};
 use crate::vulkan::buffer::VulkanBuffer;
+use crate::vulkan::pipeline::VulkanPipeline;
 use crate::vulkan::{VulkanSampler, VulkanCtxRef, VulkanSwapchain};
 use crate::vulkan::image::TextureImage;
-use crate::{vulkan::{pipeline::{VulkanPipeline, VulkanShader, shader_data::VulkanUboData}, VulkanCtx, VulkanRenderPassData, descriptors::VulkanDescriptorSetGroup}, render_data::GlobalUniformObject, shared::collections::PerFrame};
+use crate::{vulkan::{pipeline::{VulkanShader, shader_data::VulkanUboData}, VulkanCtx, VulkanRenderPassData, descriptors::VulkanDescriptorSetGroup}, render_data::GlobalUniformObject, shared::collections::PerFrame};
 
 
 
@@ -34,7 +35,6 @@ pub struct VulkanSpriteShader {
     desc_layouts: [vk::DescriptorSetLayout; 3],
 
     // pipeline
-    // pub shader: VulkanShader,
     pub pipeline: VulkanPipeline,
 
 }
@@ -72,7 +72,7 @@ impl VulkanSpriteShader {
 
         // texture data
         // ------------
-        let sampler = VulkanSampler::new(&ctx)?;
+        let sampler = VulkanSampler::new(ctx)?;
 
         // descriptor pool
         // ---------------

@@ -73,7 +73,9 @@ impl VulkanSwapchainSupport {
             *desired_mode
         } else {
             // guaranteed to be available
-            vk::PresentModeKHR::FIFO
+            // NOTE: changed for testing purposes
+            // vk::PresentModeKHR::FIFO
+            vk::PresentModeKHR::IMMEDIATE
         }
     }
 
@@ -193,7 +195,7 @@ impl VulkanSwapchain {
         let swapchain_loader = ash::extensions::khr::Swapchain::new(&ctx.instance.instance, &ctx.device.device);
         let swapchain = unsafe { swapchain_loader.create_swapchain(&create_info, None).expect("failed to create swapchain") };
 
-        let imgs = unsafe { swapchain_loader.get_swapchain_images(swapchain).to_render_hell_err()? };
+        let imgs = unsafe { swapchain_loader.get_swapchain_images(swapchain)? };
         let views = image::create_img_views(&ctx.device.device, &imgs, surface_format.format, vk::ImageAspectFlags::COLOR);
 
         let viewport = [
@@ -241,7 +243,7 @@ impl VulkanSwapchain {
 impl VulkanSwapchain {
     pub fn aquire_next_image(&self, img_available_sem: vk::Semaphore) -> HellResult<(u32, bool)> {
         unsafe {
-            self.swapchain_loader.acquire_next_image(self.vk_swapchain, u64::MAX, img_available_sem, vk::Fence::null()).to_render_hell_err()
+            Ok(self.swapchain_loader.acquire_next_image(self.vk_swapchain, u64::MAX, img_available_sem, vk::Fence::null())?)
         }
     }
 

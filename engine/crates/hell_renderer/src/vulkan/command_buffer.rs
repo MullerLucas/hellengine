@@ -31,13 +31,46 @@ impl VulkanCommands {
 
 
 // ----------------------------------------------------------------------------
+// buffer-handle
+// ----------------------------------------------------------------------------
+
+pub struct VulkanCommandBuffer<'a> {
+    // NOTE: technically not required to be a reference - but being a reference, it's lifetime is tied to the lifetime of the Command-Pool, which is nice
+    handle: &'a vk::CommandBuffer,
+}
+
+impl<'a> VulkanCommandBuffer<'a> {
+    pub fn new(handle: &'a vk::CommandBuffer) -> Self {
+        Self { handle }
+    }
+
+    pub fn handle(&self) -> vk::CommandBuffer {
+        *self.handle
+    }
+
+    pub fn begin_cmd_buffer(&self, ctx: &VulkanCtxRef) -> HellResult<()> {
+        let begin_info = vk::CommandBufferBeginInfo::default();
+        unsafe { ctx.device.device.begin_command_buffer(*self.handle, &begin_info)? }
+        Ok(())
+    }
+
+    pub fn cmd_set_viewport(&self, ctx: &VulkanCtxRef, first_viewport: u32, viewports: &[vk::Viewport]) {
+        unsafe { ctx.device.device.cmd_set_viewport(self.handle(), first_viewport, viewports); }
+    }
+
+    pub fn cmd_set_scissor(&self, ctx: &VulkanCtxRef, first_scissor: u32, scissors: &[vk::Rect2D]) {
+        unsafe { ctx.device.device.cmd_set_scissor(self.handle(), first_scissor, scissors); }
+    }
+}
+
+// ----------------------------------------------------------------------------
 // command-pool
 // ----------------------------------------------------------------------------
 
 pub struct VulkanCommandPool {
     ctx: VulkanCtxRef,
     pub pool: vk::CommandPool,
-    pub cmd_buffers: Vec<vk::CommandBuffer>
+    buffers: Vec<vk::CommandBuffer>
 }
 
 impl Drop for VulkanCommandPool {
@@ -55,12 +88,12 @@ impl Drop for VulkanCommandPool {
 impl VulkanCommandPool {
     pub fn new(ctx: &VulkanCtxRef, queue_family_idx: u32, pool_flags: vk::CommandPoolCreateFlags) -> HellResult<Self> {
         let pool = create_pool(&ctx.device.device, queue_family_idx, pool_flags)?;
-        let buffers = create_buffers(pool, &ctx.device.device, config::FRAMES_IN_FLIGHT as u32)?;
+        let buffers = Self::create_multiple_buffers(ctx, pool, config::FRAMES_IN_FLIGHT as u32)?;
 
         Ok(Self {
             ctx: ctx.clone(),
             pool,
-            cmd_buffers: buffers,
+            buffers,
         })
     }
 
@@ -72,8 +105,20 @@ impl VulkanCommandPool {
         VulkanCommandPool::new(ctx, ctx.device.queues.transfer.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER | vk::CommandPoolCreateFlags::TRANSIENT)
     }
 
-    pub fn get_buffer(&self, idx: usize) -> vk::CommandBuffer {
-        self.cmd_buffers[idx]
+    pub fn get_buffer(&self, idx: usize) -> VulkanCommandBuffer {
+        VulkanCommandBuffer::new(
+            &self.buffers[idx]
+        )
+    }
+
+    fn create_multiple_buffers(ctx: &VulkanCtxRef, pool: vk::CommandPool, count: u32) -> HellResult<Vec<vk::CommandBuffer>> {
+        let alloc_info = vk::CommandBufferAllocateInfo::builder()
+            .command_pool(pool)
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_buffer_count(count)
+            .build();
+
+        Ok(unsafe { ctx.device.device.allocate_command_buffers(&alloc_info) }?)
     }
 }
 
@@ -84,16 +129,6 @@ fn create_pool(device: &ash::Device, queue_family_idx: u32, flags: vk::CommandPo
         .build();
 
     unsafe { device.create_command_pool(&pool_info, None).to_render_hell_err() }
-}
-
-fn create_buffers(pool: vk::CommandPool, device: &ash::Device, buffer_count: u32) -> HellResult<Vec<vk::CommandBuffer>> {
-    let alloc_info = vk::CommandBufferAllocateInfo::builder()
-        .command_pool(pool)
-        .level(vk::CommandBufferLevel::PRIMARY)
-        .command_buffer_count(buffer_count)
-        .build();
-
-    unsafe { device.allocate_command_buffers(&alloc_info).to_render_hell_err() }
 }
 
 
@@ -111,7 +146,7 @@ impl VulkanCommandPool {
         let cmd_buffer = unsafe {
             device.allocate_command_buffers(&alloc_info)
                 .expect("failed to create single-time-command-buffer")
-                [0]
+            [0]
         };
 
         let begin_info = vk::CommandBufferBeginInfo {
@@ -166,7 +201,7 @@ impl VulkanCommandPool {
 impl VulkanCommandPool {
     pub fn reset_cmd_buffer(&self, device: &ash::Device, idx: usize) -> HellResult<()> {
         unsafe {
-            device.reset_command_buffer(self.cmd_buffers[idx], vk::CommandBufferResetFlags::empty()).to_render_hell_err()
+            device.reset_command_buffer(self.buffers[idx], vk::CommandBufferResetFlags::empty()).to_render_hell_err()
         }
     }
 

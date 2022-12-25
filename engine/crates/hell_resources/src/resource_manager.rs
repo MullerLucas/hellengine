@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-use hell_core::config;
 use hell_error::{HellErrorKind, HellError, HellResult};
 
 use crate::resources::{TextureResource, MaterialResource};
@@ -15,6 +14,12 @@ use crate::resources::{TextureResource, MaterialResource};
 pub struct ResourceGroup<T> {
     pub paths: Vec<String>,
     pub resources: Vec<T>,
+}
+
+impl<T> Default for ResourceGroup<T> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<T> ResourceGroup<T> {
@@ -44,6 +49,11 @@ impl<T> ResourceGroup<T> {
         self.index_of(path)
             .and_then(|i| self.get_at(i))
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
 
     pub fn len(&self) -> usize {
         self.paths.len()
@@ -144,7 +154,7 @@ impl ResourceManager {
         let imgs_to_load: Vec<String> = self.materials.resources
             .iter()
             .flat_map(|m| {
-                let t: Vec<String> = m.textures.iter().map(|(_, v)| v.path.clone()).collect();
+                let t: Vec<String> = m.textures.values().map(|v| v.path.clone()).collect();
                 t
             })
             .collect();
