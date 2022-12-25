@@ -206,7 +206,7 @@ impl VulkanRenderPassData {
         self.world_depth_img = DepthImage::new(ctx, swapchain, cmds)?;
         self.world_framebuffer = VulkanFramebuffer::new_world_buffer(&ctx, swapchain, &self.world_render_pass, &self.world_depth_img)?;
 
-        self.ui_framebuffer = VulkanFramebuffer::new_ui_buffer(&ctx, swapchain, &self.world_render_pass)?;
+        self.ui_framebuffer = VulkanFramebuffer::new_ui_buffer(&ctx, swapchain, &self.ui_render_pass)?;
 
         Ok(())
     }

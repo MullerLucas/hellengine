@@ -128,7 +128,7 @@ impl VulkanSpriteShader {
         // pipeline
         // --------
         let shader = VulkanShader::from_file(ctx, shader_path)?;
-        let pipeline = VulkanPipeline::new(ctx, swapchain, shader, render_pass_data, &desc_layouts, true)?;
+        let pipeline = VulkanPipeline::new(ctx, swapchain, shader, render_pass_data, &desc_layouts, true, false)?;
 
         Ok(Self {
             ctx: ctx.clone(),

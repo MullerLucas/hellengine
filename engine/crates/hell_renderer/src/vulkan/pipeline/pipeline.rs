@@ -1,6 +1,6 @@
 use ash::vk;
 use hell_error::{HellResult, HellError, HellErrorKind};
-use crate::vulkan::{VulkanRenderPassData, Vertex, VulkanSwapchain, VulkanCtxRef};
+use crate::vulkan::{VulkanRenderPassData, Vertex, VulkanCtxRef, VulkanSwapchain};
 use super::{shader::VulkanShader, shader_data::MeshPushConstants};
 
 
@@ -30,7 +30,7 @@ impl Drop for VulkanPipeline {
 }
 
 impl VulkanPipeline {
-    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout], depth_test_enabled: bool) -> HellResult<Self> {
+    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout], depth_test_enabled: bool, is_wireframe: bool) -> HellResult<Self> {
         let device = &ctx.device.device;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 
@@ -56,16 +56,13 @@ impl VulkanPipeline {
             .primitive_restart_enable(false)
             .build();
 
-        // viewport
-        // --------
-        let viewport_state_info = swapchain.create_pipeline_viewport_data();
-
         // rasterizer
         // ----------
+        let polygin_mode = if is_wireframe { vk::PolygonMode::LINE } else { vk::PolygonMode::FILL };
         let rasterization_info = vk::PipelineRasterizationStateCreateInfo::builder()
             .depth_clamp_enable(false) // clamp fragments that are beyond the near- and far-plane to them
             .rasterizer_discard_enable(false) // prevetns geometry to pass through te rasterizer stage
-            .polygon_mode(vk::PolygonMode::FILL)
+            .polygon_mode(polygin_mode)
             .cull_mode(vk::CullModeFlags::BACK)
             .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
             .depth_bias_enable(false)
@@ -132,6 +129,24 @@ impl VulkanPipeline {
                 .build()
         ];
 
+
+        // dyn-state
+        // ---------
+        let dyn_states = [
+            vk::DynamicState::VIEWPORT,
+            vk::DynamicState::SCISSOR,
+            // vk::DynamicState::LINE_WIDTH,
+        ];
+        let dyn_state_create_info = vk::PipelineDynamicStateCreateInfo::builder()
+            .dynamic_states(&dyn_states)
+            .build();
+
+        // viewport
+        // --------
+        // NOTE: even though we are using dyn-state, we still have to set the initial viewport state
+        let viewport_state_info = swapchain.create_pipeline_viewport_data();
+
+
         // pipeline layout
         // ---------------
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder()
@@ -147,7 +162,6 @@ impl VulkanPipeline {
             .stages(shader_stages)
             .vertex_input_state(&vertex_input_info)
             .input_assembly_state(&input_assembly)
-            .viewport_state(&viewport_state_info)
             .rasterization_state(&rasterization_info)
             .multisample_state(&multisample_state_info)
             .color_blend_state(&color_blend_info)
@@ -155,7 +169,9 @@ impl VulkanPipeline {
             .render_pass(render_pass_data.world_render_pass.handle)
             .subpass(0)
             .base_pipeline_handle(vk::Pipeline::null())
-            .base_pipeline_index(-1);
+            .base_pipeline_index(-1)
+            .viewport_state(&viewport_state_info)
+            .dynamic_state(&dyn_state_create_info);
         if depth_test_enabled {
             pipeline_info = pipeline_info.depth_stencil_state(&depth_stencil_info);
         }

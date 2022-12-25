@@ -158,9 +158,8 @@ impl VulkanBackend {
     pub fn recreate_swapchain(&mut self, window_extent: HellWindowExtent) -> HellResult<()> {
         println!("> recreating swapchain...");
 
-        // self.swapchain.drop_manual(&self.ctx.device.device);
-        let swapchain_new = VulkanSwapchain::new(&self.ctx, window_extent)?;
-        self.swapchain = swapchain_new;
+        self.swapchain.drop_manual();
+        self.swapchain = VulkanSwapchain::new(&self.ctx, window_extent)?;
 
         Ok(())
     }
@@ -247,6 +246,7 @@ impl VulkanBackend {
         Ok(())
     }
 
+
     pub fn draw_frame(&mut self, _delta_time: f32, world_render_data: &RenderData, resources: &ResourceManager) -> HellResult<bool> {
         let device = &self.ctx.device.device;
 
@@ -296,6 +296,11 @@ impl VulkanBackend {
         let cmd_buffer = self.frame_data.get_cmd_buffer(self.frame_idx)?;
 
         unsafe { device.begin_command_buffer(cmd_buffer, &begin_info)?; }
+
+        let viewport = &self.swapchain.viewport;
+        unsafe { device.cmd_set_viewport(cmd_buffer, 0, viewport); }
+        let scissor = &self.swapchain.sissor;
+        unsafe { device.cmd_set_scissor(cmd_buffer, 0, scissor); }
 
         // world render pass
         self.begin_render_pass(BultinRenderPassType::World, cmd_buffer, swap_img_idx);

@@ -131,10 +131,20 @@ pub struct VulkanSwapchain {
 
     pub viewport: [vk::Viewport; 1],
     pub sissor: [vk::Rect2D; 1],
+
+    was_dropped: bool,
 }
 
 impl Drop for VulkanSwapchain {
     fn drop(&mut self) {
+        if !self.was_dropped {
+            self.drop_manual();
+        }
+    }
+}
+
+impl VulkanSwapchain {
+    pub fn drop_manual(&mut self) {
         println!("> dropping Swapchain...");
 
         unsafe {
@@ -145,6 +155,8 @@ impl Drop for VulkanSwapchain {
             // cleans up all swapchain images
             self.swapchain_loader.destroy_swapchain(self.vk_swapchain, None);
         }
+
+        self.was_dropped = true;
     }
 }
 
@@ -179,7 +191,7 @@ impl VulkanSwapchain {
             .build();
 
         let swapchain_loader = ash::extensions::khr::Swapchain::new(&ctx.instance.instance, &ctx.device.device);
-        let swapchain = unsafe { swapchain_loader .create_swapchain(&create_info, None) .expect("failed to create swapchain") };
+        let swapchain = unsafe { swapchain_loader.create_swapchain(&create_info, None).expect("failed to create swapchain") };
 
         let imgs = unsafe { swapchain_loader.get_swapchain_images(swapchain).to_render_hell_err()? };
         let views = image::create_img_views(&ctx.device.device, &imgs, surface_format.format, vk::ImageAspectFlags::COLOR);
@@ -219,6 +231,8 @@ impl VulkanSwapchain {
 
             viewport,
             sissor,
+
+            was_dropped: false,
         })
     }
 }
