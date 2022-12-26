@@ -4,21 +4,23 @@ use ash::vk;
 use hell_error::HellResult;
 use crate::error::{err_invalid_frame_idx, err_invalid_set_idx};
 
-use crate::render_data::{SceneData, ObjectData};
+use crate::shared::shader::sprite_shader::{SpriteShaderGlobalUniformObject, SpriteShaderSceneData, SpriteShaderObjectData};
 use crate::vulkan::pipeline::VulkanPipeline;
-use crate::vulkan::primitives::{VulkanImage, VulkanBuffer, VulkanSampler, VulkanSwapchain, VulkanDescriptorSetGroup, VulkanRenderPassData};
+use crate::vulkan::pipeline::shader_data::calculate_aligned_size;
+use crate::vulkan::primitives::{VulkanImage, VulkanBuffer, VulkanSampler, VulkanSwapchain, VulkanDescriptorSet, VulkanRenderPassData};
 use crate::vulkan::VulkanContextRef;
-use crate::{vulkan::{pipeline::{VulkanShader, shader_data::VulkanUboData}, VulkanContext}, render_data::GlobalUniformObject, shared::collections::PerFrame};
+use crate::{vulkan::{pipeline::VulkanShader, VulkanContext}, shared::collections::PerFrame};
 use hell_core::config;
 
 
 
 
+const SPRITE_SHADER_DESCRIPTOR_SET_COUNT: usize = 3;
 pub struct VulkanSpriteShader {
     ctx: VulkanContextRef,
 
     // data
-    pub global_uo: GlobalUniformObject,
+    pub global_uo: SpriteShaderGlobalUniformObject,
     pub global_ubos: PerFrame<VulkanBuffer>,
     pub scene_ubo: VulkanBuffer, // one ubo for all frames
     pub object_ubos: PerFrame<VulkanBuffer>,
@@ -28,10 +30,10 @@ pub struct VulkanSpriteShader {
 
     // descriptor sets
     pub desc_set_pool: vk::DescriptorPool,
-    pub global_desc_group: VulkanDescriptorSetGroup,
-    pub object_desc_group: VulkanDescriptorSetGroup,
-    pub material_desc_group: VulkanDescriptorSetGroup,
-    desc_layouts: [vk::DescriptorSetLayout; 3],
+    pub global_desc_group: VulkanDescriptorSet,
+    pub object_desc_group: VulkanDescriptorSet,
+    pub material_desc_group: VulkanDescriptorSet,
+    desc_layouts: [vk::DescriptorSetLayout; SPRITE_SHADER_DESCRIPTOR_SET_COUNT],
 
     // pipeline
     pub pipeline: VulkanPipeline,
@@ -54,17 +56,17 @@ impl VulkanSpriteShader {
 
         // global uniform
         // --------------
-        let global_uo = GlobalUniformObject::default();
-        let global_ubos = array::from_fn(|_| VulkanBuffer::from_uniform(ctx, GlobalUniformObject::device_size()));
+        let global_uo = SpriteShaderGlobalUniformObject::default();
+        let global_ubos = array::from_fn(|_| VulkanBuffer::from_uniform(ctx, SpriteShaderGlobalUniformObject::device_size()));
 
         // scene uniform
         // --------------
-        let scene_ubo_size = SceneData::total_size(ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment, config::FRAMES_IN_FLIGHT as u64);
+        let scene_ubo_size = SpriteShaderSceneData::total_size(ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment, config::FRAMES_IN_FLIGHT as u64);
         let scene_ubo = VulkanBuffer::from_uniform(ctx, scene_ubo_size);
 
         // object uniform
         // --------------
-        let object_ubos = array::from_fn(|_| VulkanBuffer::from_storage(ctx, ObjectData::total_size()));
+        let object_ubos = array::from_fn(|_| VulkanBuffer::from_storage(ctx, SpriteShaderObjectData::total_size()));
 
         // texture data
         // ------------
@@ -81,22 +83,24 @@ impl VulkanSpriteShader {
             // Object
             vk::DescriptorPoolSize::builder()
                 .ty(vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC)
-                .descriptor_count(config::DYNAMIC_UNIFORM_DESCRIPTOR_COUNT)
+                // when using arrays of data -> defines number of elements
+                .descriptor_count(config::FRAMES_IN_FLIGHT as u32)
                 .build(),
             // Object
             vk::DescriptorPoolSize::builder()
-                .ty(vk::DescriptorType::STORAGE_BUFFER)
-                .descriptor_count(config::DYNAMIC_STORAGE_DESCRIPTOR_COUNT)
+                .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(config::FRAMES_IN_FLIGHT as u32)
                 .build(),
             // Texture
             vk::DescriptorPoolSize::builder()
                 .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .descriptor_count(config::TEXTURE_DESCRIPTOR_COUNT)
+                .descriptor_count(config::FRAMES_IN_FLIGHT as u32)
                 .build()
         ];
 
         let pool_info = vk::DescriptorPoolCreateInfo::builder()
             .pool_sizes(&pool_sizes)
+            // maximum number of descriptor sets that may be allocated
             .max_sets(config::MAX_DESCRIPTOR_SET_COUNT)
             .build();
 
@@ -104,15 +108,15 @@ impl VulkanSpriteShader {
 
         // descirptor set groups
         // ---------------------
-        let mut global_desc_group = VulkanDescriptorSetGroup::new_global_group(ctx, device)?;
-        let _ = Self::add_global_descriptor_sets(device, desc_set_pool, &mut global_desc_group, &global_ubos, &scene_ubo, config::FRAMES_IN_FLIGHT)?;
+        let mut global_desc_group = new_global_group(ctx, device, 1)?;
+        let _ = Self::create_global_descriptor_sets(ctx, desc_set_pool, &mut global_desc_group, &global_ubos, &scene_ubo)?;
 
-        let mut object_desc_group = VulkanDescriptorSetGroup::new_object_group(ctx, device)?;
-        let _ = Self::add_object_descriptor_set(device, desc_set_pool, &mut object_desc_group, &object_ubos, config::FRAMES_IN_FLIGHT)?;
+        let mut object_desc_group = new_object_group(ctx, device, 1)?;
+        let _ = Self::add_object_descriptor_set(ctx, desc_set_pool, &mut object_desc_group, &object_ubos)?;
 
-        let mut material_desc_group = VulkanDescriptorSetGroup::new_material_group(ctx, device)?;
+        let mut material_desc_group = new_material_group(ctx, device, textures.len())?;
         for tex in &textures {
-            let _ = Self::add_material_descriptor_sets(device, desc_set_pool, &mut material_desc_group, tex, &sampler)?;
+            let _ = Self::add_material_descriptor_sets(ctx, desc_set_pool, &mut material_desc_group, tex, &sampler)?;
         }
 
         let desc_layouts = [
@@ -148,7 +152,7 @@ impl VulkanSpriteShader {
         })
     }
 
-    pub fn update_global_uo(&mut self, global_uo: GlobalUniformObject, core: &VulkanContext, frame_idx: usize) -> HellResult<()> {
+    pub fn update_global_uo(&mut self, global_uo: SpriteShaderGlobalUniformObject, core: &VulkanContext, frame_idx: usize) -> HellResult<()> {
         self.global_uo = global_uo;
 
         let buffer = &self.global_ubos[frame_idx];
@@ -156,7 +160,6 @@ impl VulkanSpriteShader {
 
         Ok(())
     }
-
 }
 
 impl VulkanSpriteShader {
@@ -166,7 +169,7 @@ impl VulkanSpriteShader {
 
     pub fn get_global_set(&self, set_idx: usize, frame_idx: usize) -> HellResult<vk::DescriptorSet> {
         Ok(
-            *self.global_desc_group.sets
+            *self.global_desc_group.handles
                 .get(set_idx).ok_or_else(|| err_invalid_set_idx(frame_idx))?
                 .get(frame_idx).ok_or_else(|| err_invalid_frame_idx(frame_idx))?
         )
@@ -174,34 +177,24 @@ impl VulkanSpriteShader {
 
     pub fn get_object_set(&self, set_idx: usize, frame_idx: usize) -> HellResult<vk::DescriptorSet> {
         Ok(
-            *self.object_desc_group.sets
+            *self.object_desc_group.handles
                 .get(set_idx).ok_or_else(|| err_invalid_set_idx(frame_idx))?
                 .get(frame_idx).ok_or_else(|| err_invalid_frame_idx(frame_idx))?
         )
     }
 
-    pub fn get_material_set(&self, set_idx: usize) -> HellResult<vk::DescriptorSet> {
+    pub fn get_material_set(&self, set_idx: usize, frame_idx: usize) -> HellResult<vk::DescriptorSet> {
         Ok(
-            *self.material_desc_group.sets
+            *self.material_desc_group.handles
                 .get(set_idx).ok_or_else(|| err_invalid_set_idx(set_idx))?
-                .get(0).ok_or_else(|| err_invalid_frame_idx(0))?
+                .get(frame_idx).ok_or_else(|| err_invalid_frame_idx(0))?
         )
     }
 }
 
-
 impl VulkanSpriteShader {
-    pub fn add_global_descriptor_sets(device: &ash::Device, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSetGroup, camera_ubos: &[VulkanBuffer], scene_ubo: &VulkanBuffer, frames_in_flight: usize) -> HellResult<usize> {
-        let layouts = vec![group.layout; frames_in_flight];
-
-        // create sets
-        // -----------
-        let alloc_info = vk::DescriptorSetAllocateInfo::builder()
-            .descriptor_pool(pool)
-            .set_layouts(&layouts)
-            .build();
-
-        let sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
+    pub fn create_global_descriptor_sets(ctx: &VulkanContextRef, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSet, camera_ubos: &[VulkanBuffer], scene_ubo: &VulkanBuffer) -> HellResult<usize> {
+        let sets = VulkanDescriptorSet::allocate_sets_for_layout(ctx, group.layout, pool)?;
 
         // write sets
         // ----------
@@ -210,7 +203,7 @@ impl VulkanSpriteShader {
                 vk::DescriptorBufferInfo::builder()
                     .buffer(camera_ubos[idx].buffer)
                     .offset(0)
-                    .range(GlobalUniformObject::device_size())
+                    .range(SpriteShaderGlobalUniformObject::device_size())
                     .build()
             ];
 
@@ -220,7 +213,7 @@ impl VulkanSpriteShader {
                     .buffer(scene_ubo.buffer)
                     .offset(0)
                     // .offset(SceneData::padded_device_size(min_ubo_alignment) * idx as u64) // hard coded offset -> for non-dynamic buffer
-                    .range(SceneData::device_size())
+                    .range(SpriteShaderSceneData::device_size())
                     .build()
             ];
 
@@ -241,33 +234,24 @@ impl VulkanSpriteShader {
                     .build()
             ];
 
-            unsafe {
-                device.update_descriptor_sets(&write_descriptors, &[]);
-            }
+            unsafe { ctx.device.handle.update_descriptor_sets(&write_descriptors, &[]); }
         }
 
-        group.sets.push(sets);
-
-        let set_idx = group.set_count() - 1;
-        Ok(set_idx)
+        // convert Vec to PerFrame and push
+        let sets: PerFrame<vk::DescriptorSet> = array::from_fn(|idx| sets[idx]);
+        group.handles.push(sets);
+        Ok(group.handles.len() - 1)
     }
 
-    pub fn add_object_descriptor_set(device: &ash::Device, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSetGroup,  object_ubos: &[VulkanBuffer], descriptor_count: usize) -> HellResult<usize> {
-        let layouts = vec![group.layout; descriptor_count];
-
-        let alloc_info = vk::DescriptorSetAllocateInfo::builder()
-            .descriptor_pool(pool)
-            .set_layouts(&layouts)
-            .build();
-
-        let sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
+    pub fn add_object_descriptor_set(ctx: &VulkanContextRef, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSet,  object_ubos: &[VulkanBuffer]) -> HellResult<usize> {
+        let sets = VulkanDescriptorSet::allocate_sets_for_layout(ctx, group.layout, pool)?;
 
         for (idx, s) in sets.iter().enumerate() {
             let object_infos = [
                 vk::DescriptorBufferInfo::builder()
                     .buffer(object_ubos[idx].buffer)
                     .offset(0)
-                    .range(ObjectData::total_size())
+                    .range(SpriteShaderObjectData::total_size())
                     .build()
             ];
 
@@ -281,27 +265,17 @@ impl VulkanSpriteShader {
                     .build()
             ];
 
-            unsafe {
-                device.update_descriptor_sets(&write_descriptors, &[]);
-            }
+            unsafe { ctx.device.handle.update_descriptor_sets(&write_descriptors, &[]); }
         }
 
-        group.sets.push(sets);
-        let set_idx = group.set_count() - 1;
-
-        Ok(set_idx)
+        let sets: PerFrame<vk::DescriptorSet> = array::from_fn(|idx| sets[idx]);
+        group.handles.push(sets);
+        Ok(group.handles.len() - 1)
     }
 
-    pub fn add_material_descriptor_sets(device: &ash::Device, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSetGroup, texture: &VulkanImage, sampler: &VulkanSampler) -> HellResult<usize> {
-        // one set for all frames
-        let layouts = vec![group.layout];
-
-        let alloc_info = vk::DescriptorSetAllocateInfo::builder()
-            .descriptor_pool(pool)
-            .set_layouts(&layouts)
-            .build();
-
-        let sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
+    pub fn add_material_descriptor_sets(ctx: &VulkanContextRef, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSet, texture: &VulkanImage, sampler: &VulkanSampler) -> HellResult<usize> {
+        // TODO: check - can we use one set for all frames?
+        let sets = VulkanDescriptorSet::allocate_sets_for_layout(ctx, group.layout, pool)?;
 
         for (_, s) in sets.iter().enumerate() {
             let image_infos = [
@@ -322,15 +296,13 @@ impl VulkanSpriteShader {
                     .build()
             ];
 
-            unsafe {
-                device.update_descriptor_sets(&write_descriptors, &[]);
-            }
+            unsafe { ctx.device.handle.update_descriptor_sets(&write_descriptors, &[]); }
         }
 
-        group.sets.push(sets);
+        let sets: PerFrame<vk::DescriptorSet> = array::from_fn(|idx| sets[idx]);
+        group.handles.push(sets);
 
-        let set_idx = group.set_count() - 1;
-        Ok(set_idx)
+        Ok(group.handles.len() - 1)
     }
 }
 
@@ -346,4 +318,114 @@ impl VulkanSpriteShader {
     pub fn get_object_buffer(&self, frame_idx: usize) -> &VulkanBuffer {
         &self.object_ubos[frame_idx]
     }
+}
+
+
+// ----------------------------------------------------------------------------
+// ubos
+// ----------------------------------------------------------------------------
+
+pub trait VulkanUboData {
+    fn device_size() -> vk::DeviceSize;
+
+    fn padded_device_size(min_ubo_alignment: u64) -> vk::DeviceSize {
+        calculate_aligned_size(min_ubo_alignment, Self::device_size())
+    }
+}
+
+// ----------------------------------------------
+
+impl VulkanUboData for SpriteShaderGlobalUniformObject {
+    fn device_size() -> vk::DeviceSize {
+        std::mem::size_of::<Self>() as vk::DeviceSize
+    }
+}
+
+// ----------------------------------------------
+
+impl VulkanUboData for SpriteShaderSceneData {
+    fn device_size() -> vk::DeviceSize {
+        std::mem::size_of::<Self>() as vk::DeviceSize
+    }
+}
+
+impl SpriteShaderSceneData {
+    pub fn total_size(min_ubo_alignment: u64, frame_count: u64) -> vk::DeviceSize {
+        Self::padded_device_size(min_ubo_alignment) * frame_count
+    }
+}
+
+// ----------------------------------------------
+
+impl VulkanUboData for SpriteShaderObjectData {
+    fn device_size() -> vk::DeviceSize {
+        std::mem::size_of::<Self>() as vk::DeviceSize
+    }
+}
+
+impl SpriteShaderObjectData {
+    pub fn total_size() -> vk::DeviceSize {
+        (Self::device_size() *  Self::MAX_OBJ_COUNT) as vk::DeviceSize
+    }
+}
+
+
+// ----------------------------------------------------------------------------
+// descriptor sets
+// ----------------------------------------------------------------------------
+
+fn new_global_group(ctx: &VulkanContextRef, device: &ash::Device, capacity: usize) -> HellResult<VulkanDescriptorSet> {
+    let bindings = [
+        // Global-Uniform
+        vk::DescriptorSetLayoutBinding::builder()
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            // number of elements in array
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::VERTEX)
+            .build(),
+        // Scene-Data
+        vk::DescriptorSetLayoutBinding::builder()
+            .binding(1)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
+            .build()
+    ];
+
+    let layout = VulkanDescriptorSet::create_descriptor_set_layout(device, &bindings)?;
+
+    Ok(VulkanDescriptorSet::new(ctx, layout, capacity))
+}
+
+fn new_object_group(ctx: &VulkanContextRef, device: &ash::Device, capacity: usize) -> HellResult<VulkanDescriptorSet> {
+    let bindings = [
+        // Per-Object-Data
+        vk::DescriptorSetLayoutBinding::builder()
+            .binding(0)
+            .descriptor_count(1)
+            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+            .stage_flags(vk::ShaderStageFlags::VERTEX)
+            .build()
+    ];
+
+    let layout = VulkanDescriptorSet::create_descriptor_set_layout(device, &bindings)?;
+
+    Ok(VulkanDescriptorSet::new(ctx, layout, capacity))
+}
+
+fn new_material_group(ctx: &VulkanContextRef, device: &ash::Device, capacity: usize) -> HellResult<VulkanDescriptorSet> {
+    let bindings = [
+        // texture_sampler
+        vk::DescriptorSetLayoutBinding::builder()
+            .binding(0)
+            .descriptor_count(1)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+            .build()
+    ];
+
+    let layout = VulkanDescriptorSet::create_descriptor_set_layout(device, &bindings)?;
+
+    Ok(VulkanDescriptorSet::new(ctx, layout, capacity))
 }

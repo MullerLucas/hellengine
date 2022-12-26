@@ -2,7 +2,7 @@ use ash::prelude::VkResult;
 use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
 
-use crate::vulkan::{VulkanContextRef, Vertex, pipeline::shader_data::VulkanUboData};
+use crate::vulkan::{VulkanContextRef, Vertex3D, shader::VulkanUboData};
 
 use super::{VulkanCommands, VulkanCommandPool};
 
@@ -86,7 +86,7 @@ impl VulkanBuffer {
         }
     }
 
-    pub fn from_vertices(ctx: &VulkanContextRef, cmds: &VulkanCommands, vertices: &[Vertex]) -> HellResult<Self> {
+    pub fn from_vertices(ctx: &VulkanContextRef, cmds: &VulkanCommands, vertices: &[Vertex3D]) -> HellResult<Self> {
         let device = &ctx.device.handle;
 
         let buffer_size = std::mem::size_of_val(vertices) as vk::DeviceSize;
@@ -102,7 +102,7 @@ impl VulkanBuffer {
         );
 
         unsafe {
-            let mem_ptr = device.map_memory(staging_buffer.mem, 0, buffer_size, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut Vertex;
+            let mem_ptr = device.map_memory(staging_buffer.mem, 0, buffer_size, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut Vertex3D;
             mem_ptr.copy_from_nonoverlapping(vertices.as_ptr(), vertices.len());
             device.unmap_memory(staging_buffer.mem);
         }

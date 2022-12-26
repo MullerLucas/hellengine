@@ -2,7 +2,7 @@ use hell_common::window::{HellWindow, HellWindowExtent};
 use hell_core::config;
 use hell_error::HellResult;
 use hell_input::InputManager;
-use hell_renderer::render_data::SceneData;
+use hell_renderer::shader::sprite_shader::SpriteShaderSceneData;
 use hell_renderer::{HellRenderer, HellRendererInfo};
 use hell_renderer::vulkan::RenderData;
 use hell_resources::ResourceManager;
@@ -15,8 +15,8 @@ use hell_resources::ResourceManager;
 // ----------------------------------------------------------------------------
 
 pub trait HellGame {
-    fn scene_data(&self) -> &SceneData;
-    fn scene_data_mut(&mut self) -> &mut SceneData;
+    fn scene_data(&self) -> &SpriteShaderSceneData;
+    fn scene_data_mut(&mut self) -> &mut SpriteShaderSceneData;
     fn render_data(&self) -> &RenderData;
     fn render_data_mut(&mut self) -> &mut RenderData;
 

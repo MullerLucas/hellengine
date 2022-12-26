@@ -5,7 +5,7 @@ use hell_error::HellResult;
 use hell_resources::ResourceManager;
 
 use crate::render_data::TmpCamera;
-use crate::shared::render_data::SceneData;
+use crate::shared::shader::sprite_shader::SpriteShaderSceneData;
 use crate::vulkan::primitives::VulkanSwapchain;
 use crate::vulkan::{VulkanBackend, VulkanContext, VulkanFrameData, RenderData};
 
@@ -66,7 +66,7 @@ impl HellRenderer {
         Ok(())
     }
 
-    pub fn draw_frame(&mut self, delta_time: f32, scene_data: &SceneData, world_render_data: &RenderData, resources: &ResourceManager) -> HellResult<bool> {
+    pub fn draw_frame(&mut self, delta_time: f32, scene_data: &SpriteShaderSceneData, world_render_data: &RenderData, resources: &ResourceManager) -> HellResult<bool> {
         self.backend.update_global_state(self.camera.clone())?;
         self.backend.update_scene_buffer(scene_data)?;
         self.backend.update_object_buffer(world_render_data)?;

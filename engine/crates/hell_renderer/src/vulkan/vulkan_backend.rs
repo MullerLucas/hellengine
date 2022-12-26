@@ -2,113 +2,22 @@ use std::collections::{HashMap, HashSet};
 
 use ash::vk;
 use hell_collections::DynArray;
-use hell_common::transform::Transform;
 use hell_common::window::HellWindowExtent;
 use hell_error::{HellResult, HellError, HellErrorKind, OptToHellErr, ErrToHellErr};
 use hell_resources::{ResourceManager, ResourceHandle};
-use crate::render_data::{SceneData, ObjectData, GlobalUniformObject, TmpCamera};
+use crate::render_data::TmpCamera;
+use crate::shared::shader::sprite_shader::{SpriteShaderSceneData, SpriteShaderGlobalUniformObject, SpriteShaderObjectData};
 use crate::vulkan::primitives::RenderPassClearFlags;
 
-use super::VulkanContextRef;
+use super::{VulkanContextRef, RenderData};
 use super::primitives::{VulkanImage, VulkanSwapchain, VulkanCommands, VulkanCommandBuffer, VulkanRenderPassData, BultinRenderPassType};
 use super::frame::VulkanFrameData;
-use super::pipeline::shader_data::{VulkanUboData, VulkanMesh, MeshPushConstants};
-use super::shader::VulkanSpriteShader;
+use super::pipeline::shader_data::{MeshPushConstants, VulkanWorldMesh, VulkanUiMesh};
+use super::shader::{VulkanSpriteShader, VulkanUboData};
 use hell_core::config;
 
 
 
-
-
-
-
-// ----------------------------------------------------------------------------
-// render data chunk
-// ----------------------------------------------------------------------------
-
-pub struct RenderDataChunk<'a> {
-    pub mesh_idx: usize,
-    pub transform: &'a Transform,
-    pub material: ResourceHandle,
-}
-
-
-
-// ----------------------------------------------------------------------------
-// render data
-// ----------------------------------------------------------------------------
-
-#[derive(Debug, Default)]
-pub struct RenderData {
-    pub meshes: Vec<usize>,
-    pub transforms: Vec<Transform>,
-    pub materials: Vec<ResourceHandle>,
-}
-
-impl RenderData {
-    pub fn data_count(&self) -> usize {
-        self.meshes.len()
-    }
-
-    pub fn add_data(&mut self, mesh_idx: usize, material: ResourceHandle, trans: Transform) -> usize {
-        self.meshes.push(mesh_idx);
-        self.transforms.push(trans);
-        self.materials.push(material);
-
-        self.data_count()
-    }
-
-    pub fn data_at(&self, idx: usize) -> RenderDataChunk {
-        RenderDataChunk {
-            mesh_idx: self.meshes[idx],
-            transform: &self.transforms[idx],
-            material: self.materials[idx]
-        }
-    }
-}
-
-impl RenderData {
-    pub fn iter(&self) -> RenderDataIter {
-        self.into_iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a RenderData {
-    type Item = RenderDataChunk<'a>;
-    type IntoIter = RenderDataIter<'a>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        RenderDataIter::new(self)
-    }
-}
-
-pub struct RenderDataIter<'a> {
-    idx: usize,
-    render_data: &'a RenderData,
-}
-
-impl<'a> RenderDataIter<'a> {
-    pub fn new(render_data: &'a RenderData) -> RenderDataIter<'a> {
-        Self {
-            idx: 0,
-            render_data,
-        }
-    }
-}
-
-impl<'a> Iterator for RenderDataIter<'a> {
-    type Item = RenderDataChunk<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.render_data.data_count() > self.idx {
-            let result = Some(self.render_data.data_at(self.idx));
-            self.idx += 1;
-            result
-        } else {
-            None
-        }
-    }
-}
 
 
 
@@ -123,7 +32,8 @@ pub struct VulkanBackend {
     pub curr_swap_idx: usize,
 
     pub cmd_pools: VulkanCommands,
-    pub meshes: Vec<VulkanMesh>,
+    pub world_meshes: Vec<VulkanWorldMesh>,
+    pub ui_meshes: Vec<VulkanUiMesh>,
     pub swapchain: VulkanSwapchain,
     pub render_pass_data: VulkanRenderPassData,
     pub shaders: HashMap<String, VulkanSpriteShader>,
@@ -134,8 +44,12 @@ impl VulkanBackend {
     pub fn new(ctx: VulkanContextRef, swapchain: VulkanSwapchain) -> HellResult<Self> {
         let frame_data = VulkanFrameData::new(&ctx)?;
         let cmds = VulkanCommands::new(&ctx)?;
-        let quad_mesh = VulkanMesh::new_quad(&ctx, &cmds)?;
-        let meshes = vec![quad_mesh];
+
+        let quad_mesh_3d = VulkanWorldMesh::new_quad_3d(&ctx, &cmds)?;
+        let world_meshes = vec![quad_mesh_3d];
+        let quad_mesh_2d = VulkanUiMesh::new_quad_2d(&ctx, &cmds)?;
+        let ui_meshes = vec![quad_mesh_2d];
+
         let render_pass_data = VulkanRenderPassData::new(&ctx, &swapchain, &cmds)?;
         let shaders = HashMap::new();
 
@@ -144,7 +58,8 @@ impl VulkanBackend {
             frame_idx: 0,
             curr_swap_idx: usize::MAX,
             shaders,
-            meshes,
+            world_meshes,
+            ui_meshes,
             swapchain,
             render_pass_data,
             cmd_pools: cmds,
@@ -348,10 +263,9 @@ impl VulkanBackend {
 
             let mut curr_mat = resources.material_at(0).unwrap();
             let mut curr_shader = self.shaders.get(&curr_mat.shader).unwrap();
-            let mut curr_mesh = &self.meshes[0];
+            let mut curr_mesh = &self.world_meshes[0];
 
             let mut curr_shader_key: &str = "";
-
 
             // bind static descriptor sets once
             let descriptor_set = [
@@ -361,7 +275,7 @@ impl VulkanBackend {
 
             let min_ubo_alignment = self.ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
             let dynamic_descriptor_offsets = [
-                SceneData::padded_device_size(min_ubo_alignment) as u32 * self.frame_idx as u32,
+                SpriteShaderSceneData::padded_device_size(min_ubo_alignment) as u32 * self.frame_idx as u32,
             ];
 
             cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
@@ -374,7 +288,7 @@ impl VulkanBackend {
                     curr_mat = resources.material_at(curr_mat_handle.id).to_hell_err(HellErrorKind::RenderError)?;
 
                     // bind material descriptors
-                    let descriptor_set = [ curr_shader.get_material_set(rd.material.id)? ];
+                    let descriptor_set = [ curr_shader.get_material_set(rd.material.id, self.frame_idx)? ];
                     cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 2, &descriptor_set, &[]);
                 }
 
@@ -389,11 +303,11 @@ impl VulkanBackend {
                 // bind mesh
                 if curr_mesh_idx != rd.mesh_idx {
                     curr_mesh_idx = rd.mesh_idx;
-                    curr_mesh = &self.meshes[curr_mesh_idx];
+                    curr_mesh = &self.world_meshes[curr_mesh_idx];
 
                     let vertex_buffers = [curr_mesh.vertex_buffer.buffer];
                     cmd_buffer.cmd_bind_vertex_buffers(&self.ctx, 0, &vertex_buffers, &[0]);
-                    cmd_buffer.cmd_bind_index_buffer(&self.ctx, curr_mesh.index_buffer.buffer, 0, VulkanMesh::INDEX_TYPE);
+                    cmd_buffer.cmd_bind_index_buffer(&self.ctx, curr_mesh.index_buffer.buffer, 0, VulkanWorldMesh::INDEX_TYPE);
                 }
 
                 // bind push constants
@@ -418,7 +332,7 @@ impl VulkanBackend {
 
 impl VulkanBackend {
     pub fn update_global_state(&mut self, camera: TmpCamera) -> HellResult<()> {
-        let global_uo = GlobalUniformObject::new(camera.view, camera.proj, camera.view_proj);
+        let global_uo = SpriteShaderGlobalUniformObject::new(camera.view, camera.proj, camera.view_proj);
 
         for sh in &mut self.shaders.values_mut() {
             sh.update_global_uo(global_uo.clone(), &self.ctx, self.frame_idx)?;
@@ -427,7 +341,7 @@ impl VulkanBackend {
         Ok(())
     }
 
-    pub fn update_scene_buffer(&self, scene_data: &SceneData) -> HellResult<()> {
+    pub fn update_scene_buffer(&self, scene_data: &SpriteShaderSceneData) -> HellResult<()> {
         let min_ubo_alignment = self.ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
         for sh in self.shaders.values() {
             let buffer = sh.get_scene_buffer();
@@ -442,7 +356,7 @@ impl VulkanBackend {
             let buffer = sh.get_object_buffer(self.frame_idx);
 
             let object_data: Vec<_> = render_data.iter()
-                .map(|r| ObjectData {
+                .map(|r| SpriteShaderObjectData {
                     model: r.transform.create_model_mat()
                 })
                 .collect();

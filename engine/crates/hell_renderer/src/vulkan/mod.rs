@@ -11,11 +11,13 @@ pub use frame::VulkanFrameData;
 pub mod pipeline;
 
 mod vertext;
-pub use vertext::Vertex;
+pub use vertext::*;
 
 mod vulkan_backend;
-pub use vulkan_backend::{VulkanBackend, RenderData};
+pub use vulkan_backend::*;
+
+mod vulkan_data;
+pub use vulkan_data::*;
 
 pub mod shader;
-
 pub mod primitives;

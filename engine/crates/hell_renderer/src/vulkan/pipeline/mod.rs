@@ -6,7 +6,7 @@ pub mod shader_data;
 
 use ash::vk;
 use hell_error::{HellResult, HellError, HellErrorKind};
-use crate::vulkan::{Vertex, VulkanContextRef};
+use crate::vulkan::{Vertex3D, VulkanContextRef};
 
 use self::shader_data::MeshPushConstants;
 
@@ -51,8 +51,8 @@ impl VulkanPipeline {
 
         // vertices
         // --------
-        let vertex_binding_desc = [Vertex::get_binding_desc()];
-        let vertex_attr_desc = Vertex::get_attribute_desc();
+        let vertex_binding_desc = [Vertex3D::get_binding_desc()];
+        let vertex_attr_desc = Vertex3D::get_attribute_desc();
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
             .vertex_binding_descriptions(&vertex_binding_desc)
             .vertex_attribute_descriptions(&vertex_attr_desc)

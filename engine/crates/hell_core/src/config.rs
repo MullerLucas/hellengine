@@ -23,11 +23,9 @@ pub const FRAMES_IN_FLIGHT: usize = 3;
 use ash::vk;
 pub const FALLBACK_PRESENT_MODE: vk::PresentModeKHR = vk::PresentModeKHR::FIFO;
 
-pub const DYNAMIC_UNIFORM_DESCRIPTOR_COUNT: u32 = 10;
-pub const DYNAMIC_STORAGE_DESCRIPTOR_COUNT: u32 = 10;
-pub const TEXTURE_DESCRIPTOR_COUNT: u32 = 10;
-
-pub const MAX_DESCRIPTOR_SET_COUNT: u32 = 10;
+// TODO: think about values
+// maximum number of descriptor sets that may be allocated
+pub const MAX_DESCRIPTOR_SET_COUNT: u32 = 100;
 
 pub const ENABLE_SAMPLE_SHADING: bool = true;
 
