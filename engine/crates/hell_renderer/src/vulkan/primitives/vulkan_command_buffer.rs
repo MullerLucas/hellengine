@@ -1,8 +1,9 @@
 use std::ptr;
 use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
-use super::VulkanCtxRef;
 use hell_core::config;
+
+use crate::vulkan::VulkanContextRef;
 
 
 
@@ -16,7 +17,7 @@ pub struct VulkanCommands {
 }
 
 impl VulkanCommands {
-    pub fn new(ctx: &VulkanCtxRef) -> HellResult<Self> {
+    pub fn new(ctx: &VulkanContextRef) -> HellResult<Self> {
         let graphics_cmd_pool = VulkanCommandPool::default_for_graphics(ctx)?;
         let transfer_cmd_pool = VulkanCommandPool::default_for_transfer(ctx)?;
 
@@ -48,49 +49,49 @@ impl<'a> VulkanCommandBuffer<'a> {
         *self.handle
     }
 
-    pub fn begin_cmd_buffer(&self, ctx: &VulkanCtxRef, begin_info: vk::CommandBufferBeginInfo) -> HellResult<()> {
-        unsafe { ctx.device.device.begin_command_buffer(*self.handle, &begin_info)? }
+    pub fn begin_cmd_buffer(&self, ctx: &VulkanContextRef, begin_info: vk::CommandBufferBeginInfo) -> HellResult<()> {
+        unsafe { ctx.device.handle.begin_command_buffer(*self.handle, &begin_info)? }
         Ok(())
     }
 
-    pub fn cmd_set_viewport(&self, ctx: &VulkanCtxRef, first_viewport: u32, viewports: &[vk::Viewport]) {
-        unsafe { ctx.device.device.cmd_set_viewport(self.handle(), first_viewport, viewports); }
+    pub fn cmd_set_viewport(&self, ctx: &VulkanContextRef, first_viewport: u32, viewports: &[vk::Viewport]) {
+        unsafe { ctx.device.handle.cmd_set_viewport(self.handle(), first_viewport, viewports); }
     }
 
-    pub fn cmd_set_scissor(&self, ctx: &VulkanCtxRef, first_scissor: u32, scissors: &[vk::Rect2D]) {
-        unsafe { ctx.device.device.cmd_set_scissor(self.handle(), first_scissor, scissors); }
+    pub fn cmd_set_scissor(&self, ctx: &VulkanContextRef, first_scissor: u32, scissors: &[vk::Rect2D]) {
+        unsafe { ctx.device.handle.cmd_set_scissor(self.handle(), first_scissor, scissors); }
     }
 
-    pub fn cmd_begin_render_pass(&self, ctx: &VulkanCtxRef, create_info: &vk::RenderPassBeginInfo, contents: vk::SubpassContents) {
-        unsafe { ctx.device.device.cmd_begin_render_pass(self.handle(), create_info, contents); }
+    pub fn cmd_begin_render_pass(&self, ctx: &VulkanContextRef, create_info: &vk::RenderPassBeginInfo, contents: vk::SubpassContents) {
+        unsafe { ctx.device.handle.cmd_begin_render_pass(self.handle(), create_info, contents); }
     }
 
-    pub fn cmd_end_render_pass(&self, ctx: &VulkanCtxRef) {
-        unsafe { ctx.device.device.cmd_end_render_pass(self.handle()); }
+    pub fn cmd_end_render_pass(&self, ctx: &VulkanContextRef) {
+        unsafe { ctx.device.handle.cmd_end_render_pass(self.handle()); }
     }
 
-    pub fn cmd_bind_descriptor_sets(&self, ctx: &VulkanCtxRef, pipeline_bind_point: vk::PipelineBindPoint, layout: vk::PipelineLayout, first_set: u32, descriptor_sets: &[vk::DescriptorSet], dynamic_offsets: &[u32]) {
-        unsafe { ctx.device.device.cmd_bind_descriptor_sets(self.handle(), pipeline_bind_point, layout, first_set, descriptor_sets, dynamic_offsets); }
+    pub fn cmd_bind_descriptor_sets(&self, ctx: &VulkanContextRef, pipeline_bind_point: vk::PipelineBindPoint, layout: vk::PipelineLayout, first_set: u32, descriptor_sets: &[vk::DescriptorSet], dynamic_offsets: &[u32]) {
+        unsafe { ctx.device.handle.cmd_bind_descriptor_sets(self.handle(), pipeline_bind_point, layout, first_set, descriptor_sets, dynamic_offsets); }
     }
 
-    pub fn cmd_bind_pipeline(&self, ctx: &VulkanCtxRef, pipeline_bind_point: vk::PipelineBindPoint, pipeline: vk::Pipeline) {
-        unsafe { ctx.device.device.cmd_bind_pipeline(self.handle(), pipeline_bind_point, pipeline); }
+    pub fn cmd_bind_pipeline(&self, ctx: &VulkanContextRef, pipeline_bind_point: vk::PipelineBindPoint, pipeline: vk::Pipeline) {
+        unsafe { ctx.device.handle.cmd_bind_pipeline(self.handle(), pipeline_bind_point, pipeline); }
     }
 
-    pub fn cmd_bind_vertex_buffers(&self, ctx: &VulkanCtxRef, first_binding: u32, buffers: &[vk::Buffer], offsets: &[vk::DeviceSize]) {
-        unsafe { ctx.device.device.cmd_bind_vertex_buffers(self.handle(), first_binding, buffers, offsets); }
+    pub fn cmd_bind_vertex_buffers(&self, ctx: &VulkanContextRef, first_binding: u32, buffers: &[vk::Buffer], offsets: &[vk::DeviceSize]) {
+        unsafe { ctx.device.handle.cmd_bind_vertex_buffers(self.handle(), first_binding, buffers, offsets); }
     }
 
-    pub fn cmd_bind_index_buffer(&self, ctx: &VulkanCtxRef, buffer: vk::Buffer, offset: vk::DeviceSize, index_type: vk::IndexType) {
-        unsafe { ctx.device.device.cmd_bind_index_buffer(self.handle(), buffer, offset, index_type); }
+    pub fn cmd_bind_index_buffer(&self, ctx: &VulkanContextRef, buffer: vk::Buffer, offset: vk::DeviceSize, index_type: vk::IndexType) {
+        unsafe { ctx.device.handle.cmd_bind_index_buffer(self.handle(), buffer, offset, index_type); }
     }
 
-    pub fn cmd_push_constants(&self, ctx: &VulkanCtxRef, layout: vk::PipelineLayout, stage_flags: vk::ShaderStageFlags, offset: u32, constants: &[u8]) {
-        unsafe { ctx.device.device.cmd_push_constants(self.handle(), layout, stage_flags, offset, constants); }
+    pub fn cmd_push_constants(&self, ctx: &VulkanContextRef, layout: vk::PipelineLayout, stage_flags: vk::ShaderStageFlags, offset: u32, constants: &[u8]) {
+        unsafe { ctx.device.handle.cmd_push_constants(self.handle(), layout, stage_flags, offset, constants); }
     }
 
-    pub fn cmd_draw_indexed(&self, ctx: &VulkanCtxRef, index_count: u32, instance_count: u32, first_index: u32, vertex_offset: i32, first_instance: u32) {
-        unsafe { ctx.device.device.cmd_draw_indexed(self.handle(), index_count, instance_count, first_index, vertex_offset, first_instance); }
+    pub fn cmd_draw_indexed(&self, ctx: &VulkanContextRef, index_count: u32, instance_count: u32, first_index: u32, vertex_offset: i32, first_instance: u32) {
+        unsafe { ctx.device.handle.cmd_draw_indexed(self.handle(), index_count, instance_count, first_index, vertex_offset, first_instance); }
     }
 }
 
@@ -99,7 +100,7 @@ impl<'a> VulkanCommandBuffer<'a> {
 // ----------------------------------------------------------------------------
 
 pub struct VulkanCommandPool {
-    ctx: VulkanCtxRef,
+    ctx: VulkanContextRef,
     pub pool: vk::CommandPool,
     buffers: Vec<vk::CommandBuffer>
 }
@@ -109,7 +110,7 @@ impl Drop for VulkanCommandPool {
         println!("> dropping CommandPool...");
 
         unsafe {
-            let device = &self.ctx.device.device;
+            let device = &self.ctx.device.handle;
             // destroys all associated command buffers
             device.destroy_command_pool(self.pool, None);
         }
@@ -117,8 +118,8 @@ impl Drop for VulkanCommandPool {
 }
 
 impl VulkanCommandPool {
-    pub fn new(ctx: &VulkanCtxRef, queue_family_idx: u32, pool_flags: vk::CommandPoolCreateFlags) -> HellResult<Self> {
-        let pool = create_pool(&ctx.device.device, queue_family_idx, pool_flags)?;
+    pub fn new(ctx: &VulkanContextRef, queue_family_idx: u32, pool_flags: vk::CommandPoolCreateFlags) -> HellResult<Self> {
+        let pool = create_pool(&ctx.device.handle, queue_family_idx, pool_flags)?;
         let buffers = Self::create_multiple_buffers(ctx, pool, config::FRAMES_IN_FLIGHT as u32)?;
 
         Ok(Self {
@@ -128,11 +129,11 @@ impl VulkanCommandPool {
         })
     }
 
-    pub fn default_for_graphics(ctx: &VulkanCtxRef) -> HellResult<Self> {
+    pub fn default_for_graphics(ctx: &VulkanContextRef) -> HellResult<Self> {
         VulkanCommandPool::new(ctx, ctx.device.queues.graphics.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
     }
 
-    pub fn default_for_transfer(ctx: &VulkanCtxRef) -> HellResult<Self> {
+    pub fn default_for_transfer(ctx: &VulkanContextRef) -> HellResult<Self> {
         VulkanCommandPool::new(ctx, ctx.device.queues.transfer.family_idx, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER | vk::CommandPoolCreateFlags::TRANSIENT)
     }
 
@@ -142,14 +143,14 @@ impl VulkanCommandPool {
         )
     }
 
-    fn create_multiple_buffers(ctx: &VulkanCtxRef, pool: vk::CommandPool, count: u32) -> HellResult<Vec<vk::CommandBuffer>> {
+    fn create_multiple_buffers(ctx: &VulkanContextRef, pool: vk::CommandPool, count: u32) -> HellResult<Vec<vk::CommandBuffer>> {
         let alloc_info = vk::CommandBufferAllocateInfo::builder()
             .command_pool(pool)
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_buffer_count(count)
             .build();
 
-        Ok(unsafe { ctx.device.device.allocate_command_buffers(&alloc_info) }?)
+        Ok(unsafe { ctx.device.handle.allocate_command_buffers(&alloc_info) }?)
     }
 }
 

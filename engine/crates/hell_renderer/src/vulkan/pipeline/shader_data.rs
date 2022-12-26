@@ -1,6 +1,6 @@
 use ash::vk;
 use hell_error::HellResult;
-use crate::{shared::render_data::{SceneData, ObjectData}, render_data::GlobalUniformObject, vulkan::{Vertex, VulkanCtxRef, buffer::VulkanBuffer, command_buffer::VulkanCommands}};
+use crate::{shared::render_data::{SceneData, ObjectData}, render_data::GlobalUniformObject, vulkan::{Vertex, VulkanContextRef, primitives::{VulkanBuffer, VulkanCommands}}};
 
 
 /// Vulkan:
@@ -62,7 +62,7 @@ pub struct VulkanMesh {
 impl VulkanMesh {
     pub const INDEX_TYPE: vk::IndexType = vk::IndexType::UINT32;
 
-    pub fn new_quad(ctx: &VulkanCtxRef, cmds: &VulkanCommands) -> HellResult<Self> {
+    pub fn new_quad(ctx: &VulkanContextRef, cmds: &VulkanCommands) -> HellResult<Self> {
         Ok(Self {
             vertices: QUAD_VERTS.to_vec(),
             indices: QUAD_INDICES.to_vec(),

@@ -1,17 +1,19 @@
 use ash::vk;
 use hell_common::window::HellWindowExtent;
-use hell_error::{HellResult, ErrToHellErr, OptToHellErr};
+use hell_error::{HellResult, OptToHellErr};
 use hell_core::config;
 
-use crate::vulkan::image;
+use crate::vulkan::{primitives::VulkanImage,  VulkanContextRef};
 
-use super::VulkanCtxRef;
-use super::primitives::VulkanSemaphore;
-use super::surface::VulkanSurface;
+use super::{VulkanSemaphore, VulkanSurface};
 
 
 
 
+
+// ----------------------------------------------------------------------------
+// swapchain support
+// ----------------------------------------------------------------------------
 
 pub struct VulkanSwapchainSupport {
     pub capabilities: vk::SurfaceCapabilitiesKHR,
@@ -24,20 +26,17 @@ impl VulkanSwapchainSupport {
         let capabilities = unsafe {
             surface
                 .surface_loader
-                .get_physical_device_surface_capabilities(phys_device, surface.surface)
-                .to_render_hell_err()?
+                .get_physical_device_surface_capabilities(phys_device, surface.surface)?
         };
         let formats = unsafe {
             surface
                 .surface_loader
-                .get_physical_device_surface_formats(phys_device, surface.surface)
-                .to_render_hell_err()?
+                .get_physical_device_surface_formats(phys_device, surface.surface)?
         };
         let present_modes = unsafe {
             surface
                 .surface_loader
-                .get_physical_device_surface_present_modes(phys_device, surface.surface)
-                .to_render_hell_err()?
+                .get_physical_device_surface_present_modes(phys_device, surface.surface)?
         };
 
 
@@ -113,13 +112,12 @@ impl VulkanSwapchainSupport {
 
 
 
-
-
-
-
+// ----------------------------------------------------------------------------
+// swapchain support
+// ----------------------------------------------------------------------------
 
 pub struct VulkanSwapchain {
-    ctx: VulkanCtxRef,
+    ctx: VulkanContextRef,
 
     pub vk_swapchain: vk::SwapchainKHR,
     pub swapchain_loader: ash::extensions::khr::Swapchain,
@@ -131,6 +129,7 @@ pub struct VulkanSwapchain {
     pub surface_format: vk::SurfaceFormatKHR,
     pub extent: vk::Extent2D,
 
+    // TODO: remove useless array format
     pub viewport: [vk::Viewport; 1],
     pub sissor: [vk::Rect2D; 1],
 
@@ -150,7 +149,7 @@ impl VulkanSwapchain {
         println!("> dropping Swapchain...");
 
         unsafe {
-            let device = &self.ctx.device.device;
+            let device = &self.ctx.device.handle;
             self.views.iter().for_each(|&v| {
                 device.destroy_image_view(v, None);
             });
@@ -163,7 +162,7 @@ impl VulkanSwapchain {
 }
 
 impl VulkanSwapchain {
-    pub fn new(ctx: &VulkanCtxRef, window_extent: HellWindowExtent) -> HellResult<VulkanSwapchain> {
+    pub fn new(ctx: &VulkanContextRef, window_extent: HellWindowExtent) -> HellResult<VulkanSwapchain> {
         let swapchain_support = VulkanSwapchainSupport::new(ctx.phys_device.phys_device, &ctx.surface)?;
 
         let surface_format = swapchain_support.choose_swap_surface_format()?;
@@ -192,11 +191,11 @@ impl VulkanSwapchain {
             .old_swapchain(vk::SwapchainKHR::null())
             .build();
 
-        let swapchain_loader = ash::extensions::khr::Swapchain::new(&ctx.instance.instance, &ctx.device.device);
+        let swapchain_loader = ash::extensions::khr::Swapchain::new(&ctx.instance.instance, &ctx.device.handle);
         let swapchain = unsafe { swapchain_loader.create_swapchain(&create_info, None).expect("failed to create swapchain") };
 
         let imgs = unsafe { swapchain_loader.get_swapchain_images(swapchain)? };
-        let views = image::create_img_views(&ctx.device.device, &imgs, surface_format.format, vk::ImageAspectFlags::COLOR);
+        let views = VulkanImage::create_img_views(&ctx.device.handle, &imgs, surface_format.format, vk::ImageAspectFlags::COLOR);
 
         let viewport = [
             vk::Viewport {
@@ -238,7 +237,6 @@ impl VulkanSwapchain {
         })
     }
 }
-
 
 impl VulkanSwapchain {
     pub fn aquire_next_image(&self, img_available_sem: &VulkanSemaphore) -> HellResult<(u32, bool)> {

@@ -5,18 +5,17 @@ use hell_error::HellResult;
 use crate::error::{err_invalid_frame_idx, err_invalid_set_idx};
 
 use crate::render_data::{SceneData, ObjectData};
-use crate::vulkan::buffer::VulkanBuffer;
 use crate::vulkan::pipeline::VulkanPipeline;
-use crate::vulkan::{VulkanSampler, VulkanCtxRef, VulkanSwapchain};
-use crate::vulkan::image::TextureImage;
-use crate::{vulkan::{pipeline::{VulkanShader, shader_data::VulkanUboData}, VulkanCtx, VulkanRenderPassData, descriptors::VulkanDescriptorSetGroup}, render_data::GlobalUniformObject, shared::collections::PerFrame};
+use crate::vulkan::primitives::{VulkanImage, VulkanBuffer, VulkanSampler, VulkanSwapchain, VulkanDescriptorSetGroup, VulkanRenderPassData};
+use crate::vulkan::VulkanContextRef;
+use crate::{vulkan::{pipeline::{VulkanShader, shader_data::VulkanUboData}, VulkanContext}, render_data::GlobalUniformObject, shared::collections::PerFrame};
 use hell_core::config;
 
 
 
 
 pub struct VulkanSpriteShader {
-    ctx: VulkanCtxRef,
+    ctx: VulkanContextRef,
 
     // data
     pub global_uo: GlobalUniformObject,
@@ -24,7 +23,7 @@ pub struct VulkanSpriteShader {
     pub scene_ubo: VulkanBuffer, // one ubo for all frames
     pub object_ubos: PerFrame<VulkanBuffer>,
 
-    pub textures: Vec<TextureImage>,
+    pub textures: Vec<VulkanImage>,
     pub sampler: VulkanSampler,
 
     // descriptor sets
@@ -42,7 +41,7 @@ pub struct VulkanSpriteShader {
 impl Drop for VulkanSpriteShader {
     fn drop(&mut self) {
         unsafe {
-            let device = &self.ctx.device.device;
+            let device = &self.ctx.device.handle;
             // automatically cleans up all associated sets
             device.destroy_descriptor_pool(self.desc_set_pool, None);
         }
@@ -50,8 +49,8 @@ impl Drop for VulkanSpriteShader {
 }
 
 impl VulkanSpriteShader {
-    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, shader_path: &str, render_pass_data: &VulkanRenderPassData, textures: Vec<TextureImage>) -> HellResult<Self> {
-        let device = &ctx.device.device;
+    pub fn new(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, shader_path: &str, render_pass_data: &VulkanRenderPassData, textures: Vec<VulkanImage>) -> HellResult<Self> {
+        let device = &ctx.device.handle;
 
         // global uniform
         // --------------
@@ -149,11 +148,11 @@ impl VulkanSpriteShader {
         })
     }
 
-    pub fn update_global_uo(&mut self, global_uo: GlobalUniformObject, core: &VulkanCtx, frame_idx: usize) -> HellResult<()> {
+    pub fn update_global_uo(&mut self, global_uo: GlobalUniformObject, core: &VulkanContext, frame_idx: usize) -> HellResult<()> {
         self.global_uo = global_uo;
 
         let buffer = &self.global_ubos[frame_idx];
-        buffer.upload_data_buffer(&core.device.device, &self.global_uo)?;
+        buffer.upload_data_buffer(&core.device.handle, &self.global_uo)?;
 
         Ok(())
     }
@@ -293,7 +292,7 @@ impl VulkanSpriteShader {
         Ok(set_idx)
     }
 
-    pub fn add_material_descriptor_sets(device: &ash::Device, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSetGroup, texture: &TextureImage, sampler: &VulkanSampler) -> HellResult<usize> {
+    pub fn add_material_descriptor_sets(device: &ash::Device, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSetGroup, texture: &VulkanImage, sampler: &VulkanSampler) -> HellResult<usize> {
         // one set for all frames
         let layouts = vec![group.layout];
 
@@ -308,7 +307,7 @@ impl VulkanSpriteShader {
             let image_infos = [
                 vk::DescriptorImageInfo::builder()
                     .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .image_view(texture.img.view)
+                    .image_view(texture.view)
                     .sampler(sampler.sampler)
                     .build()
             ];

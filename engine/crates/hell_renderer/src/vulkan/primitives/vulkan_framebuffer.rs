@@ -1,15 +1,15 @@
 use ash::vk;
 use hell_error::HellResult;
 
-use super::VulkanCtxRef;
-use super::image::DepthImage;
-use super::render_pass::VulkanRenderPass;
-use super::swapchain::VulkanSwapchain;
 use hell_core::config;
+
+use crate::vulkan::VulkanContextRef;
+
+use super::{VulkanSwapchain, VulkanImage, VulkanRenderPass};
 
 
 pub struct VulkanFramebuffer {
-    ctx: VulkanCtxRef,
+    ctx: VulkanContextRef,
     handles: Vec<vk::Framebuffer>, // one per Swapchain-Image
 }
 
@@ -18,7 +18,7 @@ impl Drop for VulkanFramebuffer {
         println!("> dropping Framebuffer...");
 
         unsafe {
-            let device = &self.ctx.device.device;
+            let device = &self.ctx.device.handle;
             self.handles.iter().for_each(|b| {
                 device.destroy_framebuffer(*b, None);
             });
@@ -28,13 +28,13 @@ impl Drop for VulkanFramebuffer {
 
 impl VulkanFramebuffer {
 
-    pub fn new_world_buffer(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, render_pass: &VulkanRenderPass, depth_buffer: &DepthImage,) -> HellResult<Self> {
+    pub fn new_world_buffer(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, render_pass: &VulkanRenderPass, depth_buffer: &VulkanImage) -> HellResult<Self> {
         // let buffers = array::from_fn(|idx| {
         let handles = swapchain.views.iter()
             .map(|sv| {
                 // only a single subpass is running at the same time, so we can reuse the same depth-buffer for all frames in flight
                 // let sv = &swapchain.views[idx];
-                let attachments = [*sv, depth_buffer.img.view];
+                let attachments = [*sv, depth_buffer.view];
 
                 let buffer_info = vk::FramebufferCreateInfo::builder()
                     .render_pass(render_pass.handle)
@@ -45,7 +45,7 @@ impl VulkanFramebuffer {
                     .build();
 
                 // TODO: no unwrap
-                unsafe { ctx.device.device.create_framebuffer(&buffer_info, None).unwrap() }
+                unsafe { ctx.device.handle.create_framebuffer(&buffer_info, None).unwrap() }
             })
             .collect();
 
@@ -57,7 +57,7 @@ impl VulkanFramebuffer {
         })
     }
 
-    pub fn new_ui_buffer(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, render_pass: &VulkanRenderPass) -> HellResult<Self> {
+    pub fn new_ui_buffer(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, render_pass: &VulkanRenderPass) -> HellResult<Self> {
         // let buffers = array::from_fn(|idx| {
         let handles = swapchain.views.iter()
             .map(|sv| {
@@ -74,7 +74,7 @@ impl VulkanFramebuffer {
                     .build();
 
                 // TODO: no unwrap
-                unsafe { ctx.device.device.create_framebuffer(&buffer_info, None).unwrap() }
+                unsafe { ctx.device.handle.create_framebuffer(&buffer_info, None).unwrap() }
             })
             .collect();
 

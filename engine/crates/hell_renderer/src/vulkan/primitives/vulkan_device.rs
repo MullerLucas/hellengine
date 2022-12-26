@@ -1,3 +1,4 @@
+
 use std::{ptr, ffi};
 
 use ash::vk;
@@ -5,15 +6,15 @@ use hell_error::{HellResult, ErrToHellErr};
 use hell_utils::conversion;
 use hell_core::config;
 
-use super::phys_device::VulkanPhysDevice;
-use super::queues::VulkanQueues;
+use super::{VulkanPhysDevice, VulkanQueues};
+
+
 
 
 pub struct VulkanLogicDevice {
-    pub device: ash::Device,
+    pub handle: ash::Device,
     pub queues: VulkanQueues,
 }
-
 
 impl VulkanLogicDevice {
     pub fn new(instance: &ash::Instance, phys_device: &VulkanPhysDevice) -> HellResult<Self> {
@@ -70,7 +71,7 @@ impl VulkanLogicDevice {
         let queues = VulkanQueues::from_support(&device, &phys_device.queue_support)?;
 
         Ok(Self {
-            device,
+            handle: device,
             queues
         })
     }
@@ -82,14 +83,14 @@ impl Drop for VulkanLogicDevice {
 
         unsafe {
             // cleans up device queues
-            self.device.destroy_device(None);
+            self.handle.destroy_device(None);
         }
     }
 }
 
 impl VulkanLogicDevice {
     pub fn wait_idle(&self) -> HellResult<()> {
-        unsafe { self.device.device_wait_idle().to_render_hell_err()?; }
+        unsafe { self.handle.device_wait_idle().to_render_hell_err()?; }
 
         Ok(())
     }

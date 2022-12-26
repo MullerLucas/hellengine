@@ -1,10 +1,10 @@
 use ash::vk;
 use hell_collections::DynArray;
 use hell_error::HellResult;
-use super::command_buffer::VulkanCommands;
-use super::{VulkanCtxRef, VulkanSwapchain};
-use super::framebuffer::VulkanFramebuffer;
-use super::image::DepthImage;
+
+use crate::vulkan::VulkanContextRef;
+
+use super::{VulkanSwapchain, VulkanImage, VulkanFramebuffer, VulkanCommands};
 
 
 
@@ -24,7 +24,7 @@ pub enum BultinRenderPassType {
 }
 
 pub struct VulkanRenderPass {
-    ctx: VulkanCtxRef,
+    ctx: VulkanContextRef,
     pub handle: vk::RenderPass,
 
     pub depth: f32,
@@ -40,14 +40,14 @@ impl Drop for VulkanRenderPass {
         println!("> dropping RenderPass...");
 
         unsafe {
-            let device = &self.ctx.device.device;
+            let device = &self.ctx.device.handle;
             device.destroy_render_pass(self.handle, None);
         }
     }
 }
 
 impl VulkanRenderPass {
-    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, clear_flags: RenderPassClearFlags, has_prev: bool, has_next: bool) -> HellResult<Self> {
+    pub fn new(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, clear_flags: RenderPassClearFlags, has_prev: bool, has_next: bool) -> HellResult<Self> {
         let swap_format = swapchain.surface_format.format;
         let msaa_samples = vk::SampleCountFlags::TYPE_1;
 
@@ -150,7 +150,7 @@ impl VulkanRenderPass {
             .dependencies(&subpass_dependencies)
             .build();
 
-        let pass = unsafe { ctx.device.device.create_render_pass(&render_pass_info, None)? };
+        let pass = unsafe { ctx.device.handle.create_render_pass(&render_pass_info, None)? };
 
         Ok(Self {
             ctx: ctx.clone(),
@@ -173,7 +173,7 @@ impl VulkanRenderPass {
 // ----------------------------------------------------------------------------
 
 pub struct VulkanRenderPassData {
-    pub world_depth_img: DepthImage,
+    pub world_depth_img: VulkanImage,
     pub world_framebuffer: VulkanFramebuffer,
     pub world_render_pass: VulkanRenderPass,
 
@@ -182,9 +182,9 @@ pub struct VulkanRenderPassData {
 }
 
 impl VulkanRenderPassData {
-    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, cmds: &VulkanCommands) -> HellResult<Self> {
+    pub fn new(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, cmds: &VulkanCommands) -> HellResult<Self> {
         let world_clear_flags = RenderPassClearFlags::COLORBUFFER | RenderPassClearFlags::DEPTHBUFFER | RenderPassClearFlags::STENCILBUFFER;
-        let world_depth_img = DepthImage::new(ctx, swapchain, cmds)?;
+        let world_depth_img = VulkanImage::new_depth_img(ctx, swapchain, cmds)?;
         let world_render_pass = VulkanRenderPass::new(ctx, swapchain, world_clear_flags, false, true)?;
         let world_framebuffer = VulkanFramebuffer::new_world_buffer(ctx, swapchain, &world_render_pass, &world_depth_img)?;
 
@@ -202,8 +202,8 @@ impl VulkanRenderPassData {
         })
     }
 
-    pub fn recreate_framebuffer(&mut self, ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, cmds: &VulkanCommands) -> HellResult<()> {
-        self.world_depth_img = DepthImage::new(ctx, swapchain, cmds)?;
+    pub fn recreate_framebuffer(&mut self, ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, cmds: &VulkanCommands) -> HellResult<()> {
+        self.world_depth_img = VulkanImage::new_depth_img(ctx, swapchain, cmds)?;
         self.world_framebuffer = VulkanFramebuffer::new_world_buffer(ctx, swapchain, &self.world_render_pass, &self.world_depth_img)?;
 
         self.ui_framebuffer = VulkanFramebuffer::new_ui_buffer(ctx, swapchain, &self.ui_render_pass)?;

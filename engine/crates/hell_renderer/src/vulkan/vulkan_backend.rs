@@ -7,13 +7,12 @@ use hell_common::window::HellWindowExtent;
 use hell_error::{HellResult, HellError, HellErrorKind, OptToHellErr, ErrToHellErr};
 use hell_resources::{ResourceManager, ResourceHandle};
 use crate::render_data::{SceneData, ObjectData, GlobalUniformObject, TmpCamera};
-use crate::vulkan::image::TextureImage;
+use crate::vulkan::primitives::RenderPassClearFlags;
 
-use super::command_buffer::{VulkanCommands, VulkanCommandBuffer};
-use super::{VulkanCtxRef, VulkanSwapchain};
+use super::VulkanContextRef;
+use super::primitives::{VulkanImage, VulkanSwapchain, VulkanCommands, VulkanCommandBuffer, VulkanRenderPassData, BultinRenderPassType};
 use super::frame::VulkanFrameData;
 use super::pipeline::shader_data::{VulkanUboData, VulkanMesh, MeshPushConstants};
-use super::render_pass::{VulkanRenderPassData, RenderPassClearFlags, BultinRenderPassType};
 use super::shader::VulkanSpriteShader;
 use hell_core::config;
 
@@ -128,11 +127,11 @@ pub struct VulkanBackend {
     pub swapchain: VulkanSwapchain,
     pub render_pass_data: VulkanRenderPassData,
     pub shaders: HashMap<String, VulkanSpriteShader>,
-    pub ctx: VulkanCtxRef,
+    pub ctx: VulkanContextRef,
 }
 
 impl VulkanBackend {
-    pub fn new(ctx: VulkanCtxRef, swapchain: VulkanSwapchain) -> HellResult<Self> {
+    pub fn new(ctx: VulkanContextRef, swapchain: VulkanSwapchain) -> HellResult<Self> {
         let frame_data = VulkanFrameData::new(&ctx)?;
         let cmds = VulkanCommands::new(&ctx)?;
         let quad_mesh = VulkanMesh::new_quad(&ctx, &cmds)?;
@@ -167,7 +166,7 @@ impl VulkanBackend {
     pub fn create_shaders(&mut self, shader_paths: HashSet<String>, resource_manager: &ResourceManager) -> HellResult<()>{
         for path in shader_paths {
             let texture: HellResult<Vec<_>> = resource_manager.get_all_images().iter()
-                .map(|i| TextureImage::from(&self.ctx, &self.cmd_pools, i))
+                .map(|i| VulkanImage::from(&self.ctx, &self.cmd_pools, i))
                 .collect();
             let texture = texture?;
 
@@ -249,7 +248,7 @@ impl VulkanBackend {
 
     #[allow(clippy::modulo_one)]
     pub fn draw_frame(&mut self, _delta_time: f32, world_render_data: &RenderData, resources: &ResourceManager) -> HellResult<bool> {
-        let device = &self.ctx.device.device;
+        let device = &self.ctx.device.handle;
 
         // let frame_data = &self.frame_data[frame_idx];
         let cmd_pool = &self.frame_data.graphics_cmd_pools.get(self.frame_idx).to_render_hell_err()?;
@@ -291,7 +290,7 @@ impl VulkanBackend {
                 .build()
         ];
 
-        unsafe { self.ctx.device.device.queue_submit(queue, &submit_info, in_flight_fence).to_render_hell_err() }
+        unsafe { self.ctx.device.handle.queue_submit(queue, &submit_info, in_flight_fence).to_render_hell_err() }
     }
 
     pub fn present_queue(&self, queue: vk::Queue, swapchain: &VulkanSwapchain, img_indices: &[u32]) -> HellResult<bool> {
@@ -318,8 +317,8 @@ impl VulkanBackend {
     }
 
     // fn record_cmd_buffer(&self, ctx: &VulkanCtxRef, render_pass_data: &VulkanRenderPassData, swap_img_idx: usize, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
-    fn record_cmd_buffer(&self, ctx: &VulkanCtxRef, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
-        let device = &ctx.device.device;
+    fn record_cmd_buffer(&self, ctx: &VulkanContextRef, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
+        let device = &ctx.device.handle;
         let cmd_buffer = self.frame_data.get_cmd_buffer(self.frame_idx)?;
 
         let begin_info = vk::CommandBufferBeginInfo::default();
@@ -432,7 +431,7 @@ impl VulkanBackend {
         let min_ubo_alignment = self.ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
         for sh in self.shaders.values() {
             let buffer = sh.get_scene_buffer();
-            buffer.upload_data_buffer_array(&self.ctx.device.device, min_ubo_alignment, scene_data, self.frame_idx)?;
+            buffer.upload_data_buffer_array(&self.ctx.device.handle, min_ubo_alignment, scene_data, self.frame_idx)?;
         }
 
         Ok(())
@@ -450,7 +449,7 @@ impl VulkanBackend {
 
             unsafe {
                 // TODO: try to write diretly into the buffer
-                buffer.upload_data_storage_buffer(&self.ctx.device.device, object_data.as_ptr(), object_data.len())?;
+                buffer.upload_data_storage_buffer(&self.ctx.device.handle, object_data.as_ptr(), object_data.len())?;
             }
         }
 

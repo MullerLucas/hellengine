@@ -6,9 +6,11 @@ pub mod shader_data;
 
 use ash::vk;
 use hell_error::{HellResult, HellError, HellErrorKind};
-use crate::vulkan::{VulkanRenderPassData, Vertex, VulkanCtxRef, VulkanSwapchain};
+use crate::vulkan::{Vertex, VulkanContextRef};
 
 use self::shader_data::MeshPushConstants;
+
+use super::primitives::{VulkanSwapchain, VulkanRenderPassData};
 
 
 
@@ -19,7 +21,7 @@ use self::shader_data::MeshPushConstants;
 // ----------------------------------------------------------------------------
 
 pub struct VulkanPipeline {
-    ctx: VulkanCtxRef,
+    ctx: VulkanContextRef,
     pub layout: vk::PipelineLayout,
     pub pipeline: vk::Pipeline,
 }
@@ -29,7 +31,7 @@ impl Drop for VulkanPipeline {
         println!("> dropping GraphicsPipeline...");
 
         unsafe {
-            let device = &self.ctx.device.device;
+            let device = &self.ctx.device.handle;
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.layout, None);
         }
@@ -37,8 +39,8 @@ impl Drop for VulkanPipeline {
 }
 
 impl VulkanPipeline {
-    pub fn new(ctx: &VulkanCtxRef, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout], depth_test_enabled: bool, is_wireframe: bool) -> HellResult<Self> {
-        let device = &ctx.device.device;
+    pub fn new(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout], depth_test_enabled: bool, is_wireframe: bool) -> HellResult<Self> {
+        let device = &ctx.device.handle;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 
         // let render_pass_data = VulkanRenderPassData::new(core);

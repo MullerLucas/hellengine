@@ -1,12 +1,13 @@
 use ash::prelude::VkResult;
 pub use ash::vk;
 
-use super::VulkanCtxRef;
+use crate::vulkan::VulkanContextRef;
+
 
 
 
 pub struct VulkanSampler {
-    ctx: VulkanCtxRef,
+    ctx: VulkanContextRef,
     pub sampler: vk::Sampler,
 }
 
@@ -15,7 +16,7 @@ impl Drop for VulkanSampler {
         println!("> dropping VulkanTextureSampler...");
 
         unsafe {
-            let device = &self.ctx.device.device;
+            let device = &self.ctx.device.handle;
             device.destroy_sampler(self.sampler, None);
         }
     }
@@ -23,7 +24,7 @@ impl Drop for VulkanSampler {
 
 
 impl VulkanSampler {
-    pub fn new(ctx: &VulkanCtxRef) -> VkResult<Self> {
+    pub fn new(ctx: &VulkanContextRef) -> VkResult<Self> {
 
         // enabled ansiotropy if the physical device supports it
         let (ansiotropy_enabled, max_ansiotropy) = if ctx.phys_device.features.sampler_anisotropy == vk::TRUE {
@@ -51,7 +52,7 @@ impl VulkanSampler {
             .max_lod(0.0)
             .build();
 
-        let sampler = unsafe { ctx.device.device.create_sampler(&sampler_info, None)? };
+        let sampler = unsafe { ctx.device.handle.create_sampler(&sampler_info, None)? };
 
         Ok(Self {
             ctx: ctx.clone(),

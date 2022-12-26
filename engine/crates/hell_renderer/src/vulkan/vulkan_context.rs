@@ -2,19 +2,16 @@ use std::sync::Arc;
 use hell_common::window::HellSurfaceInfo;
 use hell_error::HellResult;
 use super::debugging::VulkanDebugData;
-use super::instance::VulkanInstance;
-use super::logic_device::VulkanLogicDevice;
-use super::phys_device::VulkanPhysDevice;
-use super::surface::VulkanSurface;
+use super::primitives::{VulkanSurface, VulkanLogicDevice, VulkanPhysDevice, VulkanInstance};
 use hell_core::config;
 
 
 
 
 
-pub type VulkanCtxRef = Arc<VulkanCtx>;
+pub type VulkanContextRef = Arc<VulkanContext>;
 
-pub struct VulkanCtx {
+pub struct VulkanContext {
     pub debug_data: VulkanDebugData,
     pub surface: VulkanSurface,
     pub phys_device: VulkanPhysDevice,
@@ -23,13 +20,13 @@ pub struct VulkanCtx {
     pub instance: VulkanInstance,
 }
 
-impl std::fmt::Debug for VulkanCtx {
+impl std::fmt::Debug for VulkanContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "VulkanCtx")
     }
 }
 
-impl VulkanCtx {
+impl VulkanContext {
     pub fn new(surface_info: &HellSurfaceInfo) -> HellResult<Self> {
         let instance = VulkanInstance::new(config::APP_NAME)?;
         let debug_data = VulkanDebugData::new(&instance.entry, &instance.instance);

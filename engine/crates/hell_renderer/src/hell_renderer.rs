@@ -6,7 +6,8 @@ use hell_resources::ResourceManager;
 
 use crate::render_data::TmpCamera;
 use crate::shared::render_data::SceneData;
-use crate::vulkan::{VulkanBackend, VulkanCtx, VulkanFrameData, RenderData, VulkanSwapchain};
+use crate::vulkan::primitives::VulkanSwapchain;
+use crate::vulkan::{VulkanBackend, VulkanContext, VulkanFrameData, RenderData};
 
 
 
@@ -27,7 +28,7 @@ pub struct HellRenderer {
 
 impl HellRenderer {
     pub fn new(info: HellRendererInfo) -> HellResult<Self> {
-        let ctx = Arc::new(VulkanCtx::new(&info.surface_info)?);
+        let ctx = Arc::new(VulkanContext::new(&info.surface_info)?);
         let swapchain = VulkanSwapchain::new(&ctx, info.window_extent)?;
         let aspect_ratio = swapchain.aspect_ratio();
         let backend = VulkanBackend::new(ctx, swapchain)?;
@@ -91,7 +92,7 @@ impl HellRenderer {
         &self.backend.frame_data
     }
 
-    pub fn get_core(&self) -> &VulkanCtx {
+    pub fn get_core(&self) -> &VulkanContext {
         &self.backend.ctx
     }
 }

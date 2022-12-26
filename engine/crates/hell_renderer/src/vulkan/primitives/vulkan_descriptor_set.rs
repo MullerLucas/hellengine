@@ -1,9 +1,8 @@
+
 use ash::prelude::VkResult;
 use ash::vk;
 
-use super::VulkanCtxRef;
-
-
+use crate::vulkan::VulkanContextRef;
 
 
 
@@ -15,7 +14,7 @@ use super::VulkanCtxRef;
 // ----------------------------------------------------------------------------
 
 pub struct VulkanDescriptorSetGroup {
-    ctx: VulkanCtxRef,
+    ctx: VulkanContextRef,
     pub layout: vk::DescriptorSetLayout,
     pub sets: Vec<Vec<vk::DescriptorSet>>, // per frame
 }
@@ -25,14 +24,14 @@ impl Drop for VulkanDescriptorSetGroup {
         println!("> dropping VulkanDescriptorSetLayoutGroup...");
 
         unsafe {
-            let device = &self.ctx.device.device;
+            let device = &self.ctx.device.handle;
             device.destroy_descriptor_set_layout(self.layout, None);
         }
     }
 }
 
 impl VulkanDescriptorSetGroup {
-    pub fn new(ctx: &VulkanCtxRef, layout: vk::DescriptorSetLayout) -> Self {
+    pub fn new(ctx: &VulkanContextRef, layout: vk::DescriptorSetLayout) -> Self {
         Self {
             ctx: ctx.clone(),
             layout,
@@ -40,19 +39,19 @@ impl VulkanDescriptorSetGroup {
         }
     }
 
-    pub fn new_global_group(ctx: &VulkanCtxRef, device: &ash::Device) -> VkResult<Self> {
+    pub fn new_global_group(ctx: &VulkanContextRef, device: &ash::Device) -> VkResult<Self> {
         let layout = Self::create_global_set_layout(device)?;
 
         Ok(Self::new(ctx, layout))
     }
 
-    pub fn new_object_group(ctx: &VulkanCtxRef, device: &ash::Device) -> VkResult<Self> {
+    pub fn new_object_group(ctx: &VulkanContextRef, device: &ash::Device) -> VkResult<Self> {
         let layout = Self::create_object_set_layout(device)?;
 
         Ok(Self::new(ctx, layout))
     }
 
-    pub fn new_material_group(ctx: &VulkanCtxRef, device: &ash::Device) -> VkResult<Self> {
+    pub fn new_material_group(ctx: &VulkanContextRef, device: &ash::Device) -> VkResult<Self> {
         let layout = Self::create_material_set_layout(device)?;
 
         Ok(Self::new(ctx, layout))

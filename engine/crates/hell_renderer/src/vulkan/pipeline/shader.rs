@@ -5,7 +5,7 @@ use std::io::Read;
 use std::path::Path;
 use std::{fs, ffi};
 
-use crate::vulkan::VulkanCtxRef;
+use crate::vulkan::VulkanContextRef;
 
 
 
@@ -16,7 +16,7 @@ pub struct VulkanShader {
 }
 
 impl VulkanShader {
-    pub fn from_file(ctx: &VulkanCtxRef, path: &str) -> HellResult<Self> {
+    pub fn from_file(ctx: &VulkanContextRef, path: &str) -> HellResult<Self> {
         let vert_path = format!("{}.vert.spv", path);
         let frag_path = format!("{}.frag.spv", path);
 
@@ -45,7 +45,7 @@ impl VulkanShader {
 
 
 pub struct VulkanShaderModule {
-    ctx: VulkanCtxRef,
+    ctx: VulkanContextRef,
     pub entrypoint: ffi::CString,
     pub module: vk::ShaderModule,
 }
@@ -53,17 +53,17 @@ pub struct VulkanShaderModule {
 impl Drop for VulkanShaderModule {
     fn drop(&mut self) {
         unsafe {
-            let device = &self.ctx.device.device;
+            let device = &self.ctx.device.handle;
             device.destroy_shader_module(self.module, None);
         }
     }
 }
 
 impl VulkanShaderModule {
-    pub fn new(ctx: &VulkanCtxRef, code_path: &str) -> HellResult<Self> {
+    pub fn new(ctx: &VulkanContextRef, code_path: &str) -> HellResult<Self> {
         let entrypoint = ffi::CString::new("main").to_render_hell_err()?;
         let code = read_shader_code(Path::new(code_path))?;
-        let module = create_shader_module(&ctx.device.device, &code)?;
+        let module = create_shader_module(&ctx.device.handle, &code)?;
 
         Ok(Self {
             ctx: ctx.clone(),

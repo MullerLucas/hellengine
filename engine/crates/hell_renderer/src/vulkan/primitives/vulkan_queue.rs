@@ -1,8 +1,10 @@
 use std::collections::HashSet;
 use ash::vk;
-use hell_error::{HellResult, OptToHellErr, ErrToHellErr};
+use hell_error::{HellResult, OptToHellErr};
 
-use super::surface::VulkanSurface;
+use super::VulkanSurface;
+
+
 
 
 
@@ -108,8 +110,7 @@ impl VulkanQueueSupport {
             if result.present_family.is_none() {
                 let present_is_supported = unsafe {
                     surface_data.surface_loader
-                        .get_physical_device_surface_support(phys_device, idx, surface_data.surface)
-                        .to_render_hell_err()?
+                        .get_physical_device_surface_support(phys_device, idx, surface_data.surface)?
                 };
 
                 if present_is_supported {
@@ -145,17 +146,17 @@ impl VulkanQueueSupport {
             self.present_family.is_some() &&
             self.transfer_family.is_some()
     }
-}
 
-pub fn print_queue_families(instance: &ash::Instance, device: vk::PhysicalDevice) {
-    let props = unsafe { instance.get_physical_device_queue_family_properties(device) };
+    pub fn print_queue_families(instance: &ash::Instance, device: vk::PhysicalDevice) {
+        let props = unsafe { instance.get_physical_device_queue_family_properties(device) };
 
-    for (idx, prop) in props.iter().enumerate() {
-        println!("\t> queue: {}", idx);
+        for (idx, prop) in props.iter().enumerate() {
+            println!("\t> queue: {}", idx);
 
-        if prop.queue_flags.contains(vk::QueueFlags::GRAPHICS) { println!("\t\t> GRAPHICS-QUEUE"); }
-        if prop.queue_flags.contains(vk::QueueFlags::COMPUTE) { println!("\t\t> COMPUTE-QUEUE"); }
-        if prop.queue_flags.contains(vk::QueueFlags::TRANSFER) { println!("\t\t> TRANSFER-QUEUE"); }
-        if prop.queue_flags.contains(vk::QueueFlags::SPARSE_BINDING) { println!("\t\t> SPARSE-BINDING-QUEUE"); }
+            if prop.queue_flags.contains(vk::QueueFlags::GRAPHICS) { println!("\t\t> GRAPHICS-QUEUE"); }
+            if prop.queue_flags.contains(vk::QueueFlags::COMPUTE) { println!("\t\t> COMPUTE-QUEUE"); }
+            if prop.queue_flags.contains(vk::QueueFlags::TRANSFER) { println!("\t\t> TRANSFER-QUEUE"); }
+            if prop.queue_flags.contains(vk::QueueFlags::SPARSE_BINDING) { println!("\t\t> SPARSE-BINDING-QUEUE"); }
+        }
     }
 }

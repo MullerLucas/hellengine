@@ -5,10 +5,10 @@ use std::ffi::CStr;
 use std::fmt;
 use hell_core::config;
 
-use crate::vulkan::queues::{self, VulkanQueueSupport};
+use super::{VulkanSwapchainSupport, VulkanSurface, VulkanQueueSupport};
 
-use super::VulkanSwapchainSupport;
-use super::surface::VulkanSurface;
+
+
 
 pub struct VulkanPhysDevice {
     pub phys_device: vk::PhysicalDevice,
@@ -19,7 +19,6 @@ pub struct VulkanPhysDevice {
     pub swapchain_support: VulkanSwapchainSupport,
     pub depth_format: vk::Format,
 }
-
 
 impl VulkanPhysDevice {
     pub fn pick_phys_device(instance: &ash::Instance, surface: &VulkanSurface) -> HellResult<Self> {
@@ -113,7 +112,7 @@ impl VulkanPhysDevice {
 
         // queue-families
         // --------------
-        queues::print_queue_families(instance, phys_device);
+        VulkanQueueSupport::print_queue_families(instance, phys_device);
 
         let queue_support = VulkanQueueSupport::new(instance, phys_device, surface).ok()?;
         if !queue_support.is_complete() {

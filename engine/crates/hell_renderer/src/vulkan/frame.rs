@@ -2,13 +2,11 @@ use std::array;
 
 use crate::error::err_invalid_frame_idx;
 use crate::shared::collections::PerFrame;
-use crate::vulkan::VulkanCommandPool;
 use ash::vk;
 use hell_error::HellResult;
 
-use super::VulkanCtxRef;
-use super::command_buffer::VulkanCommandBuffer;
-use super::primitives::{VulkanSemaphore, VulkanFence};
+use super::VulkanContextRef;
+use super::primitives::{VulkanSemaphore, VulkanFence, VulkanCommandPool, VulkanCommandBuffer};
 
 
 pub struct VulkanFrameData {
@@ -22,7 +20,7 @@ pub struct VulkanFrameData {
 }
 
 impl VulkanFrameData {
-    pub fn new(ctx: &VulkanCtxRef) -> HellResult<Self> {
+    pub fn new(ctx: &VulkanContextRef) -> HellResult<Self> {
         let semaphore_info = vk::SemaphoreCreateInfo::default();
 
         let fence_info = vk::FenceCreateInfo::builder()
