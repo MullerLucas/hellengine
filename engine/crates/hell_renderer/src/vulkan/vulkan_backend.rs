@@ -4,7 +4,7 @@ use ash::vk;
 use hell_collections::DynArray;
 use hell_common::transform::Transform;
 use hell_common::window::HellWindowExtent;
-use hell_error::{HellResult, HellError, HellErrorKind, OptToHellErr};
+use hell_error::{HellResult, HellError, HellErrorKind, OptToHellErr, ErrToHellErr};
 use hell_resources::{ResourceManager, ResourceHandle};
 use crate::render_data::{SceneData, ObjectData, GlobalUniformObject, TmpCamera};
 use crate::vulkan::image::TextureImage;
@@ -253,9 +253,11 @@ impl VulkanBackend {
 
         // let frame_data = &self.frame_data[frame_idx];
         let cmd_pool = &self.frame_data.graphics_cmd_pools.get(self.frame_idx).to_render_hell_err()?;
-        self.frame_data.wait_for_in_flight(&self.ctx.device.device, self.frame_idx)?;
+        let in_flight_fence = self.frame_data.in_flight_fence(self.frame_idx);
+        in_flight_fence.wait_for_fence(u64::MAX)?;
 
-        let (curr_swap_idx, _is_suboptimal) = self.swapchain.aquire_next_image(self.frame_data.img_available_semaphors[self.frame_idx])?;
+        let img_available_sem = self.frame_data.img_available_sem(self.frame_idx);
+        let (curr_swap_idx, _is_suboptimal) = self.swapchain.aquire_next_image(img_available_sem)?;
         self.curr_swap_idx = curr_swap_idx as usize;
 
         cmd_pool.reset_cmd_buffer(device, 0)?;
@@ -266,20 +268,51 @@ impl VulkanBackend {
         )?;
 
         // delay resetting the fence until we know for sure we will be submitting work with it (not return early)
-        self.frame_data.reset_in_flight_fence(device, self.frame_idx)?;
-        self.frame_data.submit_queue(device, self.ctx.device.queues.graphics.queue, &[cmd_pool.get_buffer(0).handle()], self.frame_idx)?;
+        in_flight_fence.reset_fence()?;
+        self.submit_queue(self.ctx.device.queues.graphics.queue, &[cmd_pool.get_buffer(0).handle()])?;
+        let is_resized = self.present_queue(self.ctx.device.queues.present.queue, &self.swapchain, &[curr_swap_idx])?;
 
-        let present_result = self.frame_data.present_queue(self.ctx.device.queues.present.queue, &self.swapchain, &[curr_swap_idx], self.frame_idx);
+        self.frame_idx = (self.frame_idx + 1) % config::FRAMES_IN_FLIGHT;
+
+        Ok(is_resized)
+    }
+
+    pub fn submit_queue(&self, queue: vk::Queue, cmd_buffers: &[vk::CommandBuffer]) -> HellResult<()> {
+        let img_available_sems   = [self.frame_data.img_available_sem(self.frame_idx).handle()];
+        let render_finished_sems = [self.frame_data.img_render_finished_sem(self.frame_idx).handle()];
+        let in_flight_fence      = self.frame_data.in_flight_fence(self.frame_idx).handle();
+
+        let submit_info = [
+            vk::SubmitInfo::builder()
+                .wait_semaphores(&img_available_sems)
+                .wait_dst_stage_mask(&self.frame_data.wait_stages)
+                .signal_semaphores(&render_finished_sems)
+                .command_buffers(cmd_buffers)
+                .build()
+        ];
+
+        unsafe { self.ctx.device.device.queue_submit(queue, &submit_info, in_flight_fence).to_render_hell_err() }
+    }
+
+    pub fn present_queue(&self, queue: vk::Queue, swapchain: &VulkanSwapchain, img_indices: &[u32]) -> HellResult<bool> {
+        let render_finished_sems = [self.frame_data.img_render_finished_sem(self.frame_idx).handle()];
+        let sc = &[swapchain.vk_swapchain];
+
+        let present_info = vk::PresentInfoKHR::builder()
+            .wait_semaphores(&render_finished_sems)
+            .swapchains(sc)
+            .image_indices(img_indices)
+            .build();
+
+        let result = unsafe { swapchain.swapchain_loader.queue_present(queue, &present_info) };
 
         // TODO: check
         // do this after queue-present to ensure that the semaphores are in a consistent state - otherwise a signaled semaphore may never be properly waited upon
-        let is_resized = match present_result {
+        let is_resized = match result {
             Ok(is_suboptimal) => { is_suboptimal },
             Err(vk::Result::ERROR_OUT_OF_DATE_KHR | vk::Result::SUBOPTIMAL_KHR) => { true },
             _ => { return Err(HellError::from_msg(HellErrorKind::RenderError, "failed to aquire next image".to_owned())) }
         };
-
-        self.frame_idx = (self.frame_idx + 1) % config::FRAMES_IN_FLIGHT;
 
         Ok(is_resized)
     }

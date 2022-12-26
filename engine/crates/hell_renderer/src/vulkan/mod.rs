@@ -54,3 +54,5 @@ pub use sampler::VulkanSampler;
 pub mod shader;
 
 pub mod buffer;
+
+pub mod primitives;

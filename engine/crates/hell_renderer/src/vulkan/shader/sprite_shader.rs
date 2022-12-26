@@ -56,9 +56,7 @@ impl VulkanSpriteShader {
         // global uniform
         // --------------
         let global_uo = GlobalUniformObject::default();
-
         let global_ubos = array::from_fn(|_| VulkanBuffer::from_uniform(ctx, GlobalUniformObject::device_size()));
-        let global_ubos = PerFrame::new(global_ubos);
 
         // scene uniform
         // --------------
@@ -68,7 +66,6 @@ impl VulkanSpriteShader {
         // object uniform
         // --------------
         let object_ubos = array::from_fn(|_| VulkanBuffer::from_storage(ctx, ObjectData::total_size()));
-        let object_ubos = PerFrame::new(object_ubos);
 
         // texture data
         // ------------
@@ -109,10 +106,10 @@ impl VulkanSpriteShader {
         // descirptor set groups
         // ---------------------
         let mut global_desc_group = VulkanDescriptorSetGroup::new_global_group(ctx, device)?;
-        let _ = Self::add_global_descriptor_sets(device, desc_set_pool, &mut global_desc_group, global_ubos.get_all(), &scene_ubo, config::FRAMES_IN_FLIGHT)?;
+        let _ = Self::add_global_descriptor_sets(device, desc_set_pool, &mut global_desc_group, &global_ubos, &scene_ubo, config::FRAMES_IN_FLIGHT)?;
 
         let mut object_desc_group = VulkanDescriptorSetGroup::new_object_group(ctx, device)?;
-        let _ = Self::add_object_descriptor_set(device, desc_set_pool, &mut object_desc_group, object_ubos.get_all(), config::FRAMES_IN_FLIGHT)?;
+        let _ = Self::add_object_descriptor_set(device, desc_set_pool, &mut object_desc_group, &object_ubos, config::FRAMES_IN_FLIGHT)?;
 
         let mut material_desc_group = VulkanDescriptorSetGroup::new_material_group(ctx, device)?;
         for tex in &textures {
@@ -155,7 +152,7 @@ impl VulkanSpriteShader {
     pub fn update_global_uo(&mut self, global_uo: GlobalUniformObject, core: &VulkanCtx, frame_idx: usize) -> HellResult<()> {
         self.global_uo = global_uo;
 
-        let buffer = self.global_ubos.get(frame_idx);
+        let buffer = &self.global_ubos[frame_idx];
         buffer.upload_data_buffer(&core.device.device, &self.global_uo)?;
 
         Ok(())
@@ -344,10 +341,10 @@ impl VulkanSpriteShader {
     }
 
     pub fn get_all_object_buffers(&self) -> &[VulkanBuffer] {
-        self.object_ubos.get_all()
+        &self.object_ubos
     }
 
     pub fn get_object_buffer(&self, frame_idx: usize) -> &VulkanBuffer {
-        self.object_ubos.get(frame_idx)
+        &self.object_ubos[frame_idx]
     }
 }

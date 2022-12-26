@@ -1,44 +1,28 @@
+use std::array;
+
 use crate::error::err_invalid_frame_idx;
+use crate::shared::collections::PerFrame;
 use crate::vulkan::VulkanCommandPool;
-use ash::prelude::VkResult;
 use ash::vk;
-use hell_error::{HellResult, ErrToHellErr};
+use hell_error::HellResult;
 
 use super::VulkanCtxRef;
 use super::command_buffer::VulkanCommandBuffer;
-use super::swapchain::VulkanSwapchain;
-use hell_core::config;
-
+use super::primitives::{VulkanSemaphore, VulkanFence};
 
 
 pub struct VulkanFrameData {
-    ctx: VulkanCtxRef,
-    pub img_available_semaphors: Vec<vk::Semaphore>,
-    pub render_finished_semaphors: Vec<vk::Semaphore>,
-    pub in_flight_fences: Vec<vk::Fence>,
+    img_available_sem: PerFrame<VulkanSemaphore>,
+    render_finished_sem: PerFrame<VulkanSemaphore>,
+    in_flight_fences: PerFrame<VulkanFence>,
 
     pub wait_stages: [vk::PipelineStageFlags; 1], // same for each frame
-    pub graphics_cmd_pools: Vec<VulkanCommandPool>,
+    pub graphics_cmd_pools: PerFrame<VulkanCommandPool>,
 
-}
-
-impl Drop for VulkanFrameData {
-    fn drop(&mut self) {
-        println!("> dropping FrameData...");
-
-        unsafe {
-            let device = &self.ctx.device.device;
-            self.img_available_semaphors.iter().for_each(|s| device.destroy_semaphore(*s, None));
-            self.render_finished_semaphors.iter().for_each(|s| device.destroy_semaphore(*s, None));
-            self.in_flight_fences.iter().for_each(|f| device.destroy_fence(*f, None));
-        }
-    }
 }
 
 impl VulkanFrameData {
     pub fn new(ctx: &VulkanCtxRef) -> HellResult<Self> {
-        let device = &ctx.device.device;
-
         let semaphore_info = vk::SemaphoreCreateInfo::default();
 
         let fence_info = vk::FenceCreateInfo::builder()
@@ -47,78 +31,34 @@ impl VulkanFrameData {
             .build();
 
         // TODO: error handling
-        let img_available_sem: HellResult<Vec<_>> = (0..config::FRAMES_IN_FLIGHT).into_iter()
-            .map(|_| unsafe { device.create_semaphore(&semaphore_info, None).to_render_hell_err() })
-            .collect();
-        let render_finished_sem: HellResult<Vec<_>> = (0..config::FRAMES_IN_FLIGHT).into_iter()
-            .map(|_| unsafe { device.create_semaphore(&semaphore_info, None).to_render_hell_err() })
-            .collect();
-        let in_flight_fence: HellResult<Vec<_>> = (0..config::FRAMES_IN_FLIGHT).into_iter()
-            .map(|_| unsafe { device.create_fence(&fence_info, None).to_render_hell_err() })
-            .collect();
-
-        let graphics_cmd_pool: HellResult<Vec<_>> = (0..config::FRAMES_IN_FLIGHT).into_iter()
-            .map(|_| VulkanCommandPool::default_for_graphics(ctx))
-            .collect();
-        let graphics_cmd_pool = graphics_cmd_pool?;
-
-
+        let img_available_sem   = array::from_fn(|_| VulkanSemaphore::new(ctx, &semaphore_info).unwrap());
+        let render_finished_sem = array::from_fn(|_| VulkanSemaphore::new(ctx, &semaphore_info).unwrap());
+        let in_flight_fences    = array::from_fn(|_| VulkanFence::new(ctx, &fence_info).unwrap());
+        let graphics_cmd_pools  = array::from_fn(|_| VulkanCommandPool::default_for_graphics(ctx).unwrap());
 
         Ok(Self {
-            ctx: ctx.clone(),
-            img_available_semaphors: img_available_sem?,
-            render_finished_semaphors: render_finished_sem?,
-            in_flight_fences: in_flight_fence?,
+            img_available_sem,
+            render_finished_sem,
+            in_flight_fences,
             wait_stages: [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
-            graphics_cmd_pools: graphics_cmd_pool,
+            graphics_cmd_pools,
         })
     }
 }
 
 impl VulkanFrameData {
-    pub fn wait_for_in_flight(&self, device: &ash::Device, frame_idx: usize) -> HellResult<()>{
-        unsafe {
-            device.wait_for_fences(
-                &[self.in_flight_fences[frame_idx]],
-                true,
-                u64::MAX    // ^= "don't time out"
-            ) .to_render_hell_err()
-        }
+    pub fn in_flight_fence(&self, frame_idx: usize) -> &VulkanFence {
+        &self.in_flight_fences[frame_idx]
     }
 
-    pub fn reset_in_flight_fence(&self, device: &ash::Device, frame_idx: usize) -> HellResult<()> {
-        unsafe {
-            device.reset_fences(&[self.in_flight_fences[frame_idx]]).to_render_hell_err()
-        }
+    pub fn img_available_sem(&self, frame_idx: usize) -> &VulkanSemaphore {
+        &self.img_available_sem[frame_idx]
     }
 
-    pub fn submit_queue(&self, device: &ash::Device, queue: vk::Queue, cmd_buffers: &[vk::CommandBuffer], frame_idx: usize) -> HellResult<()> {
-        let submit_info = [
-            vk::SubmitInfo::builder()
-                .wait_semaphores(&[self.img_available_semaphors[frame_idx]])
-                .wait_dst_stage_mask(&self.wait_stages)
-                .signal_semaphores(&[self.render_finished_semaphors[frame_idx]])
-                .command_buffers(cmd_buffers)
-                .build()
-        ];
-
-        unsafe {
-            device.queue_submit(queue, &submit_info, self.in_flight_fences[frame_idx]).to_render_hell_err()
-        }
+    pub fn img_render_finished_sem(&self, frame_idx: usize) -> &VulkanSemaphore {
+        &self.render_finished_sem[frame_idx]
     }
 
-    pub fn present_queue(&self, queue: vk::Queue, swapchain: &VulkanSwapchain, img_indices: &[u32], frame_idx: usize) -> VkResult<bool> {
-        let s = &[swapchain.vk_swapchain];
-        let present_info = vk::PresentInfoKHR::builder()
-            .wait_semaphores(&[self.render_finished_semaphors[frame_idx]])
-            .swapchains(s)
-            .image_indices(img_indices)
-            .build();
-
-        unsafe {
-            swapchain.swapchain_loader.queue_present(queue, &present_info)
-        }
-    }
 }
 
 impl VulkanFrameData {

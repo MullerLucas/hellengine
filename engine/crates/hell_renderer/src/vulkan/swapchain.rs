@@ -6,6 +6,7 @@ use hell_core::config;
 use crate::vulkan::image;
 
 use super::VulkanCtxRef;
+use super::primitives::VulkanSemaphore;
 use super::surface::VulkanSurface;
 
 
@@ -240,9 +241,9 @@ impl VulkanSwapchain {
 
 
 impl VulkanSwapchain {
-    pub fn aquire_next_image(&self, img_available_sem: vk::Semaphore) -> HellResult<(u32, bool)> {
+    pub fn aquire_next_image(&self, img_available_sem: &VulkanSemaphore) -> HellResult<(u32, bool)> {
         unsafe {
-            Ok(self.swapchain_loader.acquire_next_image(self.vk_swapchain, u64::MAX, img_available_sem, vk::Fence::null())?)
+            Ok(self.swapchain_loader.acquire_next_image(self.vk_swapchain, u64::MAX, img_available_sem.handle(), vk::Fence::null())?)
         }
     }
 
