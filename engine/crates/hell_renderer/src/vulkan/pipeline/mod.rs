@@ -10,7 +10,7 @@ use crate::vulkan::{Vertex3D, VulkanContextRef};
 
 use self::shader_data::MeshPushConstants;
 
-use super::primitives::{VulkanSwapchain, VulkanRenderPassData};
+use super::primitives::{VulkanSwapchain, VulkanRenderPass};
 
 
 
@@ -39,11 +39,9 @@ impl Drop for VulkanPipeline {
 }
 
 impl VulkanPipeline {
-    pub fn new(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass_data: &VulkanRenderPassData, descriptor_set_layouts: &[vk::DescriptorSetLayout], depth_test_enabled: bool, is_wireframe: bool) -> HellResult<Self> {
+    pub fn new(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass: &VulkanRenderPass, descriptor_set_layouts: &[vk::DescriptorSetLayout], depth_test_enabled: bool, is_wireframe: bool) -> HellResult<Self> {
         let device = &ctx.device.handle;
         let sample_count = vk::SampleCountFlags::TYPE_1;
-
-        // let render_pass_data = VulkanRenderPassData::new(core);
 
         // shader
         // ------
@@ -175,7 +173,7 @@ impl VulkanPipeline {
             .multisample_state(&multisample_state_info)
             .color_blend_state(&color_blend_info)
             .layout(pipeline_layout)
-            .render_pass(render_pass_data.world_render_pass.handle)
+            .render_pass(render_pass.handle)
             .subpass(0)
             .base_pipeline_handle(vk::Pipeline::null())
             .base_pipeline_index(-1)

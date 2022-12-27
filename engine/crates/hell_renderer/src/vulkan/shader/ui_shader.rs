@@ -5,7 +5,7 @@ use hell_error::HellResult;
 use crate::error::{err_invalid_frame_idx, err_invalid_set_idx};
 
 use crate::render_types::{PerFrame, RenderData};
-use crate::shader::{SpriteShaderGlobalUniformObject, SpriteShaderSceneData, SpriteShaderObjectData};
+use crate::shader::{UiShaderGlobalUniformObject, UiShaderSceneData, UiShaderObjectData};
 use crate::vulkan::pipeline::{VulkanPipeline, VulkanShader};
 use crate::vulkan::primitives::{VulkanImage, VulkanBuffer, VulkanSampler, VulkanSwapchain, VulkanDescriptorSet, VulkanRenderPassData};
 use crate::vulkan::{VulkanContextRef, VulkanContext};
@@ -17,11 +17,11 @@ use super::shader_utils::VulkanUboData;
 
 
 const SPRITE_SHADER_DESCRIPTOR_SET_COUNT: usize = 3;
-pub struct VulkanSpriteShader {
+pub struct VulkanUiShader {
     ctx: VulkanContextRef,
 
     // data
-    pub global_uo: SpriteShaderGlobalUniformObject,
+    pub global_uo: UiShaderGlobalUniformObject,
     pub global_ubos: PerFrame<VulkanBuffer>,
     pub scene_ubo: VulkanBuffer, // one ubo for all frames
     pub object_ubos: PerFrame<VulkanBuffer>,
@@ -41,7 +41,7 @@ pub struct VulkanSpriteShader {
 
 }
 
-impl Drop for VulkanSpriteShader {
+impl Drop for VulkanUiShader {
     fn drop(&mut self) {
         unsafe {
             let device = &self.ctx.device.handle;
@@ -51,23 +51,23 @@ impl Drop for VulkanSpriteShader {
     }
 }
 
-impl VulkanSpriteShader {
+impl VulkanUiShader {
     pub fn new(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, shader_path: &str, render_pass_data: &VulkanRenderPassData) -> HellResult<Self> {
         let device = &ctx.device.handle;
 
         // global uniform
         // --------------
-        let global_uo = SpriteShaderGlobalUniformObject::default();
-        let global_ubos = array::from_fn(|_| VulkanBuffer::from_uniform(ctx, SpriteShaderGlobalUniformObject::device_size()));
+        let global_uo = UiShaderGlobalUniformObject::default();
+        let global_ubos = array::from_fn(|_| VulkanBuffer::from_uniform(ctx, UiShaderGlobalUniformObject::device_size()));
 
         // scene uniform
         // --------------
-        let scene_ubo_size = SpriteShaderSceneData::total_size(ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment, config::FRAMES_IN_FLIGHT as u64);
+        let scene_ubo_size = UiShaderSceneData::total_size(ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment, config::FRAMES_IN_FLIGHT as u64);
         let scene_ubo = VulkanBuffer::from_uniform(ctx, scene_ubo_size);
 
         // object uniform
         // --------------
-        let object_ubos = array::from_fn(|_| VulkanBuffer::from_storage(ctx, SpriteShaderObjectData::total_size()));
+        let object_ubos = array::from_fn(|_| VulkanBuffer::from_storage(ctx, UiShaderObjectData::total_size()));
 
         // texture data
         // ------------
@@ -126,7 +126,7 @@ impl VulkanSpriteShader {
         // pipeline
         // --------
         let shader = VulkanShader::from_file(ctx, shader_path)?;
-        let pipeline = VulkanPipeline::new(ctx, swapchain, shader, &render_pass_data.world_render_pass, &desc_layouts, true, false)?;
+        let pipeline = VulkanPipeline::new(ctx, swapchain, shader, &render_pass_data.ui_render_pass, &desc_layouts, false, false)?;
 
         Ok(Self {
             ctx: ctx.clone(),
@@ -150,7 +150,7 @@ impl VulkanSpriteShader {
         })
     }
 
-    pub fn update_global_uo(&mut self, global_uo: SpriteShaderGlobalUniformObject, core: &VulkanContext, frame_idx: usize) -> HellResult<()> {
+    pub fn update_global_uo(&mut self, global_uo: UiShaderGlobalUniformObject, core: &VulkanContext, frame_idx: usize) -> HellResult<()> {
         self.global_uo = global_uo;
 
         let buffer = &self.global_ubos[frame_idx];
@@ -159,7 +159,7 @@ impl VulkanSpriteShader {
         Ok(())
     }
 
-    pub fn update_scene_uo(&self, scene_data: &SpriteShaderSceneData, frame_idx: usize) -> HellResult<()> {
+    pub fn update_scene_uo(&self, scene_data: &UiShaderSceneData, frame_idx: usize) -> HellResult<()> {
         let min_ubo_alignment = self.ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
 
         let buffer = self.get_scene_buffer();
@@ -172,7 +172,7 @@ impl VulkanSpriteShader {
         let buffer = self.get_object_buffer(frame_idx);
 
         let object_data: Vec<_> = render_data.iter()
-            .map(|r| SpriteShaderObjectData::new(r.transform.create_model_mat()))
+            .map(|r| UiShaderObjectData::new(r.transform.create_model_mat()))
             .collect();
 
         unsafe {
@@ -184,7 +184,7 @@ impl VulkanSpriteShader {
 
 }
 
-impl VulkanSpriteShader {
+impl VulkanUiShader {
     pub fn get_layouts(&self) -> &[vk::DescriptorSetLayout] {
         &self.desc_layouts
     }
@@ -214,7 +214,7 @@ impl VulkanSpriteShader {
     }
 }
 
-impl VulkanSpriteShader {
+impl VulkanUiShader {
     fn add_global_descriptor_sets(ctx: &VulkanContextRef, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSet, camera_ubos: &[VulkanBuffer], scene_ubo: &VulkanBuffer) -> HellResult<usize> {
         let sets = VulkanDescriptorSet::allocate_sets_for_layout(ctx, group.layout, pool)?;
 
@@ -225,7 +225,7 @@ impl VulkanSpriteShader {
                 vk::DescriptorBufferInfo::builder()
                     .buffer(camera_ubos[idx].buffer)
                     .offset(0)
-                    .range(SpriteShaderGlobalUniformObject::device_size())
+                    .range(UiShaderGlobalUniformObject::device_size())
                     .build()
             ];
 
@@ -235,7 +235,7 @@ impl VulkanSpriteShader {
                     .buffer(scene_ubo.buffer)
                     .offset(0)
                     // .offset(SceneData::padded_device_size(min_ubo_alignment) * idx as u64) // hard coded offset -> for non-dynamic buffer
-                    .range(SpriteShaderSceneData::device_size())
+                    .range(UiShaderSceneData::device_size())
                     .build()
             ];
 
@@ -273,7 +273,7 @@ impl VulkanSpriteShader {
                 vk::DescriptorBufferInfo::builder()
                     .buffer(object_ubos[idx].buffer)
                     .offset(0)
-                    .range(SpriteShaderObjectData::total_size())
+                    .range(UiShaderObjectData::total_size())
                     .build()
             ];
 
@@ -338,7 +338,7 @@ impl VulkanSpriteShader {
     }
 }
 
-impl VulkanSpriteShader {
+impl VulkanUiShader {
     pub fn get_scene_buffer(&self) -> &VulkanBuffer {
         &self.scene_ubo
     }
@@ -357,7 +357,8 @@ impl VulkanSpriteShader {
 // ubos
 // ----------------------------------------------------------------------------
 
-impl VulkanUboData for SpriteShaderGlobalUniformObject {
+
+impl VulkanUboData for UiShaderGlobalUniformObject {
     fn device_size() -> vk::DeviceSize {
         std::mem::size_of::<Self>() as vk::DeviceSize
     }
@@ -365,13 +366,13 @@ impl VulkanUboData for SpriteShaderGlobalUniformObject {
 
 // ----------------------------------------------
 
-impl VulkanUboData for SpriteShaderSceneData {
+impl VulkanUboData for UiShaderSceneData {
     fn device_size() -> vk::DeviceSize {
         std::mem::size_of::<Self>() as vk::DeviceSize
     }
 }
 
-impl SpriteShaderSceneData {
+impl UiShaderSceneData {
     pub fn total_size(min_ubo_alignment: u64, frame_count: u64) -> vk::DeviceSize {
         Self::padded_device_size(min_ubo_alignment) * frame_count
     }
@@ -379,13 +380,13 @@ impl SpriteShaderSceneData {
 
 // ----------------------------------------------
 
-impl VulkanUboData for SpriteShaderObjectData {
+impl VulkanUboData for UiShaderObjectData {
     fn device_size() -> vk::DeviceSize {
         std::mem::size_of::<Self>() as vk::DeviceSize
     }
 }
 
-impl SpriteShaderObjectData {
+impl UiShaderObjectData {
     pub fn total_size() -> vk::DeviceSize {
         (Self::device_size() *  Self::MAX_OBJ_COUNT) as vk::DeviceSize
     }

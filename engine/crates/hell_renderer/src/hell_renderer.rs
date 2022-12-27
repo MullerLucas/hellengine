@@ -4,10 +4,11 @@ use hell_common::window::{HellSurfaceInfo, HellWindowExtent};
 use hell_error::HellResult;
 use hell_resources::ResourceManager;
 
-use crate::render_data::TmpCamera;
-use crate::shared::shader::sprite_shader::SpriteShaderSceneData;
+use crate::camera::HellCamera;
+use crate::render_types::RenderPackage;
+use crate::shader::SpriteShaderSceneData;
 use crate::vulkan::primitives::VulkanSwapchain;
-use crate::vulkan::{VulkanBackend, VulkanContext, VulkanFrameData, RenderData};
+use crate::vulkan::{VulkanBackend, VulkanContext, VulkanFrameData};
 
 
 
@@ -22,8 +23,7 @@ pub struct HellRenderer {
     backend: VulkanBackend,
 
     frame_idx: usize,
-
-    camera: TmpCamera,
+    camera: HellCamera,
 }
 
 impl HellRenderer {
@@ -33,7 +33,7 @@ impl HellRenderer {
         let aspect_ratio = swapchain.aspect_ratio();
         let backend = VulkanBackend::new(ctx, swapchain)?;
 
-        let camera = TmpCamera::new(aspect_ratio);
+        let camera = HellCamera::new(aspect_ratio);
 
         Ok(Self {
             info,
@@ -45,7 +45,7 @@ impl HellRenderer {
 }
 
 impl HellRenderer {
-    pub fn get_frame_idx(&self) -> usize {
+    pub fn frame_idx(&self) -> usize {
         self.frame_idx
     }
 }
@@ -61,17 +61,18 @@ impl HellRenderer {
     }
 
     pub fn prepare_renderer(&mut self, resource_manager: &ResourceManager) -> HellResult<()> {
-        let shaders = resource_manager.unique_shader_keys();
-        self.backend.create_shaders(shaders, resource_manager)?;
+        // let shaders = resource_manager.unique_shader_keys();
+        // self.backend.create_shaders(shaders, resource_manager)?;
+        self.backend.create_textures(resource_manager)?;
+
         Ok(())
     }
 
-    pub fn draw_frame(&mut self, delta_time: f32, scene_data: &SpriteShaderSceneData, world_render_data: &RenderData, resources: &ResourceManager) -> HellResult<bool> {
-        self.backend.update_global_state(self.camera.clone())?;
-        self.backend.update_scene_buffer(scene_data)?;
-        self.backend.update_object_buffer(world_render_data)?;
+    pub fn draw_frame(&mut self, delta_time: f32, scene_data: &SpriteShaderSceneData, render_pkg: &RenderPackage, resources: &ResourceManager) -> HellResult<bool> {
+        self.backend.update_world_shader(self.camera.clone(), scene_data, &render_pkg.world)?;
+        self.backend.update_ui_shader   (self.camera.clone(), &render_pkg.ui)?;
 
-        let is_resized = self.backend.draw_frame(delta_time, world_render_data, resources)?;
+        let is_resized = self.backend.draw_frame(delta_time, render_pkg, resources)?;
 
         self.increment_frame_idx();
         Ok(is_resized)

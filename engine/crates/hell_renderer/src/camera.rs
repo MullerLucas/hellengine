@@ -1,38 +1,15 @@
-// use crate::vulkan::RenderData;
-
-
-
-// ----------------------------------------------------------------------------
-// Renderable
-// ----------------------------------------------------------------------------
-
-// pub trait HellRenderable {
-//     fn get_render_data(&self) -> &RenderData;
-//     fn get_scene_data(&self) -> &SceneData;
-// }
-
-
-
-// ----------------------------------------------------------------------------
-// ObjectUniform
-// ----------------------------------------------------------------------------
-
-
-
-
-
 // ----------------------------------------------------------------------------
 // Camera
 // ----------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
-pub struct TmpCamera {
+pub struct HellCamera {
     pub view: glam::Mat4,      // 64 bytes
     pub proj: glam::Mat4,      // 64 bytes
     pub view_proj: glam::Mat4, // 64 bytes
 }
 
-impl TmpCamera {
+impl HellCamera {
     // TODO:
     pub fn new(aspect_ratio: f32) -> Self {
 

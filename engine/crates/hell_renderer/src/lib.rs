@@ -5,10 +5,12 @@
 
 
 pub mod vulkan;
-mod shared;
-pub use shared::render_data;
-pub use shared::shader;
 
 mod error;
 mod hell_renderer;
 pub use hell_renderer::{HellRenderer, HellRendererInfo};
+
+pub mod render_types;
+pub mod scene;
+pub mod camera;
+pub mod shader;

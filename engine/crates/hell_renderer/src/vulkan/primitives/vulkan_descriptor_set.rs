@@ -5,7 +5,7 @@ use ash::prelude::VkResult;
 use ash::vk;
 use hell_error::HellResult;
 
-use crate::shared::collections::PerFrame;
+use crate::render_types::PerFrame;
 use crate::vulkan::VulkanContextRef;
 
 

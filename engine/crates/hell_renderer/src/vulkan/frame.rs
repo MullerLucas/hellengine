@@ -1,7 +1,7 @@
 use std::array;
 
 use crate::error::err_invalid_frame_idx;
-use crate::shared::collections::PerFrame;
+use crate::render_types::PerFrame;
 use ash::vk;
 use hell_error::HellResult;
 

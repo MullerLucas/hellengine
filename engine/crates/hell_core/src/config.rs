@@ -40,3 +40,8 @@ pub const CLEAR_COLOR: [f32; 4] = [0.3, 0.2, 0.8, 1.0];
 // -----------------------------------------------------------------------------
 pub const IMG_FLIP_V: bool = false;
 pub const IMG_FLIP_H: bool = false;
+
+pub const SPRITE_SHADER_KEY:  &str = "sprite";
+pub const SPRITE_SHADER_PATH: &str = "shaders/sprite";
+pub const UI_SHADER_KEY:      &str = "sprite";
+pub const UI_SHADER_PATH:     &str = "shaders/builtin.ui";

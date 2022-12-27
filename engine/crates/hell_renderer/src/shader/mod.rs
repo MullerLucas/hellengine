@@ -1,5 +1,3 @@
-pub mod shader_utils;
-
 mod sprite_shader;
 pub use sprite_shader::*;
 

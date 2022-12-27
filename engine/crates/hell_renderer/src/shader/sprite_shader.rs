@@ -69,18 +69,20 @@ impl SpriteShaderSceneData {
 #[repr(C)]
 pub struct SpriteShaderObjectData {
     pub model: glam::Mat4,
+    pub reserved_0: glam::Mat4, // 64 bytes
+    pub reserved_1: glam::Mat4, // 64 bytes
+    pub reserved_2: glam::Mat4, // 64 bytes
 }
 
 impl SpriteShaderObjectData {
     pub const MAX_OBJ_COUNT: u64 = 10000;
+
+    pub fn new(model: glam::Mat4) -> Self {
+        Self {
+            model,
+            reserved_0: glam::Mat4::ZERO,
+            reserved_1: glam::Mat4::ZERO,
+            reserved_2: glam::Mat4::ZERO,
+        }
+    }
 }
-
-
-// #[derive(Debug, Clone)]
-// #[repr(C)]
-// pub struct ObjectUniform {
-//     pub model: glam::Mat4,     // 64 bytes
-//     pub reserve_0: glam::Mat4, // 64 bytes
-//     pub reserve_1: glam::Mat4, // 64 bytes
-//     pub reserve_2: glam::Mat4, // 64 bytes
-// }

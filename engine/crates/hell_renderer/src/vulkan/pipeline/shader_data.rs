@@ -107,18 +107,3 @@ impl VulkanMesh<Vertex2D> {
 pub struct MeshPushConstants {
     pub model: glam::Mat4,
 }
-
-
-
-
-
-
-
-// ----------------------------------------------------------------------------
-// utils
-// ----------------------------------------------------------------------------
-
-pub fn calculate_aligned_size(min_alignment: u64, orig_size: u64) -> u64 {
-    if min_alignment == 0 { return orig_size; }
-    (orig_size + min_alignment - 1) & !(min_alignment - 1)
-}

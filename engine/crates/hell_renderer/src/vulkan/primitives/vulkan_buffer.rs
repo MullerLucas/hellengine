@@ -2,7 +2,7 @@ use ash::prelude::VkResult;
 use ash::vk;
 use hell_error::{HellResult, ErrToHellErr};
 
-use crate::vulkan::{VulkanContextRef, Vertex3D, shader::VulkanUboData};
+use crate::vulkan::{VulkanContextRef, Vertex3D, shader::shader_utils::VulkanUboData};
 
 use super::{VulkanCommands, VulkanCommandPool};
 
