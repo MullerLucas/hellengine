@@ -193,8 +193,6 @@ impl VulkanBuffer {
 }
 
 
-
-
 impl VulkanBuffer {
     pub fn upload_data_buffer<T: VulkanUboData>(&self, device: &ash::Device, data: &T) -> HellResult<()> {
         let buff_size = T::device_size();
@@ -236,8 +234,8 @@ impl VulkanBuffer {
 }
 
 impl<'a> VulkanBuffer {
-    pub fn map_memory(&self, device: &'a ash::Device, offset: u64, buff_size: u64, mem_map_flags: vk::MemoryMapFlags) -> VkResult<DeviceMemoryMapGuard<'a>> {
-        DeviceMemoryMapGuard::new(device, self.mem, offset, buff_size, mem_map_flags)
+    pub fn map_memory(&self, offset: usize, buff_size: usize, mem_map_flags: vk::MemoryMapFlags) -> VkResult<DeviceMemoryMapGuard<'a>> {
+        DeviceMemoryMapGuard::new(&self.ctx.device.handle, self.mem, offset as u64, buff_size as u64, mem_map_flags)
     }
 
     pub fn find_memory_type(instance: &ash::Instance, phys_device: vk::PhysicalDevice, type_filter: u32, properties: vk::MemoryPropertyFlags) -> u32 {

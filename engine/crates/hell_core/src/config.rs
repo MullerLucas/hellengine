@@ -22,10 +22,6 @@ pub const DEVICE_EXTENSION_NAMES: &[&str] = &[
 pub const FRAMES_IN_FLIGHT: usize = 3;
 pub const FALLBACK_PRESENT_MODE: vk::PresentModeKHR = vk::PresentModeKHR::FIFO;
 
-// TODO: think about values
-// maximum number of descriptor sets that may be allocated
-pub const MAX_DESCRIPTOR_SET_COUNT: u32 = 100;
-
 pub const ENABLE_SAMPLE_SHADING: bool = true;
 
 
@@ -44,3 +40,29 @@ pub const SPRITE_SHADER_KEY:  &str = "sprite";
 pub const SPRITE_SHADER_PATH: &str = "shaders/sprite";
 pub const BMFONT_SHADER_KEY:  &str = "bmfont";
 pub const BMFONT_SHADER_PATH: &str = "shaders/bmfont";
+
+
+// guaranteed by the spec -> 128 Bytes for push constants
+// VULKAN_PUSH_CONSTANT_STRIDE = 128;
+
+// Some nvidia devices have a 256 byte alignment requirement ?
+
+// UBO - 1024
+// IMAGE - SAMPLERS 4096
+
+pub const VULKAN_UBO_DESCRIPTOR_COUNT: usize = 1024;
+pub const VULKAN_SAMPLER_DESCRIPTOR_COUNT: usize = 4096;
+
+pub const VULKAN_GUARANTEED_PUSH_CONSTANT_STRIDE: usize = 128;
+pub const VULKAN_NVIDIA_REQUIRED_ALIGNMENT: usize = 256;
+
+// TODO: think about values
+// maximum number of descriptor sets that may be allocated
+pub const MAX_DESCRIPTOR_SET_COUNT: u32 = 1024;
+
+pub const VULKAN_MAX_MATERIAL_COUNT: usize = 1024;
+
+pub const VULKAN_SHADER_MAX_STAGES: usize =  8;
+pub const VULKAN_SHADER_MAX_GLOBAL_TEXTURES: usize =  31;
+pub const VULKAN_SHADER_MAX_INSTANCE_TEXTURES: usize =  31;
+pub const VULKAN_SHADER_MAX_ATTRIBUTES: usize = 16;

@@ -17,13 +17,13 @@ use crate::vulkan::VulkanContextRef;
 // descriptor-pool
 // ----------------------------------------------------------------------------
 
-pub struct VulkanDescriptorSet {
+pub struct VulkanDescriptorSetGroup {
     ctx: VulkanContextRef,
     pub layout: vk::DescriptorSetLayout,
     pub handles: Vec<PerFrame<vk::DescriptorSet>>,
 }
 
-impl Drop for VulkanDescriptorSet {
+impl Drop for VulkanDescriptorSetGroup {
     fn drop(&mut self) {
         println!("> dropping VulkanDescriptorSetLayoutGroup...");
 
@@ -34,7 +34,7 @@ impl Drop for VulkanDescriptorSet {
     }
 }
 
-impl VulkanDescriptorSet {
+impl VulkanDescriptorSetGroup {
     pub fn new(ctx: &VulkanContextRef, layout: vk::DescriptorSetLayout, capacity: usize) -> Self {
         Self {
             ctx: ctx.clone(),
@@ -69,7 +69,7 @@ impl VulkanDescriptorSet {
     }
 }
 
-impl VulkanDescriptorSet {
+impl VulkanDescriptorSetGroup {
     pub fn set_count(&self) -> usize {
         self.handles.len()
     }

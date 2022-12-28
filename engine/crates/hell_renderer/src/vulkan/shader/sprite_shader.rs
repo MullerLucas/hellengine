@@ -7,7 +7,7 @@ use crate::error::{err_invalid_frame_idx, err_invalid_set_idx};
 use crate::render_types::{PerFrame, RenderData};
 use crate::shader::{SpriteShaderGlobalUniformObject, SpriteShaderSceneData, SpriteShaderObjectData};
 use crate::vulkan::pipeline::{VulkanPipeline, VulkanShader};
-use crate::vulkan::primitives::{VulkanImage, VulkanBuffer, VulkanSampler, VulkanSwapchain, VulkanDescriptorSet, VulkanRenderPassData};
+use crate::vulkan::primitives::{VulkanImage, VulkanBuffer, VulkanSampler, VulkanSwapchain, VulkanDescriptorSetGroup, VulkanRenderPassData};
 use crate::vulkan::{VulkanContextRef, VulkanContext};
 use hell_core::config;
 
@@ -31,9 +31,9 @@ pub struct VulkanSpriteShader {
 
     // descriptor sets
     pub desc_set_pool: vk::DescriptorPool,
-    pub global_desc_group: VulkanDescriptorSet,
-    pub object_desc_group: VulkanDescriptorSet,
-    pub material_desc_group: VulkanDescriptorSet,
+    pub global_desc_group: VulkanDescriptorSetGroup,
+    pub object_desc_group: VulkanDescriptorSetGroup,
+    pub material_desc_group: VulkanDescriptorSetGroup,
     desc_layouts: [vk::DescriptorSetLayout; SPRITE_SHADER_DESCRIPTOR_SET_COUNT],
 
     // pipeline
@@ -215,8 +215,8 @@ impl VulkanSpriteShader {
 }
 
 impl VulkanSpriteShader {
-    fn add_global_descriptor_sets(ctx: &VulkanContextRef, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSet, camera_ubos: &[VulkanBuffer], scene_ubo: &VulkanBuffer) -> HellResult<usize> {
-        let sets = VulkanDescriptorSet::allocate_sets_for_layout(ctx, group.layout, pool)?;
+    fn add_global_descriptor_sets(ctx: &VulkanContextRef, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSetGroup, camera_ubos: &[VulkanBuffer], scene_ubo: &VulkanBuffer) -> HellResult<usize> {
+        let sets = VulkanDescriptorSetGroup::allocate_sets_for_layout(ctx, group.layout, pool)?;
 
         // write sets
         // ----------
@@ -265,8 +265,8 @@ impl VulkanSpriteShader {
         Ok(group.handles.len() - 1)
     }
 
-    fn add_object_descriptor_set(ctx: &VulkanContextRef, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSet,  object_ubos: &[VulkanBuffer]) -> HellResult<usize> {
-        let sets = VulkanDescriptorSet::allocate_sets_for_layout(ctx, group.layout, pool)?;
+    fn add_object_descriptor_set(ctx: &VulkanContextRef, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSetGroup,  object_ubos: &[VulkanBuffer]) -> HellResult<usize> {
+        let sets = VulkanDescriptorSetGroup::allocate_sets_for_layout(ctx, group.layout, pool)?;
 
         for (idx, s) in sets.iter().enumerate() {
             let object_infos = [
@@ -295,9 +295,9 @@ impl VulkanSpriteShader {
         Ok(group.handles.len() - 1)
     }
 
-    fn add_texture_descriptor_sets(ctx: &VulkanContextRef, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSet, texture: &VulkanImage, sampler: &VulkanSampler) -> HellResult<usize> {
+    fn add_texture_descriptor_sets(ctx: &VulkanContextRef, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSetGroup, texture: &VulkanImage, sampler: &VulkanSampler) -> HellResult<usize> {
         // TODO: check - can we use one set for all frames?
-        let sets = VulkanDescriptorSet::allocate_sets_for_layout(ctx, group.layout, pool)?;
+        let sets = VulkanDescriptorSetGroup::allocate_sets_for_layout(ctx, group.layout, pool)?;
 
         for (_, s) in sets.iter().enumerate() {
             let image_infos = [
@@ -396,7 +396,7 @@ impl SpriteShaderObjectData {
 // descriptor sets
 // ----------------------------------------------------------------------------
 
-fn new_global_group(ctx: &VulkanContextRef, device: &ash::Device, capacity: usize) -> HellResult<VulkanDescriptorSet> {
+fn new_global_group(ctx: &VulkanContextRef, device: &ash::Device, capacity: usize) -> HellResult<VulkanDescriptorSetGroup> {
     let bindings = [
         // Global-Uniform
         vk::DescriptorSetLayoutBinding::builder()
@@ -415,12 +415,12 @@ fn new_global_group(ctx: &VulkanContextRef, device: &ash::Device, capacity: usiz
             .build()
     ];
 
-    let layout = VulkanDescriptorSet::create_descriptor_set_layout(device, &bindings)?;
+    let layout = VulkanDescriptorSetGroup::create_descriptor_set_layout(device, &bindings)?;
 
-    Ok(VulkanDescriptorSet::new(ctx, layout, capacity))
+    Ok(VulkanDescriptorSetGroup::new(ctx, layout, capacity))
 }
 
-fn new_object_group(ctx: &VulkanContextRef, device: &ash::Device, capacity: usize) -> HellResult<VulkanDescriptorSet> {
+fn new_object_group(ctx: &VulkanContextRef, device: &ash::Device, capacity: usize) -> HellResult<VulkanDescriptorSetGroup> {
     let bindings = [
         // Per-Object-Data
         vk::DescriptorSetLayoutBinding::builder()
@@ -431,12 +431,12 @@ fn new_object_group(ctx: &VulkanContextRef, device: &ash::Device, capacity: usiz
             .build()
     ];
 
-    let layout = VulkanDescriptorSet::create_descriptor_set_layout(device, &bindings)?;
+    let layout = VulkanDescriptorSetGroup::create_descriptor_set_layout(device, &bindings)?;
 
-    Ok(VulkanDescriptorSet::new(ctx, layout, capacity))
+    Ok(VulkanDescriptorSetGroup::new(ctx, layout, capacity))
 }
 
-fn new_material_group(ctx: &VulkanContextRef, device: &ash::Device, capacity: usize) -> HellResult<VulkanDescriptorSet> {
+fn new_material_group(ctx: &VulkanContextRef, device: &ash::Device, capacity: usize) -> HellResult<VulkanDescriptorSetGroup> {
     let bindings = [
         // texture_sampler
         vk::DescriptorSetLayoutBinding::builder()
@@ -447,7 +447,7 @@ fn new_material_group(ctx: &VulkanContextRef, device: &ash::Device, capacity: us
             .build()
     ];
 
-    let layout = VulkanDescriptorSet::create_descriptor_set_layout(device, &bindings)?;
+    let layout = VulkanDescriptorSetGroup::create_descriptor_set_layout(device, &bindings)?;
 
-    Ok(VulkanDescriptorSet::new(ctx, layout, capacity))
+    Ok(VulkanDescriptorSetGroup::new(ctx, layout, capacity))
 }
