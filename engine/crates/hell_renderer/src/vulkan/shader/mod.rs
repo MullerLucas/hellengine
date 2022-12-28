@@ -1,7 +1,8 @@
 pub mod shader_utils;
 
+pub mod base_shader;
+
 mod sprite_shader;
 pub use sprite_shader::*;
 
-mod ui_shader;
-pub use ui_shader::*;
+pub mod bmfont_shader;

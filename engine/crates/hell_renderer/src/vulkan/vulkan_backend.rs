@@ -5,15 +5,16 @@ use hell_error::{HellResult, HellError, HellErrorKind, OptToHellErr, ErrToHellEr
 use hell_resources::{ResourceManager, ResourceHandle};
 use crate::camera::HellCamera;
 use crate::render_types::{RenderData, RenderPackage};
-use crate::shader::{SpriteShaderSceneData, SpriteShaderGlobalUniformObject, UiShaderSceneData, UiShaderGlobalUniformObject};
+use crate::shader::{SpriteShaderSceneData, SpriteShaderGlobalUniformObject, base_shader};
 use crate::vulkan::primitives::RenderPassClearFlags;
 
 use super::VulkanContextRef;
 use super::primitives::{VulkanSwapchain, VulkanCommands, VulkanCommandBuffer, VulkanRenderPassData, BultinRenderPassType, VulkanImage};
 use super::frame::VulkanFrameData;
 use super::pipeline::shader_data::{MeshPushConstants, VulkanWorldMesh, VulkanUiMesh};
+use super::shader::bmfont_shader::BmFontShaderVulkan;
 use super::shader::shader_utils::VulkanUboData;
-use super::shader::{VulkanSpriteShader, VulkanUiShader};
+use super::shader::VulkanSpriteShader;
 use hell_core::config;
 
 
@@ -38,7 +39,7 @@ pub struct VulkanBackend {
     pub render_pass_data: VulkanRenderPassData,
 
     pub world_shader: VulkanSpriteShader,
-    pub ui_shader: VulkanUiShader,
+    pub font_shader: BmFontShaderVulkan,
 
     pub ctx: VulkanContextRef,
 }
@@ -54,8 +55,8 @@ impl VulkanBackend {
         let ui_meshes = vec![quad_mesh_2d];
         let render_pass_data = VulkanRenderPassData::new(&ctx, &swapchain, &cmds)?;
 
-        let world_shader = VulkanSpriteShader::new(&ctx, &swapchain, config::SPRITE_SHADER_PATH, &render_pass_data)?;
-        let ui_shader    = VulkanUiShader::new(&ctx, &swapchain, config::SPRITE_SHADER_PATH, &render_pass_data)?;
+        let world_shader  = VulkanSpriteShader::new(&ctx, &swapchain, config::SPRITE_SHADER_PATH, &render_pass_data)?;
+        let bmfont_shader = BmFontShaderVulkan::new(&ctx, &swapchain, config::BMFONT_SHADER_PATH, &render_pass_data)?;
 
         Ok(Self {
             frame_data,
@@ -67,7 +68,7 @@ impl VulkanBackend {
             render_pass_data,
             cmd_pools: cmds,
             world_shader,
-            ui_shader,
+            font_shader: bmfont_shader,
             ctx,
         })
     }
@@ -98,7 +99,7 @@ impl VulkanBackend {
             .collect();
         let texture = texture?;
 
-        self.ui_shader.set_texture_descriptor_sets(texture)?;
+        self.font_shader.set_texture_descriptor_sets(texture)?;
 
         Ok(())
     }
@@ -348,7 +349,7 @@ impl VulkanBackend {
             let mut curr_mat_handle = ResourceHandle::MAX;
             let mut curr_mesh_idx = usize::MAX;
 
-            let curr_shader = &self.ui_shader; // TODO: ...
+            let curr_shader = &self.font_shader; // TODO: ...
             let mut curr_mesh = &self.world_meshes[0];
 
             // bind static descriptor sets once
@@ -377,15 +378,6 @@ impl VulkanBackend {
                     let descriptor_set = [ curr_shader.get_material_set(rd.material.id, self.frame_idx)? ];
                     cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 2, &descriptor_set, &[]);
                 }
-
-                // bind pipeline
-                // TODO: remove
-                // if curr_shader_key != curr_mat.shader {
-                //     curr_shader_key = &curr_mat.shader;
-                //     curr_pipeline = &self.pipelines[curr_pipeline_idx];
-                //     curr_shader = &self.world_shader;
-                //     cmd_buffer.cmd_bind_pipeline(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.pipeline);
-                // }
 
                 // bind mesh
                 if curr_mesh_idx != rd.mesh_idx {
@@ -430,14 +422,11 @@ impl VulkanBackend {
         Ok(())
     }
 
-    pub fn update_ui_shader(&mut self, camera: HellCamera, render_data: &RenderData) -> HellResult<()> {
-        let scene_data = UiShaderSceneData::default();
-
-        let global_uo = UiShaderGlobalUniformObject::new(camera.view, camera.proj, camera.view_proj);
-        self.ui_shader.update_global_uo(global_uo, &self.ctx, self.frame_idx)?;
-        self.ui_shader.update_scene_uo(&scene_data, self.frame_idx)?;
+    pub fn update_font_shader(&mut self, camera: HellCamera, render_data: &RenderData) -> HellResult<()> {
+        let camera_uo = base_shader::CameraUniform::new(camera.view, camera.proj, camera.view_proj);
+        self.font_shader.update_global_state(camera_uo, &self.ctx, self.frame_idx)?;
         if !render_data.is_empty() {
-            self.ui_shader.update_object_uo(render_data, self.frame_idx)?;
+            self.font_shader.update_object_state(render_data, self.frame_idx)?;
         }
 
         Ok(())

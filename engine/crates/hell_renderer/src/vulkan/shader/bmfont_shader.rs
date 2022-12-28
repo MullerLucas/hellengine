@@ -5,7 +5,8 @@ use hell_error::HellResult;
 use crate::error::{err_invalid_frame_idx, err_invalid_set_idx};
 
 use crate::render_types::{PerFrame, RenderData};
-use crate::shader::{UiShaderGlobalUniformObject, UiShaderSceneData, UiShaderObjectData};
+use crate::shader::base_shader::CameraUniform;
+use crate::shader::bmfont_shader::BmFontShaderUniform;
 use crate::vulkan::pipeline::{VulkanPipeline, VulkanShader};
 use crate::vulkan::primitives::{VulkanImage, VulkanBuffer, VulkanSampler, VulkanSwapchain, VulkanDescriptorSet, VulkanRenderPassData};
 use crate::vulkan::{VulkanContextRef, VulkanContext};
@@ -17,13 +18,12 @@ use super::shader_utils::VulkanUboData;
 
 
 const SPRITE_SHADER_DESCRIPTOR_SET_COUNT: usize = 3;
-pub struct VulkanUiShader {
+pub struct BmFontShaderVulkan {
     ctx: VulkanContextRef,
 
     // data
-    pub global_uo: UiShaderGlobalUniformObject,
+    pub global_uo: CameraUniform,
     pub global_ubos: PerFrame<VulkanBuffer>,
-    pub scene_ubo: VulkanBuffer, // one ubo for all frames
     pub object_ubos: PerFrame<VulkanBuffer>,
 
     pub textures: Vec<VulkanImage>,
@@ -41,7 +41,7 @@ pub struct VulkanUiShader {
 
 }
 
-impl Drop for VulkanUiShader {
+impl Drop for BmFontShaderVulkan {
     fn drop(&mut self) {
         unsafe {
             let device = &self.ctx.device.handle;
@@ -51,23 +51,18 @@ impl Drop for VulkanUiShader {
     }
 }
 
-impl VulkanUiShader {
+impl BmFontShaderVulkan {
     pub fn new(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, shader_path: &str, render_pass_data: &VulkanRenderPassData) -> HellResult<Self> {
         let device = &ctx.device.handle;
 
         // global uniform
         // --------------
-        let global_uo = UiShaderGlobalUniformObject::default();
-        let global_ubos = array::from_fn(|_| VulkanBuffer::from_uniform(ctx, UiShaderGlobalUniformObject::device_size()));
-
-        // scene uniform
-        // --------------
-        let scene_ubo_size = UiShaderSceneData::total_size(ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment, config::FRAMES_IN_FLIGHT as u64);
-        let scene_ubo = VulkanBuffer::from_uniform(ctx, scene_ubo_size);
+        let global_uo = CameraUniform::default();
+        let global_ubos = array::from_fn(|_| VulkanBuffer::from_uniform(ctx, CameraUniform::device_size()));
 
         // object uniform
         // --------------
-        let object_ubos = array::from_fn(|_| VulkanBuffer::from_storage(ctx, UiShaderObjectData::total_size()));
+        let object_ubos = array::from_fn(|_| VulkanBuffer::from_storage(ctx, BmFontShaderUniform::total_size()));
 
         // texture data
         // ------------
@@ -110,7 +105,7 @@ impl VulkanUiShader {
         // descirptor set groups
         // ---------------------
         let mut global_desc_group = new_global_group(ctx, device, 1)?;
-        let _ = Self::add_global_descriptor_sets(ctx, desc_set_pool, &mut global_desc_group, &global_ubos, &scene_ubo)?;
+        let _ = Self::add_global_descriptor_sets(ctx, desc_set_pool, &mut global_desc_group, &global_ubos)?;
 
         let mut object_desc_group = new_object_group(ctx, device, 1)?;
         let _ = Self::add_object_descriptor_set(ctx, desc_set_pool, &mut object_desc_group, &object_ubos)?;
@@ -136,7 +131,6 @@ impl VulkanUiShader {
 
             global_uo,
             global_ubos,
-            scene_ubo,
             object_ubos,
 
             textures: vec![],
@@ -150,8 +144,8 @@ impl VulkanUiShader {
         })
     }
 
-    pub fn update_global_uo(&mut self, global_uo: UiShaderGlobalUniformObject, core: &VulkanContext, frame_idx: usize) -> HellResult<()> {
-        self.global_uo = global_uo;
+    pub fn update_global_state(&mut self, camera_uo: CameraUniform, core: &VulkanContext, frame_idx: usize) -> HellResult<()> {
+        self.global_uo = camera_uo;
 
         let buffer = &self.global_ubos[frame_idx];
         buffer.upload_data_buffer(&core.device.handle, &self.global_uo)?;
@@ -159,20 +153,11 @@ impl VulkanUiShader {
         Ok(())
     }
 
-    pub fn update_scene_uo(&self, scene_data: &UiShaderSceneData, frame_idx: usize) -> HellResult<()> {
-        let min_ubo_alignment = self.ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
-
-        let buffer = self.get_scene_buffer();
-        buffer.upload_data_buffer_array(&self.ctx.device.handle, min_ubo_alignment, scene_data, frame_idx)?;
-
-        Ok(())
-    }
-
-    pub fn update_object_uo(&self, render_data: &RenderData, frame_idx: usize) -> HellResult<()> {
+    pub fn update_object_state(&self, render_data: &RenderData, frame_idx: usize) -> HellResult<()> {
         let buffer = self.get_object_buffer(frame_idx);
 
         let object_data: Vec<_> = render_data.iter()
-            .map(|r| UiShaderObjectData::new(r.transform.create_model_mat()))
+            .map(|r| BmFontShaderUniform::new(r.transform.create_model_mat()))
             .collect();
 
         unsafe {
@@ -184,7 +169,7 @@ impl VulkanUiShader {
 
 }
 
-impl VulkanUiShader {
+impl BmFontShaderVulkan {
     pub fn get_layouts(&self) -> &[vk::DescriptorSetLayout] {
         &self.desc_layouts
     }
@@ -214,8 +199,8 @@ impl VulkanUiShader {
     }
 }
 
-impl VulkanUiShader {
-    fn add_global_descriptor_sets(ctx: &VulkanContextRef, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSet, camera_ubos: &[VulkanBuffer], scene_ubo: &VulkanBuffer) -> HellResult<usize> {
+impl BmFontShaderVulkan {
+    fn add_global_descriptor_sets(ctx: &VulkanContextRef, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSet, camera_ubos: &[VulkanBuffer]) -> HellResult<usize> {
         let sets = VulkanDescriptorSet::allocate_sets_for_layout(ctx, group.layout, pool)?;
 
         // write sets
@@ -225,17 +210,7 @@ impl VulkanUiShader {
                 vk::DescriptorBufferInfo::builder()
                     .buffer(camera_ubos[idx].buffer)
                     .offset(0)
-                    .range(UiShaderGlobalUniformObject::device_size())
-                    .build()
-            ];
-
-            // one buffer contains one set of data per frame -> use offset to index correct buffer
-            let scene_buffer_infos = [
-                vk::DescriptorBufferInfo::builder()
-                    .buffer(scene_ubo.buffer)
-                    .offset(0)
-                    // .offset(SceneData::padded_device_size(min_ubo_alignment) * idx as u64) // hard coded offset -> for non-dynamic buffer
-                    .range(UiShaderSceneData::device_size())
+                    .range(CameraUniform::device_size())
                     .build()
             ];
 
@@ -247,13 +222,6 @@ impl VulkanUiShader {
                     .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
                     .buffer_info(&camera_buffer_infos)
                     .build(),
-                vk::WriteDescriptorSet::builder()
-                    .dst_set(*s)
-                    .dst_binding(1)
-                    .dst_array_element(0)
-                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC)
-                    .buffer_info(&scene_buffer_infos)
-                    .build()
             ];
 
             unsafe { ctx.device.handle.update_descriptor_sets(&write_descriptors, &[]); }
@@ -273,7 +241,7 @@ impl VulkanUiShader {
                 vk::DescriptorBufferInfo::builder()
                     .buffer(object_ubos[idx].buffer)
                     .offset(0)
-                    .range(UiShaderObjectData::total_size())
+                    .range(BmFontShaderUniform::total_size())
                     .build()
             ];
 
@@ -338,11 +306,7 @@ impl VulkanUiShader {
     }
 }
 
-impl VulkanUiShader {
-    pub fn get_scene_buffer(&self) -> &VulkanBuffer {
-        &self.scene_ubo
-    }
-
+impl BmFontShaderVulkan {
     pub fn get_all_object_buffers(&self) -> &[VulkanBuffer] {
         &self.object_ubos
     }
@@ -358,35 +322,13 @@ impl VulkanUiShader {
 // ----------------------------------------------------------------------------
 
 
-impl VulkanUboData for UiShaderGlobalUniformObject {
+impl VulkanUboData for BmFontShaderUniform {
     fn device_size() -> vk::DeviceSize {
         std::mem::size_of::<Self>() as vk::DeviceSize
     }
 }
 
-// ----------------------------------------------
-
-impl VulkanUboData for UiShaderSceneData {
-    fn device_size() -> vk::DeviceSize {
-        std::mem::size_of::<Self>() as vk::DeviceSize
-    }
-}
-
-impl UiShaderSceneData {
-    pub fn total_size(min_ubo_alignment: u64, frame_count: u64) -> vk::DeviceSize {
-        Self::padded_device_size(min_ubo_alignment) * frame_count
-    }
-}
-
-// ----------------------------------------------
-
-impl VulkanUboData for UiShaderObjectData {
-    fn device_size() -> vk::DeviceSize {
-        std::mem::size_of::<Self>() as vk::DeviceSize
-    }
-}
-
-impl UiShaderObjectData {
+impl BmFontShaderUniform {
     pub fn total_size() -> vk::DeviceSize {
         (Self::device_size() *  Self::MAX_OBJ_COUNT) as vk::DeviceSize
     }
