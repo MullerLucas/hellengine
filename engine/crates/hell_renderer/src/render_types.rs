@@ -8,6 +8,8 @@ use hell_core::config;
 
 pub type PerFrame<T> = [T; config::FRAMES_IN_FLIGHT];
 
+pub const INVALID_USIZE: usize = usize::MAX;
+pub const INVALID_U64: u64 = u64::MAX;
 
 
 // ----------------------------------------------------------------------------

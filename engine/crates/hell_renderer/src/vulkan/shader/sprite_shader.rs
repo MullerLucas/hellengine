@@ -58,11 +58,11 @@ impl VulkanSpriteShader {
         // global uniform
         // --------------
         let global_uo = SpriteShaderGlobalUniformObject::default();
-        let global_ubos = array::from_fn(|_| VulkanBuffer::from_uniform(ctx, SpriteShaderGlobalUniformObject::device_size()));
+        let global_ubos = array::from_fn(|_| VulkanBuffer::from_uniform(ctx, SpriteShaderGlobalUniformObject::device_size() as usize));
 
         // scene uniform
         // --------------
-        let scene_ubo_size = SpriteShaderSceneData::total_size(ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment, config::FRAMES_IN_FLIGHT as u64);
+        let scene_ubo_size = SpriteShaderSceneData::total_size(ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment, config::FRAMES_IN_FLIGHT as u64) as usize;
         let scene_ubo = VulkanBuffer::from_uniform(ctx, scene_ubo_size);
 
         // object uniform
@@ -102,7 +102,7 @@ impl VulkanSpriteShader {
         let pool_info = vk::DescriptorPoolCreateInfo::builder()
             .pool_sizes(&pool_sizes)
             // maximum number of descriptor sets that may be allocated
-            .max_sets(config::MAX_DESCRIPTOR_SET_COUNT)
+            .max_sets(config::MAX_DESCRIPTOR_SET_COUNT as u32)
             .build();
 
         let desc_set_pool = unsafe{ device.create_descriptor_pool(&pool_info, None)? };
@@ -223,7 +223,7 @@ impl VulkanSpriteShader {
         for (idx, s) in sets.iter().enumerate() {
             let camera_buffer_infos = [
                 vk::DescriptorBufferInfo::builder()
-                    .buffer(camera_ubos[idx].buffer)
+                    .buffer(camera_ubos[idx].handle)
                     .offset(0)
                     .range(SpriteShaderGlobalUniformObject::device_size())
                     .build()
@@ -232,7 +232,7 @@ impl VulkanSpriteShader {
             // one buffer contains one set of data per frame -> use offset to index correct buffer
             let scene_buffer_infos = [
                 vk::DescriptorBufferInfo::builder()
-                    .buffer(scene_ubo.buffer)
+                    .buffer(scene_ubo.handle)
                     .offset(0)
                     // .offset(SceneData::padded_device_size(min_ubo_alignment) * idx as u64) // hard coded offset -> for non-dynamic buffer
                     .range(SpriteShaderSceneData::device_size())
@@ -271,9 +271,9 @@ impl VulkanSpriteShader {
         for (idx, s) in sets.iter().enumerate() {
             let object_infos = [
                 vk::DescriptorBufferInfo::builder()
-                    .buffer(object_ubos[idx].buffer)
+                    .buffer(object_ubos[idx].handle)
                     .offset(0)
-                    .range(SpriteShaderObjectData::total_size())
+                    .range(SpriteShaderObjectData::total_size() as vk::DeviceSize)
                     .build()
             ];
 
@@ -386,8 +386,8 @@ impl VulkanUboData for SpriteShaderObjectData {
 }
 
 impl SpriteShaderObjectData {
-    pub fn total_size() -> vk::DeviceSize {
-        (Self::device_size() *  Self::MAX_OBJ_COUNT) as vk::DeviceSize
+    pub fn total_size() -> usize {
+        std::mem::size_of::<Self>() *  Self::MAX_OBJ_COUNT
     }
 }
 

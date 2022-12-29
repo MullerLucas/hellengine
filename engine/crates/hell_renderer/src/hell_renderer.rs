@@ -70,7 +70,6 @@ impl HellRenderer {
 
     pub fn draw_frame(&mut self, delta_time: f32, scene_data: &SpriteShaderSceneData, render_pkg: &RenderPackage, resources: &ResourceManager) -> HellResult<bool> {
         self.backend.update_world_shader(self.camera.clone(), scene_data, &render_pkg.world)?;
-        self.backend.update_font_shader (self.camera.clone(), &render_pkg.ui)?;
 
         let is_resized = self.backend.draw_frame(delta_time, render_pkg, resources)?;
 

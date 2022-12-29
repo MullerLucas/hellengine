@@ -267,7 +267,7 @@ impl VulkanImage {
         let img_data = img.as_raw();
         let img_width = img.width();
         let img_height = img.height();
-        let img_size = (std::mem::size_of::<u8>() as u32 * img_width * img_height * 4) as vk::DeviceSize;
+        let img_size = std::mem::size_of::<u8>() * img_width as usize * img_height as usize * 4;
 
         if img_size == 0 {
             panic!("failed to load image at");
@@ -276,7 +276,7 @@ impl VulkanImage {
         let staging_buffer = VulkanBuffer::from_texture_staging(ctx, img_size);
 
         unsafe {
-            let data_ptr = device.map_memory(staging_buffer.mem, 0, img_size, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut u8;
+            let data_ptr = device.map_memory(staging_buffer.mem, 0, img_size as vk::DeviceSize, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut u8;
             data_ptr.copy_from_nonoverlapping(img_data.as_ptr(), img_data.len());
             device.unmap_memory(staging_buffer.mem);
         }
@@ -303,7 +303,7 @@ impl VulkanImage {
             vk::ImageLayout::TRANSFER_DST_OPTIMAL
         )?;
 
-        VulkanBuffer::copy_buffer_to_img(ctx, cmds, staging_buffer.buffer, img.img, img_width, img_height)?;
+        VulkanBuffer::copy_buffer_to_img(ctx, cmds, staging_buffer.handle, img.img, img_width, img_height)?;
 
         // prepare for being read by shader
         img.transition_image_layout(

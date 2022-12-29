@@ -18,9 +18,9 @@ use super::{VulkanCommands, VulkanCommandPool};
 #[derive(Debug)]
 pub struct VulkanBuffer {
     ctx: VulkanContextRef,
-    pub buffer: vk::Buffer,
+    pub handle: vk::Buffer,
     pub mem: vk::DeviceMemory,
-    pub size: vk::DeviceSize,
+    pub size: usize,
 }
 
 impl Drop for VulkanBuffer {
@@ -29,7 +29,7 @@ impl Drop for VulkanBuffer {
 
         unsafe {
             let device = &self.ctx.device.handle;
-            device.destroy_buffer(self.buffer, None);
+            device.destroy_buffer(self.handle, None);
             device.free_memory(self.mem, None);
         }
     }
@@ -37,14 +37,14 @@ impl Drop for VulkanBuffer {
 
 impl VulkanBuffer {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(ctx: &VulkanContextRef, size: vk::DeviceSize, usage: vk::BufferUsageFlags, properties: vk::MemoryPropertyFlags, sharing_mode: vk::SharingMode, queue_family_indices: Option<&[u32]>) -> Self {
+    pub fn new(ctx: &VulkanContextRef, size: usize, usage: vk::BufferUsageFlags, properties: vk::MemoryPropertyFlags, sharing_mode: vk::SharingMode, queue_family_indices: Option<&[u32]>) -> Self {
         let device = &ctx.device.handle;
 
         let mut buffer_info = vk::BufferCreateInfo {
             s_type: vk::StructureType::BUFFER_CREATE_INFO,
             p_next: std::ptr::null(),
             flags: Default::default(),
-            size,
+            size: size as vk::DeviceSize,
             usage,
             sharing_mode,
             queue_family_index_count: 0,
@@ -80,7 +80,7 @@ impl VulkanBuffer {
 
         Self {
             ctx: ctx.clone(),
-            buffer,
+            handle: buffer,
             mem,
             size
         }
@@ -89,7 +89,7 @@ impl VulkanBuffer {
     pub fn from_vertices(ctx: &VulkanContextRef, cmds: &VulkanCommands, vertices: &[Vertex3D]) -> HellResult<Self> {
         let device = &ctx.device.handle;
 
-        let buffer_size = std::mem::size_of_val(vertices) as vk::DeviceSize;
+        let buffer_size = std::mem::size_of_val(vertices);
         println!("VERT-SIZE: {}", buffer_size);
 
         let staging_buffer = VulkanBuffer::new(
@@ -102,7 +102,7 @@ impl VulkanBuffer {
         );
 
         unsafe {
-            let mem_ptr = device.map_memory(staging_buffer.mem, 0, buffer_size, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut Vertex3D;
+            let mem_ptr = device.map_memory(staging_buffer.mem, 0, buffer_size as vk::DeviceSize, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut Vertex3D;
             mem_ptr.copy_from_nonoverlapping(vertices.as_ptr(), vertices.len());
             device.unmap_memory(staging_buffer.mem);
         }
@@ -127,7 +127,7 @@ impl VulkanBuffer {
     pub fn from_indices(ctx: &VulkanContextRef, cmds: &VulkanCommands, indices: &[u32]) -> HellResult<Self> {
         let device = &ctx.device.handle;
 
-        let buffer_size = std::mem::size_of_val(indices) as vk::DeviceSize;
+        let buffer_size = std::mem::size_of_val(indices);
 
         let staging_buffer = VulkanBuffer::new(
             ctx,
@@ -139,7 +139,7 @@ impl VulkanBuffer {
         );
 
         unsafe {
-            let mem_ptr = device.map_memory(staging_buffer.mem, 0, buffer_size, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut u32;
+            let mem_ptr = device.map_memory(staging_buffer.mem, 0, buffer_size as vk::DeviceSize, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut u32;
             mem_ptr.copy_from_nonoverlapping(indices.as_ptr(), indices.len());
             device.unmap_memory(staging_buffer.mem);
         }
@@ -158,7 +158,7 @@ impl VulkanBuffer {
         Ok(device_buffer)
     }
 
-    pub fn from_uniform(ctx: &VulkanContextRef, size: vk::DeviceSize) -> Self {
+    pub fn from_uniform(ctx: &VulkanContextRef, size: usize) -> Self {
         VulkanBuffer::new(
             ctx,
             size,
@@ -169,7 +169,7 @@ impl VulkanBuffer {
         )
     }
 
-    pub fn from_storage(ctx: &VulkanContextRef, size: vk::DeviceSize) -> Self {
+    pub fn from_storage(ctx: &VulkanContextRef, size: usize) -> Self {
         VulkanBuffer::new(
             ctx,
             size,
@@ -180,11 +180,13 @@ impl VulkanBuffer {
         )
     }
 
-    pub fn from_texture_staging(ctx: &VulkanContextRef, img_size: u64) -> Self {
+    pub fn from_texture_staging(ctx: &VulkanContextRef, img_size: usize) -> Self {
         VulkanBuffer::new(
             ctx,
             img_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
+            // TODO: check support for HOST_COHERENT | DEVICE_LOCAL, and use it
+            // vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::DEVICE_LOCAL,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             vk::SharingMode::EXCLUSIVE,
             None
@@ -234,8 +236,8 @@ impl VulkanBuffer {
 }
 
 impl<'a> VulkanBuffer {
-    pub fn map_memory(&self, offset: usize, buff_size: usize, mem_map_flags: vk::MemoryMapFlags) -> VkResult<DeviceMemoryMapGuard<'a>> {
-        DeviceMemoryMapGuard::new(&self.ctx.device.handle, self.mem, offset as u64, buff_size as u64, mem_map_flags)
+    pub fn map_memory(&'a self, offset: usize, buff_size: usize, mem_map_flags: vk::MemoryMapFlags) -> VkResult<DeviceMemoryMapGuard> {
+        DeviceMemoryMapGuard::new(&self.ctx, self.mem, offset, buff_size, mem_map_flags)
     }
 
     pub fn find_memory_type(instance: &ash::Instance, phys_device: vk::PhysicalDevice, type_filter: u32, properties: vk::MemoryPropertyFlags) -> u32 {
@@ -256,11 +258,11 @@ impl<'a> VulkanBuffer {
         let copy_region = vk::BufferCopy {
             src_offset: 0,
             dst_offset: 0,
-            size: src_buff.size,
+            size: src_buff.size as vk::DeviceSize,
         };
 
         unsafe {
-            device.cmd_copy_buffer(command_buffer, src_buff.buffer, dst_buff.buffer, &[copy_region]);
+            device.cmd_copy_buffer(command_buffer, src_buff.handle, dst_buff.handle, &[copy_region]);
         }
 
         cmd_pool.end_single_time_commands(device, command_buffer, queue)?;
@@ -308,35 +310,60 @@ impl<'a> VulkanBuffer {
 // DeviceMemoryGuard
 // ----------------------------------------------------------------------------
 
-pub struct DeviceMemoryMapGuard<'a> {
-    device: &'a ash::Device,
+#[allow(dead_code)]
+pub struct DeviceMemoryMapGuard {
+    ctx: VulkanContextRef,
     mem: vk::DeviceMemory,
-    data_ptr: *mut std::os::raw::c_void,
+    data_ptr: *mut u8,
+    offset: usize,
+    size: usize,
 }
 
-impl<'a> DeviceMemoryMapGuard<'a> {
-    pub fn new(device: &'a ash::Device, mem: vk::DeviceMemory, offset: vk::DeviceSize, buff_size: vk::DeviceSize, mem_map_flags: vk::MemoryMapFlags) -> VkResult<Self> {
-        let data_ptr = unsafe { device.map_memory(mem, offset, buff_size, mem_map_flags)? };
+impl DeviceMemoryMapGuard {
+    pub fn new(ctx: &VulkanContextRef, mem: vk::DeviceMemory, offset: usize, buff_size: usize, mem_map_flags: vk::MemoryMapFlags) -> VkResult<Self> {
+        let data_ptr = unsafe { ctx.device.handle.map_memory(mem, offset as vk::DeviceSize, buff_size as vk::DeviceSize, mem_map_flags)? } as *mut u8;
 
         Ok(Self {
-            device,
+            ctx: ctx.clone(),
             mem,
-            data_ptr
+            data_ptr,
+            offset,
+            size: buff_size,
         })
     }
 
-    pub fn data_as<T>(&mut self) -> &mut T {
+    pub fn copy_from_nonoverlapping<T>(&mut self, src: &[T], offset: isize) {
+        let align = std::mem::size_of::<T>();
+        let count = src.len() * align;
+        let src_ptr = src.as_ptr() as *const u8;
+
         unsafe {
-            &mut *(self.data_ptr as *mut T)
+            self.data_ptr
+                .offset(offset)
+                .copy_from_nonoverlapping(src_ptr, count);
         }
+    }
+
+    pub fn fill_with_value<T>(&mut self, val: T) {
+        let align = std::mem::align_of::<T>();
+        let size = (self.size / align) * self.size;
+        let val = (&val) as *const T as *const u8;
+
+        (0..size)
+            .into_iter()
+            .step_by(align)
+            .for_each(|off| { unsafe {
+                self.data_ptr
+                    .add(off)
+                    .copy_from_nonoverlapping(val, align);
+            } })
     }
 }
 
-impl Drop for DeviceMemoryMapGuard<'_> {
+impl Drop for DeviceMemoryMapGuard {
     fn drop(&mut self) {
-        // data_ptr.copy_from_nonoverlapping(data, 1);
         unsafe {
-            self.device.unmap_memory(self.mem);
+            self.ctx.device.handle.unmap_memory(self.mem);
         }
     }
 }

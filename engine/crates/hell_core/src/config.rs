@@ -38,8 +38,8 @@ pub const IMG_FLIP_H: bool = false;
 
 pub const SPRITE_SHADER_KEY:  &str = "sprite";
 pub const SPRITE_SHADER_PATH: &str = "shaders/sprite";
-pub const BMFONT_SHADER_KEY:  &str = "bmfont";
-pub const BMFONT_SHADER_PATH: &str = "shaders/bmfont";
+pub const TEST_SHADER_KEY:    &str = "test";
+pub const TEST_SHADER_PATH:   &str = "shaders/test";
 
 
 // guaranteed by the spec -> 128 Bytes for push constants
@@ -53,12 +53,12 @@ pub const BMFONT_SHADER_PATH: &str = "shaders/bmfont";
 pub const VULKAN_UBO_DESCRIPTOR_COUNT: usize = 1024;
 pub const VULKAN_SAMPLER_DESCRIPTOR_COUNT: usize = 4096;
 
-pub const VULKAN_GUARANTEED_PUSH_CONSTANT_STRIDE: usize = 128;
-pub const VULKAN_NVIDIA_REQUIRED_ALIGNMENT: usize = 256;
+pub const VULKAN_GUARANTEED_PUSH_CONSTANT_STRIDE: usize= 128;
+pub const VULKAN_NVIDIA_REQUIRED_ALIGNMENT: usize= 256;
 
 // TODO: think about values
 // maximum number of descriptor sets that may be allocated
-pub const MAX_DESCRIPTOR_SET_COUNT: u32 = 1024;
+pub const MAX_DESCRIPTOR_SET_COUNT: usize = 1024;
 
 pub const VULKAN_MAX_MATERIAL_COUNT: usize = 1024;
 

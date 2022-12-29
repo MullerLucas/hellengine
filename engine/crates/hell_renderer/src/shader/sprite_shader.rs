@@ -75,7 +75,7 @@ pub struct SpriteShaderObjectData {
 }
 
 impl SpriteShaderObjectData {
-    pub const MAX_OBJ_COUNT: u64 = 10000;
+    pub const MAX_OBJ_COUNT: usize = 10000;
 
     pub fn new(model: glam::Mat4) -> Self {
         Self {

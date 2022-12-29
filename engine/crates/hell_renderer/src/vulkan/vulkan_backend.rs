@@ -1,3 +1,9 @@
+#![allow(dead_code)]
+#![allow(unused)]
+
+use std::borrow::Borrow;
+use std::cell::RefCell;
+
 use ash::vk;
 use hell_collections::DynArray;
 use hell_common::window::HellWindowExtent;
@@ -5,14 +11,15 @@ use hell_error::{HellResult, HellError, HellErrorKind, OptToHellErr, ErrToHellEr
 use hell_resources::{ResourceManager, ResourceHandle};
 use crate::camera::HellCamera;
 use crate::render_types::{RenderData, RenderPackage};
+use crate::shader::base_shader::CameraUniform;
 use crate::shader::{SpriteShaderSceneData, SpriteShaderGlobalUniformObject, base_shader};
 use crate::vulkan::primitives::RenderPassClearFlags;
 
 use super::VulkanContextRef;
 use super::primitives::{VulkanSwapchain, VulkanCommands, VulkanCommandBuffer, VulkanRenderPassData, BultinRenderPassType, VulkanImage};
 use super::frame::VulkanFrameData;
-use super::pipeline::shader_data::{MeshPushConstants, VulkanWorldMesh, VulkanUiMesh};
-use super::shader::bmfont_shader::BmFontShaderVulkan;
+use super::pipeline::shader_data::{VulkanWorldMesh, VulkanUiMesh};
+use super::shader::generic_vulkan_shader::GenericVulkanShader;
 use super::shader::shader_utils::VulkanUboData;
 use super::shader::VulkanSpriteShader;
 use hell_core::config;
@@ -39,7 +46,7 @@ pub struct VulkanBackend {
     pub render_pass_data: VulkanRenderPassData,
 
     pub world_shader: VulkanSpriteShader,
-    pub font_shader: BmFontShaderVulkan,
+    pub test_shader: RefCell<GenericVulkanShader>,
 
     pub ctx: VulkanContextRef,
 }
@@ -56,7 +63,15 @@ impl VulkanBackend {
         let render_pass_data = VulkanRenderPassData::new(&ctx, &swapchain, &cmds)?;
 
         let world_shader  = VulkanSpriteShader::new(&ctx, &swapchain, config::SPRITE_SHADER_PATH, &render_pass_data)?;
-        let bmfont_shader = BmFontShaderVulkan::new(&ctx, &swapchain, config::BMFONT_SHADER_PATH, &render_pass_data)?;
+
+        let test_shader = super::shader::generic_vulkan_shader::GenericVulkanShaderBuilder::new(&ctx, config::TEST_SHADER_PATH)
+            .with_global_bindings()
+            // .with_global_uniform::<glam::Mat4>("view")
+            // .with_global_uniform::<glam::Mat4>("proj")
+            .with_global_uniform::<glam::Mat4>("view_proj")
+            // .with_global_uniform::<glam::Mat4>("reserved_0")
+            // .with_instance_bindings()
+            .build(&swapchain, &render_pass_data.ui_render_pass)?;
 
         Ok(Self {
             frame_data,
@@ -68,7 +83,7 @@ impl VulkanBackend {
             render_pass_data,
             cmd_pools: cmds,
             world_shader,
-            font_shader: bmfont_shader,
+            test_shader: RefCell::new(test_shader),
             ctx,
         })
     }
@@ -94,12 +109,12 @@ impl VulkanBackend {
         self.world_shader.set_texture_descriptor_sets(texture)?;
 
 
-        let texture: HellResult<Vec<_>> = resource_manager.get_all_images().iter()
-            .map(|i| VulkanImage::from(&self.ctx, &self.cmd_pools, i))
-            .collect();
-        let texture = texture?;
-
-        self.font_shader.set_texture_descriptor_sets(texture)?;
+        // let texture: HellResult<Vec<_>> = resource_manager.get_all_images().iter()
+        //     .map(|i| VulkanImage::from(&self.ctx, &self.cmd_pools, i))
+        //     .collect();
+        // let texture = texture?;
+        //
+        // self.test_shader.set_texture_descriptor_sets(texture)?;
 
         Ok(())
     }
@@ -260,6 +275,7 @@ impl VulkanBackend {
         self.end_renderpass(&cmd_buffer);
 
         // ui render pass
+        self.update_test_shader()?;
         self.begin_render_pass(BultinRenderPassType::Ui, &cmd_buffer);
         self.record_ui_cmd_buffer(&cmd_buffer, &render_pkg.ui, resources)?;
         self.end_renderpass(&cmd_buffer);
@@ -270,75 +286,73 @@ impl VulkanBackend {
     }
 
     fn record_world_cmd_buffer(&self, cmd_buffer: &VulkanCommandBuffer, render_data: &RenderData, _resources: &ResourceManager) -> HellResult<()> {
-        unsafe {
-            let mut curr_mat_handle = ResourceHandle::MAX;
-            let mut curr_mesh_idx = usize::MAX;
+        let mut curr_mat_handle = ResourceHandle::MAX;
+        let mut curr_mesh_idx = usize::MAX;
 
-            // let mut curr_mat = resources.material_at(0).unwrap();
-            let curr_shader = &self.world_shader; // TODO: ...
-            let mut curr_mesh = &self.world_meshes[0];
-            // let mut curr_shader_key: &str = "";
+        // let mut curr_mat = resources.material_at(0).unwrap();
+        let curr_shader = &self.world_shader; // TODO: ...
+        let mut curr_mesh = &self.world_meshes[0];
+        // let mut curr_shader_key: &str = "";
 
-            // bind static descriptor sets once
-            let descriptor_set = [
-                curr_shader.get_global_set(0, self.frame_idx)?,
-                curr_shader.get_object_set(0, self.frame_idx)?,
-            ];
+        // bind static descriptor sets once
+        let descriptor_set = [
+            curr_shader.get_global_set(0, self.frame_idx)?,
+            curr_shader.get_object_set(0, self.frame_idx)?,
+        ];
 
-            let min_ubo_alignment = self.ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
-            let dynamic_descriptor_offsets = [
-                SpriteShaderSceneData::padded_device_size(min_ubo_alignment) as u32 * self.frame_idx as u32,
-            ];
+        let min_ubo_alignment = self.ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
+        let dynamic_descriptor_offsets = [
+            SpriteShaderSceneData::padded_device_size(min_ubo_alignment) as u32 * self.frame_idx as u32,
+        ];
 
-            cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
+        cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
 
-            // TODO: moved here
-            cmd_buffer.cmd_bind_pipeline(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.pipeline);
+        // TODO: moved here
+        cmd_buffer.cmd_bind_pipeline(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.pipeline);
 
-            // draw each object
-            for (idx, rd) in render_data.iter().enumerate() {
-                if curr_mat_handle != rd.material {
-                    curr_mat_handle = rd.material;
-                    // curr_mat = resources.material_at(curr_mat_handle.id).to_hell_err(HellErrorKind::RenderError)?;
+        // draw each object
+        for (idx, rd) in render_data.iter().enumerate() {
+            if curr_mat_handle != rd.material {
+                curr_mat_handle = rd.material;
+                // curr_mat = resources.material_at(curr_mat_handle.id).to_hell_err(HellErrorKind::RenderError)?;
 
-                    // bind material descriptors
-                    let descriptor_set = [ curr_shader.get_material_set(rd.material.id, self.frame_idx)? ];
-                    cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 2, &descriptor_set, &[]);
-                }
-
-                // bind pipeline
-                // TODO: remove
-                // if curr_shader_key != curr_mat.shader {
-                //     curr_shader_key = &curr_mat.shader;
-                //     curr_pipeline = &self.pipelines[curr_pipeline_idx];
-                //     curr_shader = &self.world_shader;
-                //     cmd_buffer.cmd_bind_pipeline(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.pipeline);
-                // }
-
-                // bind mesh
-                if curr_mesh_idx != rd.mesh_idx {
-                    curr_mesh_idx = rd.mesh_idx;
-                    curr_mesh = &self.world_meshes[curr_mesh_idx];
-
-                    let vertex_buffers = [curr_mesh.vertex_buffer.buffer];
-                    cmd_buffer.cmd_bind_vertex_buffers(&self.ctx, 0, &vertex_buffers, &[0]);
-                    cmd_buffer.cmd_bind_index_buffer(&self.ctx, curr_mesh.index_buffer.buffer, 0, VulkanWorldMesh::INDEX_TYPE);
-                }
-
-                // bind push constants
-                let push_constants = [
-                    MeshPushConstants {
-                        model: rd.transform.create_model_mat()
-                    }
-                ];
-
-                let push_const_bytes = std::slice::from_raw_parts(push_constants.as_ptr() as *const u8, std::mem::size_of_val(&push_constants));
-                cmd_buffer.cmd_push_constants(&self.ctx, curr_shader.pipeline.layout, vk::ShaderStageFlags::VERTEX, 0, push_const_bytes);
-
-                // draw
-                // value of 'first_instance' is used in the vertex shader to index into the object storage
-                cmd_buffer.cmd_draw_indexed(&self.ctx, curr_mesh.indices_count() as u32, 1, 0, 0, idx as u32);
+                // bind material descriptors
+                let descriptor_set = [ curr_shader.get_material_set(rd.material.id, self.frame_idx)? ];
+                cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 2, &descriptor_set, &[]);
             }
+
+            // bind pipeline
+            // TODO: remove
+            // if curr_shader_key != curr_mat.shader {
+            //     curr_shader_key = &curr_mat.shader;
+            //     curr_pipeline = &self.pipelines[curr_pipeline_idx];
+            //     curr_shader = &self.world_shader;
+            //     cmd_buffer.cmd_bind_pipeline(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.pipeline);
+            // }
+
+            // bind mesh
+            if curr_mesh_idx != rd.mesh_idx {
+                curr_mesh_idx = rd.mesh_idx;
+                curr_mesh = &self.world_meshes[curr_mesh_idx];
+
+                let vertex_buffers = [curr_mesh.vertex_buffer.handle];
+                cmd_buffer.cmd_bind_vertex_buffers(&self.ctx, 0, &vertex_buffers, &[0]);
+                cmd_buffer.cmd_bind_index_buffer(&self.ctx, curr_mesh.index_buffer.handle, 0, VulkanWorldMesh::INDEX_TYPE);
+            }
+
+            // bind push constants
+            // let push_constants = [
+            //     MeshPushConstants {
+            //         model: rd.transform.create_model_mat()
+            //     }
+            // ];
+
+            // let push_const_bytes = std::slice::from_raw_parts(push_constants.as_ptr() as *const u8, std::mem::size_of_val(&push_constants));
+            // cmd_buffer.cmd_push_constants(&self.ctx, curr_shader.pipeline.layout, vk::ShaderStageFlags::VERTEX, 0, push_const_bytes);
+
+            // draw
+            // value of 'first_instance' is used in the vertex shader to index into the object storage
+            cmd_buffer.cmd_draw_indexed(&self.ctx, curr_mesh.indices_count() as u32, 1, 0, 0, idx as u32);
         }
 
         Ok(())
@@ -349,59 +363,34 @@ impl VulkanBackend {
             let mut curr_mat_handle = ResourceHandle::MAX;
             let mut curr_mesh_idx = usize::MAX;
 
-            let curr_shader = &self.font_shader; // TODO: ...
-            let mut curr_mesh = &self.world_meshes[0];
+            let shader = &self.test_shader.borrow(); // TODO: ...
+            let mut mesh = &self.world_meshes[0];
 
             // bind static descriptor sets once
             let descriptor_set = [
-                curr_shader.get_global_set(0, self.frame_idx)?,
-                curr_shader.get_object_set(0, self.frame_idx)?,
+                shader.global_descriptor(self.frame_idx),
             ];
 
-            let min_ubo_alignment = self.ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
-            let dynamic_descriptor_offsets = [
-                SpriteShaderSceneData::padded_device_size(min_ubo_alignment) as u32 * self.frame_idx as u32,
-            ];
-
-            cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
+            cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, shader.pipeline.layout, 0, &descriptor_set, &[]);
 
             // TODO: moved here
-            cmd_buffer.cmd_bind_pipeline(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.pipeline);
+            cmd_buffer.cmd_bind_pipeline(&self.ctx, vk::PipelineBindPoint::GRAPHICS, shader.pipeline.pipeline);
 
             // draw each object
             for (idx, rd) in render_data.iter().enumerate() {
-                if curr_mat_handle != rd.material {
-                    curr_mat_handle = rd.material;
-                    // curr_mat = resources.material_at(curr_mat_handle.id).to_hell_err(HellErrorKind::RenderError)?;
-
-                    // bind material descriptors
-                    let descriptor_set = [ curr_shader.get_material_set(rd.material.id, self.frame_idx)? ];
-                    cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 2, &descriptor_set, &[]);
-                }
-
                 // bind mesh
                 if curr_mesh_idx != rd.mesh_idx {
                     curr_mesh_idx = rd.mesh_idx;
-                    curr_mesh = &self.world_meshes[curr_mesh_idx];
+                    mesh = &self.world_meshes[curr_mesh_idx];
 
-                    let vertex_buffers = [curr_mesh.vertex_buffer.buffer];
+                    let vertex_buffers = [mesh.vertex_buffer.handle];
                     cmd_buffer.cmd_bind_vertex_buffers(&self.ctx, 0, &vertex_buffers, &[0]);
-                    cmd_buffer.cmd_bind_index_buffer(&self.ctx, curr_mesh.index_buffer.buffer, 0, VulkanWorldMesh::INDEX_TYPE);
+                    cmd_buffer.cmd_bind_index_buffer(&self.ctx, mesh.index_buffer.handle, 0, VulkanWorldMesh::INDEX_TYPE);
                 }
-
-                // bind push constants
-                let push_constants = [
-                    MeshPushConstants {
-                        model: rd.transform.create_model_mat()
-                    }
-                ];
-
-                let push_const_bytes = std::slice::from_raw_parts(push_constants.as_ptr() as *const u8, std::mem::size_of_val(&push_constants));
-                cmd_buffer.cmd_push_constants(&self.ctx, curr_shader.pipeline.layout, vk::ShaderStageFlags::VERTEX, 0, push_const_bytes);
 
                 // draw
                 // value of 'first_instance' is used in the vertex shader to index into the object storage
-                cmd_buffer.cmd_draw_indexed(&self.ctx, curr_mesh.indices_count() as u32, 1, 0, 0, idx as u32);
+                cmd_buffer.cmd_draw_indexed(&self.ctx, mesh.indices_count() as u32, 1, 0, 0, 0);
             }
         }
 
@@ -422,12 +411,31 @@ impl VulkanBackend {
         Ok(())
     }
 
-    pub fn update_font_shader(&mut self, camera: HellCamera, render_data: &RenderData) -> HellResult<()> {
-        let camera_uo = base_shader::CameraUniform::new(camera.view, camera.proj, camera.view_proj);
-        self.font_shader.update_global_state(camera_uo, &self.ctx, self.frame_idx)?;
-        if !render_data.is_empty() {
-            self.font_shader.update_object_state(render_data, self.frame_idx)?;
+    #[allow(unused)]
+    pub fn update_test_shader(&self) -> HellResult<()> {
+        let cam = HellCamera::new(self.swapchain.aspect_ratio());
+        let cam_uo = CameraUniform::new(cam.view, cam.proj, cam.view_proj);
+
+        println!("CAM: {:?}", cam);
+        // let camera_uo = base_shader::CameraUniform::new(camera.view, camera.proj, camera.view_proj);
+        let mut shader = self.test_shader.borrow_mut();
+        // if let Some(mut uni) = shader.uniform_handle("view") {
+        //     shader.set_uniform(uni, &cam_uo.view);
+        // }
+        //
+        // if let Some(mut uni) = shader.uniform_handle("proj") {
+        //     shader.set_uniform(uni, &cam_uo.proj);
+        // }
+
+        if let Some(mut uni) = shader.uniform_handle("view_proj") {
+            shader.set_uniform(uni, &[cam.view_proj]);
         }
+
+        // if let Some(mut uni) = shader.uniform_handle("reserved_0") {
+        //     shader.set_uniform(uni, &cam_uo.reserve_0);
+        // }
+
+        shader.apply_globals(self.frame_idx);
 
         Ok(())
     }
