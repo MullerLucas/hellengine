@@ -6,9 +6,7 @@ pub mod shader_data;
 
 use ash::vk;
 use hell_error::{HellResult, HellError, HellErrorKind};
-use crate::vulkan::{Vertex3D, VulkanContextRef};
-
-// use self::shader_data::MeshPushConstants;
+use crate::vulkan::VulkanContextRef;
 
 use super::primitives::{VulkanSwapchain, VulkanRenderPass};
 
@@ -39,7 +37,8 @@ impl Drop for VulkanPipeline {
 }
 
 impl VulkanPipeline {
-    pub fn new(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass: &VulkanRenderPass, descriptor_set_layouts: &[vk::DescriptorSetLayout], depth_test_enabled: bool, is_wireframe: bool) -> HellResult<Self> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass: &VulkanRenderPass, vert_binding_desc: &[vk::VertexInputBindingDescription], vert_attrb_desc: &[vk::VertexInputAttributeDescription], descriptor_set_layouts: &[vk::DescriptorSetLayout], depth_test_enabled: bool, is_wireframe: bool) -> HellResult<Self> {
         let device = &ctx.device.handle;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 
@@ -49,11 +48,11 @@ impl VulkanPipeline {
 
         // vertices
         // --------
-        let vertex_binding_desc = [Vertex3D::get_binding_desc()];
-        let vertex_attr_desc = Vertex3D::get_attribute_desc();
+        // let vertex_binding_desc = [Vertex3D::get_binding_desc()];
+        // let vertex_attr_desc = Vertex3D::get_attribute_desc();
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
-            .vertex_binding_descriptions(&vertex_binding_desc)
-            .vertex_attribute_descriptions(&vertex_attr_desc)
+            .vertex_binding_descriptions(vert_binding_desc)
+            .vertex_attribute_descriptions(vert_attrb_desc)
             .build();
 
         // input assembly

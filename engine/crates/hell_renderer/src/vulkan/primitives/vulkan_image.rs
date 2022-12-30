@@ -1,12 +1,12 @@
 use ash::vk;
-use hell_error::{HellResult, ErrToHellErr} ;
+use hell_error::HellResult;
 use hell_resources::resources::TextureResource;
 use std::ptr;
 
 
 use crate::vulkan::VulkanContextRef;
 
-use super::{VulkanBuffer, VulkanSwapchain, VulkanCommandPool, VulkanCommands, has_stencil_component, VulkanQueue};
+use super::{VulkanBuffer, VulkanSwapchain, VulkanCommandPool, VulkanCommands, has_stencil_component, VulkanQueue, VulkanDeviceMemory};
 
 
 
@@ -14,12 +14,12 @@ use super::{VulkanBuffer, VulkanSwapchain, VulkanCommandPool, VulkanCommands, ha
 // vulkan image
 // ----------------------------------------------------------------------------
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct VulkanImage {
     ctx: VulkanContextRef,
     pub img: vk::Image,
     pub view: vk::ImageView,
-    pub mem: vk::DeviceMemory,
+    pub mem: VulkanDeviceMemory,
 }
 
 impl Drop for VulkanImage {
@@ -30,7 +30,6 @@ impl Drop for VulkanImage {
             let device = &self.ctx.device.handle;
             device.destroy_image_view(self.view, None);
             device.destroy_image(self.img, None);
-            device.free_memory(self.mem, None);
         }
     }
 }
@@ -47,7 +46,7 @@ impl VulkanImage {
         usage: vk::ImageUsageFlags,
         properties: vk::MemoryPropertyFlags,
         aspect_mask: vk::ImageAspectFlags,
-    ) -> Self {
+    ) -> HellResult<Self> {
         let device = &ctx.device.handle;
 
         let img_info = vk::ImageCreateInfo {
@@ -79,40 +78,42 @@ impl VulkanImage {
         };
         let mem_requirements = unsafe { device.get_image_memory_requirements(img) };
 
-        let memory_type_index = VulkanBuffer::find_memory_type(
-            &ctx.instance.instance,
-            ctx.phys_device.phys_device,
-            mem_requirements.memory_type_bits,
-            properties,
-        );
+        // let memory_type_index = VulkanDeviceMemory::find_memory_type(
+        //     &ctx,
+        //     mem_requirements.memory_type_bits,
+        //     properties,
+        // );
 
-        let alloc_info = vk::MemoryAllocateInfo {
-            s_type: vk::StructureType::MEMORY_ALLOCATE_INFO,
-            p_next: ptr::null(),
-            allocation_size: mem_requirements.size,
-            memory_type_index,
-        };
+        // let alloc_info = vk::MemoryAllocateInfo {
+        //     s_type: vk::StructureType::MEMORY_ALLOCATE_INFO,
+        //     p_next: ptr::null(),
+        //     allocation_size: mem_requirements.size,
+        //     memory_type_index,
+        // };
 
-        let mem = unsafe {
-            device
-                .allocate_memory(&alloc_info, None)
-                .expect("failed to allocate image memory")
-        };
+        // let mem = unsafe {
+        //     device
+        //         .allocate_memory(&alloc_info, None)
+        //         .expect("failed to allocate image memory")
+        // };
 
-        unsafe {
-            device
-                .bind_image_memory(img, mem, 0)
-                .expect("failed to bind texture img-mem");
-        }
+        let mem = VulkanDeviceMemory::new(ctx, mem_requirements, properties)?;
+        mem.bind_to_image(img, 0)?;
+
+        // unsafe {
+        //     device
+        //         .bind_image_memory(img, mem, 0)
+        //         .expect("failed to bind texture img-mem");
+        // }
 
         let view = VulkanImage::create_img_view(device, img, format, aspect_mask);
 
-        VulkanImage {
+        Ok(VulkanImage {
             ctx: ctx.clone(),
             img,
             mem,
             view,
-        }
+        })
     }
 }
 
@@ -273,13 +274,16 @@ impl VulkanImage {
             panic!("failed to load image at");
         }
 
-        let staging_buffer = VulkanBuffer::from_texture_staging(ctx, img_size);
+        let mut staging_buffer = VulkanBuffer::from_texture_staging(ctx, img_size)?;
+        let mem_map = staging_buffer.mem.map_memory(0, img_size, vk::MemoryMapFlags::empty())?;
+        mem_map.copy_from_nonoverlapping(img_data.as_slice(), 0);
+        staging_buffer.mem.unmap_memory()?;
 
-        unsafe {
-            let data_ptr = device.map_memory(staging_buffer.mem, 0, img_size as vk::DeviceSize, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut u8;
-            data_ptr.copy_from_nonoverlapping(img_data.as_ptr(), img_data.len());
-            device.unmap_memory(staging_buffer.mem);
-        }
+        // unsafe {
+        //     let data_ptr = device.map_memory(staging_buffer.mem, 0, img_size as vk::DeviceSize, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut u8;
+        //     data_ptr.copy_from_nonoverlapping(img_data.as_ptr(), img_data.len());
+        //     device.unmap_memory(staging_buffer.mem);
+        // }
 
         let img = VulkanImage::new(
             ctx,
@@ -291,7 +295,7 @@ impl VulkanImage {
             vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
             vk::ImageAspectFlags::COLOR
-        );
+        )?;
 
         // prepare for being copied into
         img.transition_image_layout(
@@ -344,7 +348,7 @@ impl VulkanImage {
             vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
             vk::ImageAspectFlags::DEPTH
-        );
+        )?;
 
         // Not required: Layout will be transitioned in the renderpass
         img.transition_image_layout(

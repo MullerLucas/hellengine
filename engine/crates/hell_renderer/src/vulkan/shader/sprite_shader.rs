@@ -8,7 +8,7 @@ use crate::render_types::{PerFrame, RenderData};
 use crate::shader::{SpriteShaderGlobalUniformObject, SpriteShaderSceneData, SpriteShaderObjectData};
 use crate::vulkan::pipeline::{VulkanPipeline, VulkanShader};
 use crate::vulkan::primitives::{VulkanImage, VulkanBuffer, VulkanSampler, VulkanSwapchain, VulkanDescriptorSetGroup, VulkanRenderPassData};
-use crate::vulkan::{VulkanContextRef, VulkanContext};
+use crate::vulkan::{VulkanContextRef, Vertex3D};
 use hell_core::config;
 
 use super::shader_utils::VulkanUboData;
@@ -52,22 +52,23 @@ impl Drop for VulkanSpriteShader {
 }
 
 impl VulkanSpriteShader {
+    // TODO: error handling
     pub fn new(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, shader_path: &str, render_pass_data: &VulkanRenderPassData) -> HellResult<Self> {
         let device = &ctx.device.handle;
 
         // global uniform
         // --------------
         let global_uo = SpriteShaderGlobalUniformObject::default();
-        let global_ubos = array::from_fn(|_| VulkanBuffer::from_uniform(ctx, SpriteShaderGlobalUniformObject::device_size() as usize));
+        let global_ubos = array::from_fn(|_| VulkanBuffer::from_uniform(ctx, SpriteShaderGlobalUniformObject::device_size() as usize).unwrap());
 
         // scene uniform
         // --------------
         let scene_ubo_size = SpriteShaderSceneData::total_size(ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment, config::FRAMES_IN_FLIGHT as u64) as usize;
-        let scene_ubo = VulkanBuffer::from_uniform(ctx, scene_ubo_size);
+        let scene_ubo = VulkanBuffer::from_uniform(ctx, scene_ubo_size)?;
 
         // object uniform
         // --------------
-        let object_ubos = array::from_fn(|_| VulkanBuffer::from_storage(ctx, SpriteShaderObjectData::total_size()));
+        let object_ubos = array::from_fn(|_| VulkanBuffer::from_storage(ctx, SpriteShaderObjectData::total_size()).unwrap());
 
         // texture data
         // ------------
@@ -123,10 +124,13 @@ impl VulkanSpriteShader {
             material_desc_group.layout,
         ];
 
+        let vert_binding_desc = [Vertex3D::get_binding_desc()];
+        let vert_attrb_desc = Vertex3D::get_attribute_desc();
+
         // pipeline
         // --------
         let shader = VulkanShader::from_file(ctx, shader_path)?;
-        let pipeline = VulkanPipeline::new(ctx, swapchain, shader, &render_pass_data.world_render_pass, &desc_layouts, true, false)?;
+        let pipeline = VulkanPipeline::new(ctx, swapchain, shader, &render_pass_data.world_render_pass, &vert_binding_desc, &vert_attrb_desc, &desc_layouts, true, false)?;
 
         Ok(Self {
             ctx: ctx.clone(),
@@ -150,26 +154,26 @@ impl VulkanSpriteShader {
         })
     }
 
-    pub fn update_global_uo(&mut self, global_uo: SpriteShaderGlobalUniformObject, core: &VulkanContext, frame_idx: usize) -> HellResult<()> {
+    pub fn update_global_uo(&mut self, global_uo: SpriteShaderGlobalUniformObject, frame_idx: usize) -> HellResult<()> {
         self.global_uo = global_uo;
 
-        let buffer = &self.global_ubos[frame_idx];
-        buffer.upload_data_buffer(&core.device.handle, &self.global_uo)?;
+        let buffer = &mut self.global_ubos[frame_idx];
+        buffer.upload_data_buffer(std::slice::from_ref(&self.global_uo))?;
 
         Ok(())
     }
 
-    pub fn update_scene_uo(&self, scene_data: &SpriteShaderSceneData, frame_idx: usize) -> HellResult<()> {
+    pub fn update_scene_uo(&mut self, scene_data: &SpriteShaderSceneData, frame_idx: usize) -> HellResult<()> {
         let min_ubo_alignment = self.ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
 
-        let buffer = self.get_scene_buffer();
-        buffer.upload_data_buffer_array(&self.ctx.device.handle, min_ubo_alignment, scene_data, frame_idx)?;
+        let buffer = &mut self.get_scene_buffer_mut();
+        buffer.upload_data_buffer_array(min_ubo_alignment, std::slice::from_ref(scene_data), frame_idx)?;
 
         Ok(())
     }
 
-    pub fn update_object_uo(&self, render_data: &RenderData, frame_idx: usize) -> HellResult<()> {
-        let buffer = self.get_object_buffer(frame_idx);
+    pub fn update_object_uo(&mut self, render_data: &RenderData, frame_idx: usize) -> HellResult<()> {
+        let buffer = self.get_object_buffer_mut(frame_idx);
 
         let object_data: Vec<_> = render_data.iter()
             .map(|r| SpriteShaderObjectData::new(r.transform.create_model_mat()))
@@ -177,7 +181,7 @@ impl VulkanSpriteShader {
 
         unsafe {
             // TODO: try to write diretly into the buffer
-            buffer.upload_data_storage_buffer(&self.ctx.device.handle, object_data.as_ptr(), object_data.len())?;
+            buffer.upload_data_storage_buffer(object_data.as_ptr(), object_data.len())?;
         }
         Ok(())
     }
@@ -339,16 +343,16 @@ impl VulkanSpriteShader {
 }
 
 impl VulkanSpriteShader {
-    pub fn get_scene_buffer(&self) -> &VulkanBuffer {
-        &self.scene_ubo
+    pub fn get_scene_buffer_mut(&mut self) -> &mut VulkanBuffer {
+        &mut self.scene_ubo
     }
 
-    pub fn get_all_object_buffers(&self) -> &[VulkanBuffer] {
-        &self.object_ubos
+    pub fn get_all_object_buffers_mut(&mut self) -> &mut [VulkanBuffer] {
+        &mut self.object_ubos
     }
 
-    pub fn get_object_buffer(&self, frame_idx: usize) -> &VulkanBuffer {
-        &self.object_ubos[frame_idx]
+    pub fn get_object_buffer_mut(&mut self, frame_idx: usize) -> &mut VulkanBuffer {
+        &mut self.object_ubos[frame_idx]
     }
 }
 

@@ -4,10 +4,46 @@
 use std::{array, collections::HashMap, mem};
 
 use ash::vk;
+use hell_collections::DynArray;
 use hell_core::config;
 use hell_error::HellResult;
 
-use crate::vulkan::{VulkanContextRef, primitives::{VulkanDescriptorSetGroup, VulkanSwapchain,  VulkanRenderPass, VulkanImage, VulkanBuffer, DeviceMemoryMapGuard}, pipeline::{VulkanShader, VulkanPipeline}};
+use crate::vulkan::{VulkanContextRef, primitives::{VulkanDescriptorSetGroup, VulkanSwapchain,  VulkanRenderPass, VulkanImage, VulkanBuffer, VulkanMemoryMap}, pipeline::{VulkanShader, VulkanPipeline}};
+
+#[allow(non_camel_case_types)]
+#[derive(Default, Debug, Clone, Copy)]
+pub enum NumberFormat {
+    #[default] UNDEFINED,
+    R32G32_SFLOAT,
+    R32G32B32_SFLOAT,
+    R32G32B32A32_SFLOAT,
+}
+
+impl NumberFormat {
+    const fn size_of<T>(count: usize) -> usize {
+        std::mem::size_of::<T>() * count
+    }
+
+    pub const fn to_vk_format(&self) -> vk::Format {
+        match self {
+            NumberFormat::R32G32_SFLOAT       => vk::Format::R32G32_SFLOAT,
+            NumberFormat::R32G32B32_SFLOAT    => vk::Format::R32G32B32_SFLOAT,
+            NumberFormat::R32G32B32A32_SFLOAT => vk::Format::R32G32B32A32_SFLOAT,
+            _ => vk::Format::UNDEFINED,
+        }
+    }
+
+    pub const fn size(&self) -> usize {
+        match self {
+            NumberFormat::R32G32_SFLOAT       => Self::size_of::<f32>(2),
+            NumberFormat::R32G32B32_SFLOAT    => Self::size_of::<f32>(3),
+            NumberFormat::R32G32B32A32_SFLOAT => Self::size_of::<f32>(4),
+            _ => 0,
+        }
+    }
+}
+
+// ----------------------------------------------
 
 #[derive(Debug, Clone, Copy)]
 pub struct ValueRange<T> {
@@ -16,21 +52,24 @@ pub struct ValueRange<T> {
 }
 
 impl<T> ValueRange<T> {
-    pub fn new(offset: T, range: T) -> Self {
+    pub const fn new(offset: T, range: T) -> Self {
         Self { offset, range }
     }
 }
 
 pub type MemRange = ValueRange<usize>;
 
-fn get_aligned(operand: usize, alignment: usize) -> usize{
+// ----------------------------------------------------------------------------
+
+const fn get_aligned(operand: usize, alignment: usize) -> usize{
     (operand + (alignment - 1)) & !(alignment - 1)
 }
 
-fn get_aligned_range(offset: usize, size: usize, alignment: usize) -> ValueRange<usize> {
+const fn get_aligned_range(offset: usize, size: usize, alignment: usize) -> ValueRange<usize> {
     ValueRange::new(get_aligned(offset, size), get_aligned(offset, alignment))
 }
 
+// ----------------------------------------------------------------------------
 
 #[repr(usize)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -119,10 +158,21 @@ pub struct InstanceState {
 
 // ----------------------------------------------
 
+#[derive(Default)]
+pub struct AttributeInfo {
+    pub format: NumberFormat,
+    pub binding: usize,
+    pub location: usize,
+}
+
+// ----------------------------------------------
+
 
 #[allow(dead_code)]
 pub struct GenericVulkanShaderBuilder {
     ctx: VulkanContextRef,
+
+    attributes: DynArray<AttributeInfo, { Self::MAX_ATTRIBUTE_COUNT }>,
 
     ubo_alignment: usize,
     push_constant_stride: usize,
@@ -148,6 +198,8 @@ impl GenericVulkanShaderBuilder {
     const BINDING_IDX_SAMPLER: u32 = 1;
 
     const MAX_GLOBAL_TEX_COUNT: usize = 16;
+
+    const MAX_ATTRIBUTE_COUNT: usize = 32;
 }
 
 impl GenericVulkanShaderBuilder {
@@ -167,6 +219,8 @@ impl GenericVulkanShaderBuilder {
 
         Self {
             ctx: ctx.clone(),
+
+            attributes: DynArray::from_default(),
 
             ubo_alignment: config::VULKAN_NVIDIA_REQUIRED_ALIGNMENT,
             push_constant_stride: config::VULKAN_GUARANTEED_PUSH_CONSTANT_STRIDE,
@@ -193,6 +247,18 @@ impl GenericVulkanShaderBuilder {
 
     pub fn with_wireframe(mut self) -> Self {
         self.is_wireframe = true;
+        self
+    }
+
+    pub fn with_attribute(mut self, format: NumberFormat) -> Self {
+        println!("ADDING-ATTRIBUTE: '{:?}'", format);
+
+        self.attributes.push(AttributeInfo {
+            format,
+            binding: 0,
+            location: self.attributes.len()
+        });
+
         self
     }
 
@@ -280,6 +346,27 @@ impl GenericVulkanShaderBuilder {
         let ctx = &self.ctx;
         let device = &self.ctx.device.handle;
 
+        // create vertex-data
+        // ------------------
+        let mut vert_stride = 0_usize;
+        let mut vert_attrb_desc: DynArray<vk::VertexInputAttributeDescription, { Self::MAX_ATTRIBUTE_COUNT }> = DynArray::from_default();
+        self.attributes.as_slice().iter().enumerate().for_each(|(idx, attr)| {
+            vert_attrb_desc.push(vk::VertexInputAttributeDescription::builder()
+                .location(idx as u32)
+                .binding(0)
+                .format(attr.format.to_vk_format())
+                .offset(vert_stride as u32)
+                .build()
+            );
+            vert_stride += attr.format.size();
+        });
+
+        let mut vert_binding_desc = [vk::VertexInputBindingDescription::builder()
+            .binding(0)
+            .stride(vert_stride as u32)
+            .build()
+        ];
+
         // create descriptor-pool
         // ----------------------
         let pool_info = vk::DescriptorPoolCreateInfo::builder()
@@ -303,11 +390,8 @@ impl GenericVulkanShaderBuilder {
             desc_sets[idx].layout
         });
 
-        // pipeline
-        // --------
-        let shader = VulkanShader::from_file(ctx, &self.shader_path)?;
-        let pipeline = VulkanPipeline::new(ctx, swapchain, shader, render_pass, &desc_layouts[0..=0], self.depth_test_enabled, self.is_wireframe)?;
-
+        // global ubos
+        // -----------
         let global_ubo_stride = self.calculate_ubo_stride(GenericShaderScope::Global);
         let instance_ubo_stride = self.calculate_ubo_stride(GenericShaderScope::Instance);
         // max count should be configurable
@@ -321,23 +405,27 @@ impl GenericVulkanShaderBuilder {
         // allocate buffer
         // ---------------
         debug_assert!(total_buffer_size > 0);
-        let buffer = VulkanBuffer::from_uniform(ctx, total_buffer_size);
-        let buffer_map = buffer.map_memory(0, total_buffer_size, vk::MemoryMapFlags::empty())?;
+        let mut buffer = VulkanBuffer::from_uniform(ctx, total_buffer_size)?;
+        buffer.mem.map_memory(0, total_buffer_size, vk::MemoryMapFlags::empty())?;
+        // let buffer_map = buffer.map_memory(0, total_buffer_size, vk::MemoryMapFlags::empty())?;
 
-
-        // ....
 
         // create descriptor-sets
         // ----------------------
         let global_layout = desc_sets[GenericShaderScope::Global as usize].layout;
         let global_desc_sets = VulkanDescriptorSetGroup::allocate_sets_for_layout(ctx, global_layout, desc_pool)?;
 
-
-        // ....
-
         // create instance states
         // ----------------------
         let instance_states = array::from_fn(|_| InstanceState::default());
+
+        // create pipeline
+        // ---------------
+        let shader = VulkanShader::from_file(ctx, &self.shader_path)?;
+        // TODO: desc_layouts
+        let pipeline = VulkanPipeline::new(ctx, swapchain, shader, render_pass, &vert_binding_desc, vert_attrb_desc.as_slice(), &desc_layouts[0..=0], self.depth_test_enabled, self.is_wireframe)?;
+
+
 
         Ok(GenericVulkanShader {
             ctx: self.ctx,
@@ -353,7 +441,6 @@ impl GenericVulkanShaderBuilder {
             pipeline,
 
             buffer,
-            buffer_map,
 
             instance_states,
 
@@ -389,7 +476,6 @@ pub struct GenericVulkanShader {
     pub pipeline: VulkanPipeline,
 
     buffer: VulkanBuffer,
-    buffer_map: DeviceMemoryMapGuard,
 
     instance_states: [InstanceState; config::VULKAN_MAX_MATERIAL_COUNT],
 }
@@ -415,7 +501,9 @@ impl GenericVulkanShader {
     pub fn set_uniform<T>(&mut self, handle: UniformHandle, value: &[T]) -> HellResult<()> {
         let uniform = &self.uniforms[handle.scope as usize][handle.idx];
         println!("SET-UNIFORM: '{:?}' - '{:?}'", handle, uniform);
-        self.buffer_map.copy_from_nonoverlapping(value, uniform.range.offset as isize);
+        self.buffer.mem
+            .mapped_memory_mut()?
+            .copy_from_nonoverlapping(value, uniform.range.offset as isize);
 
         Ok(())
     }

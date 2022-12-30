@@ -19,7 +19,7 @@ use super::VulkanContextRef;
 use super::primitives::{VulkanSwapchain, VulkanCommands, VulkanCommandBuffer, VulkanRenderPassData, BultinRenderPassType, VulkanImage};
 use super::frame::VulkanFrameData;
 use super::pipeline::shader_data::{VulkanWorldMesh, VulkanUiMesh};
-use super::shader::generic_vulkan_shader::GenericVulkanShader;
+use super::shader::generic_vulkan_shader::{GenericVulkanShader, NumberFormat};
 use super::shader::shader_utils::VulkanUboData;
 use super::shader::VulkanSpriteShader;
 use hell_core::config;
@@ -66,10 +66,11 @@ impl VulkanBackend {
 
         let test_shader = super::shader::generic_vulkan_shader::GenericVulkanShaderBuilder::new(&ctx, config::TEST_SHADER_PATH)
             .with_global_bindings()
-            // .with_global_uniform::<glam::Mat4>("view")
-            // .with_global_uniform::<glam::Mat4>("proj")
+            .with_attribute(NumberFormat::R32G32B32_SFLOAT)
+            .with_attribute(NumberFormat::R32G32_SFLOAT)
+            .with_global_uniform::<glam::Mat4>("view")
+            .with_global_uniform::<glam::Mat4>("proj")
             .with_global_uniform::<glam::Mat4>("view_proj")
-            // .with_global_uniform::<glam::Mat4>("reserved_0")
             // .with_instance_bindings()
             .build(&swapchain, &render_pass_data.ui_render_pass)?;
 
@@ -402,7 +403,7 @@ impl VulkanBackend {
     // TODO: Error handling
     pub fn update_world_shader(&mut self, camera: HellCamera, scene_data: &SpriteShaderSceneData, render_data: &RenderData) -> HellResult<()> {
         let global_uo = SpriteShaderGlobalUniformObject::new(camera.view, camera.proj, camera.view_proj);
-        self.world_shader.update_global_uo(global_uo, &self.ctx, self.frame_idx)?;
+        self.world_shader.update_global_uo(global_uo, self.frame_idx)?;
         self.world_shader.update_scene_uo(scene_data, self.frame_idx)?;
         if !render_data.is_empty() {
             self.world_shader.update_object_uo(render_data, self.frame_idx)?;
@@ -414,26 +415,20 @@ impl VulkanBackend {
     #[allow(unused)]
     pub fn update_test_shader(&self) -> HellResult<()> {
         let cam = HellCamera::new(self.swapchain.aspect_ratio());
-        let cam_uo = CameraUniform::new(cam.view, cam.proj, cam.view_proj);
 
-        println!("CAM: {:?}", cam);
-        // let camera_uo = base_shader::CameraUniform::new(camera.view, camera.proj, camera.view_proj);
         let mut shader = self.test_shader.borrow_mut();
-        // if let Some(mut uni) = shader.uniform_handle("view") {
-        //     shader.set_uniform(uni, &cam_uo.view);
-        // }
-        //
-        // if let Some(mut uni) = shader.uniform_handle("proj") {
-        //     shader.set_uniform(uni, &cam_uo.proj);
-        // }
 
-        if let Some(mut uni) = shader.uniform_handle("view_proj") {
-            shader.set_uniform(uni, &[cam.view_proj]);
+        if let Some(mut uni) = shader.uniform_handle("view") {
+            shader.set_uniform(uni, &[cam.view])?;
         }
 
-        // if let Some(mut uni) = shader.uniform_handle("reserved_0") {
-        //     shader.set_uniform(uni, &cam_uo.reserve_0);
-        // }
+        if let Some(mut uni) = shader.uniform_handle("proj") {
+            shader.set_uniform(uni, &[cam.proj])?;
+        }
+
+        if let Some(mut uni) = shader.uniform_handle("view_proj") {
+            shader.set_uniform(uni, &[cam.view_proj])?;
+        }
 
         shader.apply_globals(self.frame_idx);
 
