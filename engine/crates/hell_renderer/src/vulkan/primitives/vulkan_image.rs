@@ -285,8 +285,10 @@ impl VulkanImage {
 
         println!("creating default tex with size '{}'", BYTE_SIZE);
 
+        const MOD:  u32 = 64;
+        const STEP: u32 = MOD / 2;
         let img = image::ImageBuffer::from_fn(WIDTH as u32, HEIGHT as u32, |x, y| {
-            if (x + y) % 2 == 0 {
+            if (x % MOD < STEP) && (y & MOD < STEP) {
                 image::Rgba([255, 0,   0, 255])
             } else {
                 image::Rgba([0,   0, 255, 255])

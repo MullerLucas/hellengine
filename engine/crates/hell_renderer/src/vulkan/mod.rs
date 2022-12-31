@@ -6,7 +6,7 @@ mod platforms;
 mod debugging;
 
 mod frame;
-pub use frame::VulkanFrameData;
+pub use frame::VulkanFrame;
 
 pub mod pipeline;
 

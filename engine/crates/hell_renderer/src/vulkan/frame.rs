@@ -1,25 +1,29 @@
 use std::array;
 
-use crate::error::err_invalid_frame_idx;
 use crate::render_types::PerFrame;
 use ash::vk;
+use hell_core::config;
 use hell_error::HellResult;
 
 use super::VulkanContextRef;
 use super::primitives::{VulkanSemaphore, VulkanFence, VulkanCommandPool, VulkanCommandBuffer};
 
 
-pub struct VulkanFrameData {
+
+
+pub struct VulkanFrame {
+    #[allow(dead_code)] ctx: VulkanContextRef,
+    frame_idx: usize,
+
     img_available_sem: PerFrame<VulkanSemaphore>,
     render_finished_sem: PerFrame<VulkanSemaphore>,
     in_flight_fences: PerFrame<VulkanFence>,
+    wait_stages: vk::PipelineStageFlags, // same for each frame
 
-    pub wait_stages: [vk::PipelineStageFlags; 1], // same for each frame
-    pub graphics_cmd_pools: PerFrame<VulkanCommandPool>,
-
+    gfx_cmd_pools: PerFrame<VulkanCommandPool>,
 }
 
-impl VulkanFrameData {
+impl VulkanFrame {
     pub fn new(ctx: &VulkanContextRef) -> HellResult<Self> {
         let semaphore_info = vk::SemaphoreCreateInfo::default();
 
@@ -32,39 +36,57 @@ impl VulkanFrameData {
         let img_available_sem   = array::from_fn(|_| VulkanSemaphore::new(ctx, &semaphore_info).unwrap());
         let render_finished_sem = array::from_fn(|_| VulkanSemaphore::new(ctx, &semaphore_info).unwrap());
         let in_flight_fences    = array::from_fn(|_| VulkanFence::new(ctx, &fence_info).unwrap());
-        let graphics_cmd_pools  = array::from_fn(|_| VulkanCommandPool::default_for_graphics(ctx).unwrap());
+        let gfx_cmd_pools  = array::from_fn(|_| VulkanCommandPool::default_for_graphics(ctx).unwrap());
+        let wait_stages = vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT;
 
         Ok(Self {
+            ctx: ctx.clone(),
+            frame_idx: 0,
+
             img_available_sem,
             render_finished_sem,
             in_flight_fences,
-            wait_stages: [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
-            graphics_cmd_pools,
+            wait_stages,
+            gfx_cmd_pools,
         })
     }
 }
 
-impl VulkanFrameData {
-    pub fn in_flight_fence(&self, frame_idx: usize) -> &VulkanFence {
-        &self.in_flight_fences[frame_idx]
+impl VulkanFrame {
+    pub fn begin_frame(&self) {
+        // let cmd_buff = self.gfx_cmd_buffer();
+        // let cmd_buff_begin_info = vk::CommandBufferBeginInfo::default();
+        // cmd_buff.begin_cmd_buffer(&self.ctx, begin_info)?;
     }
 
-    pub fn img_available_sem(&self, frame_idx: usize) -> &VulkanSemaphore {
-        &self.img_available_sem[frame_idx]
+    pub fn end_frame(&mut self) {
+        self.frame_idx = (self.frame_idx + 1) % config::FRAMES_IN_FLIGHT;
     }
-
-    pub fn img_render_finished_sem(&self, frame_idx: usize) -> &VulkanSemaphore {
-        &self.render_finished_sem[frame_idx]
-    }
-
 }
 
-impl VulkanFrameData {
-    pub fn get_cmd_buffer(&self, frame_idx: usize) -> HellResult<VulkanCommandBuffer> {
-        Ok(
-            self.graphics_cmd_pools
-                .get(frame_idx).ok_or_else(|| err_invalid_frame_idx(frame_idx))?
-                .get_buffer(0)
-        )
+impl VulkanFrame {
+    pub fn idx(&self) -> usize {
+        self.frame_idx
+    }
+
+    pub fn wait_stages(&self) -> vk::PipelineStageFlags {
+        self.wait_stages
+    }
+
+    pub fn in_flight_fence(&self) -> &VulkanFence {
+        &self.in_flight_fences[self.frame_idx]
+    }
+
+    pub fn img_available_sem(&self) -> &VulkanSemaphore {
+        &self.img_available_sem[self.frame_idx]
+    }
+
+    pub fn img_render_finished_sem(&self) -> &VulkanSemaphore {
+        &self.render_finished_sem[self.frame_idx]
+    }
+
+    pub fn gfx_cmd_buffer(&self) -> VulkanCommandBuffer {
+        self.gfx_cmd_pools[self.frame_idx]
+            .get_buffer(0)
     }
 }

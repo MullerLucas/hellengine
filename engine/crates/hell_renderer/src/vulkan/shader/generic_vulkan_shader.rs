@@ -8,7 +8,7 @@ use hell_collections::DynArray;
 use hell_core::config;
 use hell_error::{HellResult, HellError, HellErrorKind, HellErrorHelper};
 
-use crate::vulkan::{VulkanContextRef, primitives::{VulkanDescriptorSetGroup, VulkanSwapchain,  VulkanRenderPass, VulkanImage, VulkanBuffer, VulkanMemoryMap, VulkanCommands, VulkanSampler, VulkanTexture}, pipeline::{VulkanShader, VulkanPipeline}};
+use crate::vulkan::{VulkanContextRef, primitives::{VulkanDescriptorSetGroup, VulkanSwapchain,  VulkanRenderPass, VulkanImage, VulkanBuffer, VulkanMemoryMap, VulkanCommands, VulkanSampler, VulkanTexture, VulkanCommandBuffer}, pipeline::{VulkanShader, VulkanPipeline}, VulkanFrame};
 
 #[allow(non_camel_case_types)]
 #[derive(Default, Debug, Clone, Copy)]
@@ -567,11 +567,13 @@ impl GenericVulkanShader {
     // ------------------------------------------------------------------------
 
 
-    pub fn apply_scope(&self, scope: GenericShaderScope, frame_idx: usize) -> HellResult<()> {
-        println!("APPLY: {}", frame_idx);
-        let set = self.global_desc_sets[frame_idx];
+    pub fn apply_scope(&self, scope: GenericShaderScope, frame: &VulkanFrame) -> HellResult<()> {
+        println!("APPLY: {}", frame.idx());
+        let set = self.global_desc_sets[frame.idx()];
         let ubo_range = &self.ubo_ranges[scope as usize];
 
+        // update desc-set
+        // ---------------
         let buffer_infos = [
             vk::DescriptorBufferInfo::builder()
                 .buffer(self.buffer.handle)
@@ -579,7 +581,6 @@ impl GenericVulkanShader {
                 .range(ubo_range.range as u64)
                 .build()
         ];
-
 
         let mut image_infos: DynArray<vk::DescriptorImageInfo, {config::VULKAN_SHADER_MAX_GLOBAL_TEXTURES}> = DynArray::from_default();
         for (idx, tex) in self.global_tex.iter().enumerate() {
@@ -611,16 +612,20 @@ impl GenericVulkanShader {
 
         unsafe { self.ctx.device.handle.update_descriptor_sets(&write_descriptors, &[]); }
 
-        // TODO: implement or remove
-        // cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
+        // bind desc-set
+        // -------------
+        let descriptor_set = [ self.global_descriptor(frame.idx()) ];
+        let cmd_buff = frame.gfx_cmd_buffer();
+        cmd_buff.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, self.pipeline.layout, 0, &descriptor_set, &[]);
+
         Ok(())
     }
 
-    pub fn apply_globals(&self, frame_idx: usize) -> HellResult<()> {
-        self.apply_scope(GenericShaderScope::Global, frame_idx)
+    pub fn apply_globals(&self, frame: &VulkanFrame) -> HellResult<()> {
+        self.apply_scope(GenericShaderScope::Global, frame)
     }
 
-    pub fn apply_locals(&self, frame_idx: usize) -> HellResult<()> {
-        self.apply_scope(GenericShaderScope::Local, frame_idx)
+    pub fn apply_locals(&self, frame: &VulkanFrame) -> HellResult<()> {
+        self.apply_scope(GenericShaderScope::Local, frame)
     }
 }

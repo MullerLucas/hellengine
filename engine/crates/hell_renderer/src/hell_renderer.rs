@@ -8,7 +8,7 @@ use crate::camera::HellCamera;
 use crate::render_types::RenderPackage;
 use crate::shader::SpriteShaderSceneData;
 use crate::vulkan::primitives::VulkanSwapchain;
-use crate::vulkan::{VulkanBackend, VulkanContext, VulkanFrameData};
+use crate::vulkan::{VulkanBackend, VulkanContext};
 
 
 
@@ -22,7 +22,7 @@ pub struct HellRenderer {
     info: HellRendererInfo,
     backend: VulkanBackend,
 
-    frame_idx: usize,
+    // frame_idx: usize,
     camera: HellCamera,
 }
 
@@ -38,15 +38,9 @@ impl HellRenderer {
         Ok(Self {
             info,
             backend,
-            frame_idx: 0,
+            // frame_idx: 0,
             camera,
         })
-    }
-}
-
-impl HellRenderer {
-    pub fn frame_idx(&self) -> usize {
-        self.frame_idx
     }
 }
 
@@ -71,29 +65,11 @@ impl HellRenderer {
     pub fn draw_frame(&mut self, delta_time: f32, scene_data: &SpriteShaderSceneData, render_pkg: &RenderPackage, resources: &ResourceManager) -> HellResult<bool> {
         self.backend.update_world_shader(self.camera.clone(), scene_data, &render_pkg.world)?;
 
-        let is_resized = self.backend.draw_frame(delta_time, render_pkg, resources)?;
+        self.backend.begin_frame()?;
+        self.backend.draw_frame(delta_time, render_pkg, resources)?;
+        let is_resized = self.backend.end_frame()?;
 
-        self.increment_frame_idx();
         Ok(is_resized)
     }
 
 }
-
-impl HellRenderer {
-    fn increment_frame_idx(&mut self) {
-        self.frame_idx = (self.frame_idx + 1) % self.info.max_frames_in_flight;
-    }
-
-}
-
-// HACK: remove
-impl HellRenderer {
-    pub fn get_frame_data(&self) -> &VulkanFrameData {
-        &self.backend.frame_data
-    }
-
-    pub fn get_core(&self) -> &VulkanContext {
-        &self.backend.ctx
-    }
-}
-

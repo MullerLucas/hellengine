@@ -15,9 +15,8 @@ use crate::shader::base_shader::CameraUniform;
 use crate::shader::{SpriteShaderSceneData, SpriteShaderGlobalUniformObject, base_shader};
 use crate::vulkan::primitives::RenderPassClearFlags;
 
-use super::VulkanContextRef;
+use super::{VulkanContextRef, VulkanFrame};
 use super::primitives::{VulkanSwapchain, VulkanCommands, VulkanCommandBuffer, VulkanRenderPassData, BultinRenderPassType, VulkanImage, VulkanTexture};
-use super::frame::VulkanFrameData;
 use super::pipeline::shader_data::{VulkanWorldMesh, VulkanUiMesh};
 use super::shader::generic_vulkan_shader::{GenericVulkanShader, NumberFormat};
 use super::shader::shader_utils::VulkanUboData;
@@ -35,14 +34,12 @@ use hell_core::config;
 // ----------------------------------------------------------------------------
 
 pub struct VulkanBackend {
-    pub frame_data: VulkanFrameData,
-    pub frame_idx: usize,
-    pub curr_swap_idx: usize,
-
-    pub cmd_pools: VulkanCommands,
+    pub frame: VulkanFrame,
+    pub cmds: VulkanCommands,
     pub world_meshes: Vec<VulkanWorldMesh>,
     pub ui_meshes: Vec<VulkanUiMesh>,
     pub swapchain: VulkanSwapchain,
+    pub swap_idx: usize,
     pub render_pass_data: VulkanRenderPassData,
 
     pub world_shader: VulkanSpriteShader,
@@ -53,7 +50,7 @@ pub struct VulkanBackend {
 
 impl VulkanBackend {
     pub fn new(ctx: VulkanContextRef, swapchain: VulkanSwapchain) -> HellResult<Self> {
-        let frame_data = VulkanFrameData::new(&ctx)?;
+        let frame = VulkanFrame::new(&ctx)?;
         let cmds = VulkanCommands::new(&ctx)?;
 
         let quad_mesh_3d = VulkanWorldMesh::new_quad_3d(&ctx, &cmds)?;
@@ -76,14 +73,13 @@ impl VulkanBackend {
             .build(&swapchain, &render_pass_data.ui_render_pass)?;
 
         Ok(Self {
-            frame_data,
-            frame_idx: 0,
-            curr_swap_idx: usize::MAX,
+            frame,
             world_meshes,
             ui_meshes,
             swapchain,
+            swap_idx: usize::MAX,
             render_pass_data,
-            cmd_pools: cmds,
+            cmds,
             world_shader,
             test_shader: RefCell::new(test_shader),
             ctx,
@@ -107,7 +103,7 @@ impl VulkanBackend {
             .map(|i| {
                 let img = i.img();
                 let data = img.as_raw().as_slice();
-                VulkanTexture::new(&self.ctx, &self.cmd_pools, data, img.width() as usize, img.height() as usize)
+                VulkanTexture::new(&self.ctx, &self.cmds, data, img.width() as usize, img.height() as usize)
             })
             .collect();
         let texture = texture?;
@@ -158,7 +154,7 @@ impl VulkanBackend {
 
         let render_pass_info = vk::RenderPassBeginInfo::builder()
             .render_pass(render_pass.handle)
-            .framebuffer(frame_buffer.buffer_at(self.curr_swap_idx))
+            .framebuffer(frame_buffer.buffer_at(self.swap_idx))
             .clear_values(clear_values.as_slice())
             .render_area(render_area)
             .build();
@@ -181,52 +177,79 @@ impl VulkanBackend {
 
     pub fn on_window_changed(&mut self, window_extent: HellWindowExtent) -> HellResult<()> {
         self.recreate_swapchain(window_extent)?;
-        self.render_pass_data.recreate_framebuffer(&self.ctx, &self.swapchain, &self.cmd_pools)?;
+        self.render_pass_data.recreate_framebuffer(&self.ctx, &self.swapchain, &self.cmds)?;
         Ok(())
     }
 
+    pub fn begin_frame(&mut self) -> HellResult<()> {
+        self.frame.begin_frame();
 
-    #[allow(clippy::modulo_one)]
-    pub fn draw_frame(&mut self, _delta_time: f32, render_pkg: &RenderPackage, resources: &ResourceManager) -> HellResult<bool> {
-        let device = &self.ctx.device.handle;
-
-        // let frame_data = &self.frame_data[frame_idx];
-        let cmd_pool = &self.frame_data.graphics_cmd_pools.get(self.frame_idx).to_render_hell_err()?;
-        let in_flight_fence = self.frame_data.in_flight_fence(self.frame_idx);
+        let in_flight_fence = self.frame.in_flight_fence();
         in_flight_fence.wait_for_fence(u64::MAX)?;
 
-        let img_available_sem = self.frame_data.img_available_sem(self.frame_idx);
+        let img_available_sem = self.frame.img_available_sem();
         let (curr_swap_idx, _is_suboptimal) = self.swapchain.aquire_next_image(img_available_sem)?;
-        self.curr_swap_idx = curr_swap_idx as usize;
+        self.swap_idx = curr_swap_idx as usize;
 
-        cmd_pool.reset_cmd_buffer(device, 0)?;
-        self.record_cmd_buffer(
-            &self.ctx,
-            render_pkg,
-            resources
-        )?;
+        let cmd_buffer = &self.frame.gfx_cmd_buffer();
+        cmd_buffer.reset_cmd_buffer(&self.ctx)?;
 
-        // delay resetting the fence until we know for sure we will be submitting work with it (not return early)
-        in_flight_fence.reset_fence()?;
-        self.submit_queue(self.ctx.device.queues.graphics.queue, &[cmd_pool.get_buffer(0).handle()])?;
-        let is_resized = self.present_queue(self.ctx.device.queues.present.queue, &self.swapchain, &[curr_swap_idx])?;
+        Ok(())
+    }
 
-        self.frame_idx = (self.frame_idx + 1) % config::FRAMES_IN_FLIGHT;
+    pub fn draw_frame(&mut self, _delta_time: f32, render_pkg: &RenderPackage, resources: &ResourceManager) -> HellResult<()> {
+        let ctx = &self.ctx;
+        let cmd_buffer = self.frame.gfx_cmd_buffer();
 
+        let begin_info = vk::CommandBufferBeginInfo::default();
+        cmd_buffer.begin_cmd_buffer(ctx, begin_info)?;
+
+        cmd_buffer.cmd_set_viewport(ctx, 0, &self.swapchain.viewport);
+        cmd_buffer.cmd_set_scissor(ctx, 0, &self.swapchain.sissor);
+
+        // world render pass
+        self.begin_render_pass(BultinRenderPassType::World, &cmd_buffer);
+        self.record_world_cmd_buffer(&cmd_buffer, &render_pkg.world, resources)?;
+        self.end_renderpass(&cmd_buffer);
+
+        // ui render pass
+        self.update_test_shader()?;
+        self.begin_render_pass(BultinRenderPassType::Ui, &cmd_buffer);
+        self.record_ui_cmd_buffer(&cmd_buffer, &render_pkg.ui, resources)?;
+        self.end_renderpass(&cmd_buffer);
+
+        Ok(())
+    }
+
+    pub fn end_frame(&mut self) -> HellResult<bool> {
+        let ctx = &self.ctx;
+
+        // end cmd-buffer
+        let cmd_buffer = &self.frame.gfx_cmd_buffer();
+        cmd_buffer.end_command_buffer(ctx)?;
+        // reset fence: delay resetting the fence until we know for sure we will be submitting work with it (not return early)
+        self.frame.in_flight_fence().reset_fence()?;
+        // submit queue
+        self.submit_queue(self.ctx.device.queues.graphics.queue, cmd_buffer)?;
+        // present queue
+        let is_resized = self.present_queue(self.ctx.device.queues.present.queue, &self.swapchain, &[self.swap_idx as u32])?;
+
+        self.frame.end_frame();
         Ok(is_resized)
     }
 
-    pub fn submit_queue(&self, queue: vk::Queue, cmd_buffers: &[vk::CommandBuffer]) -> HellResult<()> {
-        let img_available_sems   = [self.frame_data.img_available_sem(self.frame_idx).handle()];
-        let render_finished_sems = [self.frame_data.img_render_finished_sem(self.frame_idx).handle()];
-        let in_flight_fence      = self.frame_data.in_flight_fence(self.frame_idx).handle();
+    pub fn submit_queue(&self, queue: vk::Queue, cmd_buff: &VulkanCommandBuffer) -> HellResult<()> {
+        let img_available_sems = [self.frame.img_available_sem().handle()];
+        let render_finished_sems = [self.frame.img_render_finished_sem().handle()];
+        let in_flight_fence = self.frame.in_flight_fence().handle();
+        let cmd_buffers = [cmd_buff.handle()];
 
         let submit_info = [
             vk::SubmitInfo::builder()
                 .wait_semaphores(&img_available_sems)
-                .wait_dst_stage_mask(&self.frame_data.wait_stages)
+                .wait_dst_stage_mask(&[self.frame.wait_stages()])
                 .signal_semaphores(&render_finished_sems)
-                .command_buffers(cmd_buffers)
+                .command_buffers(&cmd_buffers)
                 .build()
         ];
 
@@ -234,7 +257,7 @@ impl VulkanBackend {
     }
 
     pub fn present_queue(&self, queue: vk::Queue, swapchain: &VulkanSwapchain, img_indices: &[u32]) -> HellResult<bool> {
-        let render_finished_sems = [self.frame_data.img_render_finished_sem(self.frame_idx).handle()];
+        let render_finished_sems = [self.frame.img_render_finished_sem().handle()];
         let sc = &[swapchain.vk_swapchain];
 
         let present_info = vk::PresentInfoKHR::builder()
@@ -256,33 +279,6 @@ impl VulkanBackend {
         Ok(is_resized)
     }
 
-    // fn record_cmd_buffer(&self, ctx: &VulkanCtxRef, render_pass_data: &VulkanRenderPassData, swap_img_idx: usize, render_data: &RenderData, resources: &ResourceManager) -> HellResult<()> {
-    fn record_cmd_buffer(&self, ctx: &VulkanContextRef, render_pkg: &RenderPackage, resources: &ResourceManager) -> HellResult<()> {
-        let device = &ctx.device.handle;
-        let cmd_buffer = self.frame_data.get_cmd_buffer(self.frame_idx)?;
-
-        let begin_info = vk::CommandBufferBeginInfo::default();
-        cmd_buffer.begin_cmd_buffer(ctx, begin_info)?;
-
-        cmd_buffer.cmd_set_viewport(ctx, 0, &self.swapchain.viewport);
-        cmd_buffer.cmd_set_scissor(ctx, 0, &self.swapchain.sissor);
-
-        // world render pass
-        self.begin_render_pass(BultinRenderPassType::World, &cmd_buffer);
-        self.record_world_cmd_buffer(&cmd_buffer, &render_pkg.world, resources)?;
-        self.end_renderpass(&cmd_buffer);
-
-        // ui render pass
-        self.update_test_shader()?;
-        self.begin_render_pass(BultinRenderPassType::Ui, &cmd_buffer);
-        self.record_ui_cmd_buffer(&cmd_buffer, &render_pkg.ui, resources)?;
-        self.end_renderpass(&cmd_buffer);
-
-        unsafe { device.end_command_buffer(cmd_buffer.handle())?; }
-
-        Ok(())
-    }
-
     fn record_world_cmd_buffer(&self, cmd_buffer: &VulkanCommandBuffer, render_data: &RenderData, _resources: &ResourceManager) -> HellResult<()> {
         let mut curr_mat_handle = ResourceHandle::MAX;
         let mut curr_mesh_idx = usize::MAX;
@@ -294,13 +290,13 @@ impl VulkanBackend {
 
         // bind static descriptor sets once
         let descriptor_set = [
-            curr_shader.get_global_set(0, self.frame_idx)?,
-            curr_shader.get_object_set(0, self.frame_idx)?,
+            curr_shader.get_global_set(0, self.frame.idx())?,
+            curr_shader.get_object_set(0, self.frame.idx())?,
         ];
 
         let min_ubo_alignment = self.ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
         let dynamic_descriptor_offsets = [
-            SpriteShaderSceneData::padded_device_size(min_ubo_alignment) as u32 * self.frame_idx as u32,
+            SpriteShaderSceneData::padded_device_size(min_ubo_alignment) as u32 * self.frame.idx() as u32,
         ];
 
         cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
@@ -315,7 +311,7 @@ impl VulkanBackend {
                 // curr_mat = resources.material_at(curr_mat_handle.id).to_hell_err(HellErrorKind::RenderError)?;
 
                 // bind material descriptors
-                let descriptor_set = [ curr_shader.get_material_set(rd.material.id, self.frame_idx)? ];
+                let descriptor_set = [ curr_shader.get_material_set(rd.material.id, self.frame.idx())? ];
                 cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 2, &descriptor_set, &[]);
             }
 
@@ -358,34 +354,20 @@ impl VulkanBackend {
 
     fn record_ui_cmd_buffer(&self, cmd_buffer: &VulkanCommandBuffer, render_data: &RenderData, _resources: &ResourceManager) -> HellResult<()> {
         unsafe {
-            let mut curr_mat_handle = ResourceHandle::MAX;
-            let mut curr_mesh_idx = usize::MAX;
-
             let shader = &self.test_shader.borrow(); // TODO: ...
-            let mut mesh = &self.world_meshes[0];
 
-            // bind static descriptor sets once
-            let descriptor_set = [
-                shader.global_descriptor(self.frame_idx),
-            ];
-
-            cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, shader.pipeline.layout, 0, &descriptor_set, &[]);
+            // bind vertex data
+            // ----------------
+            let mesh = &self.world_meshes[0];
+            let vertex_buffers = [mesh.vertex_buffer.handle];
+            cmd_buffer.cmd_bind_vertex_buffers(&self.ctx, 0, &vertex_buffers, &[0]);
+            cmd_buffer.cmd_bind_index_buffer(&self.ctx, mesh.index_buffer.handle, 0, VulkanWorldMesh::INDEX_TYPE);
 
             // TODO: moved here
             cmd_buffer.cmd_bind_pipeline(&self.ctx, vk::PipelineBindPoint::GRAPHICS, shader.pipeline.pipeline);
 
             // draw each object
             for (idx, rd) in render_data.iter().enumerate() {
-                // bind mesh
-                if curr_mesh_idx != rd.mesh_idx {
-                    curr_mesh_idx = rd.mesh_idx;
-                    mesh = &self.world_meshes[curr_mesh_idx];
-
-                    let vertex_buffers = [mesh.vertex_buffer.handle];
-                    cmd_buffer.cmd_bind_vertex_buffers(&self.ctx, 0, &vertex_buffers, &[0]);
-                    cmd_buffer.cmd_bind_index_buffer(&self.ctx, mesh.index_buffer.handle, 0, VulkanWorldMesh::INDEX_TYPE);
-                }
-
                 // draw
                 // value of 'first_instance' is used in the vertex shader to index into the object storage
                 cmd_buffer.cmd_draw_indexed(&self.ctx, mesh.indices_count() as u32, 1, 0, 0, 0);
@@ -400,10 +382,10 @@ impl VulkanBackend {
     // TODO: Error handling
     pub fn update_world_shader(&mut self, camera: HellCamera, scene_data: &SpriteShaderSceneData, render_data: &RenderData) -> HellResult<()> {
         let global_uo = SpriteShaderGlobalUniformObject::new(camera.view, camera.proj, camera.view_proj);
-        self.world_shader.update_global_uo(global_uo, self.frame_idx)?;
-        self.world_shader.update_scene_uo(scene_data, self.frame_idx)?;
+        self.world_shader.update_global_uo(global_uo, self.frame.idx())?;
+        self.world_shader.update_scene_uo(scene_data, self.frame.idx())?;
         if !render_data.is_empty() {
-            self.world_shader.update_object_uo(render_data, self.frame_idx)?;
+            self.world_shader.update_object_uo(render_data, self.frame.idx())?;
         }
 
         Ok(())
@@ -427,7 +409,7 @@ impl VulkanBackend {
             shader.set_uniform(uni, &[cam.view_proj])?;
         }
 
-        shader.apply_globals(self.frame_idx);
+        shader.apply_globals(&self.frame);
 
         Ok(())
     }
