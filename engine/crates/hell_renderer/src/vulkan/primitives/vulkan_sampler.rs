@@ -8,7 +8,7 @@ use crate::vulkan::VulkanContextRef;
 
 pub struct VulkanSampler {
     ctx: VulkanContextRef,
-    pub sampler: vk::Sampler,
+    pub handle: vk::Sampler,
 }
 
 impl Drop for VulkanSampler {
@@ -17,7 +17,7 @@ impl Drop for VulkanSampler {
 
         unsafe {
             let device = &self.ctx.device.handle;
-            device.destroy_sampler(self.sampler, None);
+            device.destroy_sampler(self.handle, None);
         }
     }
 }
@@ -56,7 +56,7 @@ impl VulkanSampler {
 
         Ok(Self {
             ctx: ctx.clone(),
-            sampler
+            handle: sampler
         })
     }
 }

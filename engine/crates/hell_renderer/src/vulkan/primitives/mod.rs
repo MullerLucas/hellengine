@@ -7,6 +7,9 @@ pub use vulkan_fence::*;
 mod vulkan_image;
 pub use vulkan_image::*;
 
+mod vulkan_texture;
+pub use vulkan_texture::*;
+
 mod vulkan_memory;
 pub use vulkan_memory::*;
 

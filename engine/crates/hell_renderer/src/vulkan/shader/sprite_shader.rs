@@ -7,7 +7,7 @@ use crate::error::{err_invalid_frame_idx, err_invalid_set_idx};
 use crate::render_types::{PerFrame, RenderData};
 use crate::shader::{SpriteShaderGlobalUniformObject, SpriteShaderSceneData, SpriteShaderObjectData};
 use crate::vulkan::pipeline::{VulkanPipeline, VulkanShader};
-use crate::vulkan::primitives::{VulkanImage, VulkanBuffer, VulkanSampler, VulkanSwapchain, VulkanDescriptorSetGroup, VulkanRenderPassData};
+use crate::vulkan::primitives::{VulkanTexture, VulkanBuffer, VulkanSampler, VulkanSwapchain, VulkanDescriptorSetGroup, VulkanRenderPassData};
 use crate::vulkan::{VulkanContextRef, Vertex3D};
 use hell_core::config;
 
@@ -26,7 +26,7 @@ pub struct VulkanSpriteShader {
     pub scene_ubo: VulkanBuffer, // one ubo for all frames
     pub object_ubos: PerFrame<VulkanBuffer>,
 
-    pub textures: Vec<VulkanImage>,
+    pub textures: Vec<VulkanTexture>,
     pub sampler: VulkanSampler,
 
     // descriptor sets
@@ -299,7 +299,7 @@ impl VulkanSpriteShader {
         Ok(group.handles.len() - 1)
     }
 
-    fn add_texture_descriptor_sets(ctx: &VulkanContextRef, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSetGroup, texture: &VulkanImage, sampler: &VulkanSampler) -> HellResult<usize> {
+    fn add_texture_descriptor_sets(ctx: &VulkanContextRef, pool: vk::DescriptorPool, group: &mut VulkanDescriptorSetGroup, texture: &VulkanTexture, sampler: &VulkanSampler) -> HellResult<usize> {
         // TODO: check - can we use one set for all frames?
         let sets = VulkanDescriptorSetGroup::allocate_sets_for_layout(ctx, group.layout, pool)?;
 
@@ -307,8 +307,8 @@ impl VulkanSpriteShader {
             let image_infos = [
                 vk::DescriptorImageInfo::builder()
                     .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .image_view(texture.view)
-                    .sampler(sampler.sampler)
+                    .image_view(texture.img.view)
+                    .sampler(sampler.handle)
                     .build()
             ];
 
@@ -331,7 +331,7 @@ impl VulkanSpriteShader {
         Ok(group.handles.len() - 1)
     }
 
-    pub fn set_texture_descriptor_sets(&mut self, textures: Vec<VulkanImage>) -> HellResult<()>{
+    pub fn set_texture_descriptor_sets(&mut self, textures: Vec<VulkanTexture>) -> HellResult<()>{
         for tex in &textures {
             let _ = Self::add_texture_descriptor_sets(&self.ctx, self.desc_set_pool, &mut self.material_desc_group, tex, &self.sampler)?;
         }

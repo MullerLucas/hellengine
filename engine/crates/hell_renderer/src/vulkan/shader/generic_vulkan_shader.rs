@@ -6,9 +6,9 @@ use std::{array, collections::HashMap, mem};
 use ash::vk;
 use hell_collections::DynArray;
 use hell_core::config;
-use hell_error::HellResult;
+use hell_error::{HellResult, HellError, HellErrorKind, HellErrorHelper};
 
-use crate::vulkan::{VulkanContextRef, primitives::{VulkanDescriptorSetGroup, VulkanSwapchain,  VulkanRenderPass, VulkanImage, VulkanBuffer, VulkanMemoryMap}, pipeline::{VulkanShader, VulkanPipeline}};
+use crate::vulkan::{VulkanContextRef, primitives::{VulkanDescriptorSetGroup, VulkanSwapchain,  VulkanRenderPass, VulkanImage, VulkanBuffer, VulkanMemoryMap, VulkanCommands, VulkanSampler, VulkanTexture}, pipeline::{VulkanShader, VulkanPipeline}};
 
 #[allow(non_camel_case_types)]
 #[derive(Default, Debug, Clone, Copy)]
@@ -71,6 +71,10 @@ const fn get_aligned_range(offset: usize, size: usize, alignment: usize) -> Valu
 
 // ----------------------------------------------------------------------------
 
+
+type PerScope<T> = [T; GenericShaderScope::SCOPE_COUNT];
+type PerSet<T> = [T; GenericShaderScope::SET_COUNT];
+
 #[repr(usize)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum GenericShaderScope {
@@ -80,6 +84,17 @@ pub enum GenericShaderScope {
 }
 
 impl GenericShaderScope {
+    pub const ALL_SCOPES: &[GenericShaderScope] = &[
+        Self::Global,
+        Self::Instance,
+        Self::Local,
+    ];
+
+    pub const ALL_SETS: &[GenericShaderScope] = &[
+        Self::Global,
+        Self::Instance,
+    ];
+
     pub const SCOPE_COUNT: usize = 3;
     pub const SET_COUNT: usize = 2;
 
@@ -96,6 +111,10 @@ impl GenericShaderScope {
             GenericShaderScope::Instance => Some(Self::SET_IDX_INSTANCE),
             _ => None,
         }
+    }
+
+    pub fn supports_samplers(&self) -> bool {
+        *self != GenericShaderScope::Local
     }
 }
 
@@ -127,17 +146,16 @@ struct UniformInfo {
 }
 
 impl UniformInfo {
-    pub fn new_uniform(name: impl Into<String>, scope: GenericShaderScope, idx: usize, offset: usize, size: usize) -> Self {
+    pub fn new_uniform(name: impl Into<String>, scope: GenericShaderScope, idx: usize, range: MemRange) -> Self {
         Self {
             name: name.into(),
             scope,
             idx,
-            range: ValueRange::new(offset, size),
+            range,
         }
     }
 
-    pub fn new_push_constant(name: impl Into<String>, entry_idx: usize, raw_offset: usize, raw_size: usize) -> Self {
-        let range = get_aligned_range(raw_offset, raw_size, 4);
+    pub fn new_push_constant(name: impl Into<String>, entry_idx: usize, range: MemRange) -> Self {
         Self {
             name: name.into(),
             scope: GenericShaderScope::Local,
@@ -167,7 +185,6 @@ pub struct AttributeInfo {
 
 // ----------------------------------------------
 
-
 #[allow(dead_code)]
 pub struct GenericVulkanShaderBuilder {
     ctx: VulkanContextRef,
@@ -180,14 +197,15 @@ pub struct GenericVulkanShaderBuilder {
     depth_test_enabled: bool,
     is_wireframe: bool,
 
-    desc_pool_sizes: [vk::DescriptorPoolSize; Self::DESC_COUNT],
-    desc_bindings: [Option<[vk::DescriptorSetLayoutBinding; Self::DESC_COUNT]>; GenericShaderScope::SET_COUNT],
+    use_set: PerScope<bool>,
+    // desc_bindings: [Option<[vk::DescriptorSetLayoutBinding; Self::DESC_COUNT]>; GenericShaderScope::SET_COUNT],
 
-    global_textures: Vec<VulkanImage>,
+    global_tex: Vec<VulkanTexture>,
+    tex_count: PerScope<usize>,
 
     uniform_lookups: HashMap<String, UniformHandle>,
-    uniforms: [Vec<UniformInfo>; GenericShaderScope::SCOPE_COUNT],
-    scope_sizes: [usize; GenericShaderScope::SCOPE_COUNT],
+    uniforms: PerScope<Vec<UniformInfo>>,
+    scope_sizes: PerScope<usize>,
     push_constant_ranges: Vec<MemRange>,
 }
 
@@ -204,19 +222,6 @@ impl GenericVulkanShaderBuilder {
 
 impl GenericVulkanShaderBuilder {
     pub fn new(ctx: &VulkanContextRef, shader_path: impl Into<String>) -> Self {
-        let pool_sizes = [
-            vk::DescriptorPoolSize::builder()
-                .ty(vk::DescriptorType::UNIFORM_BUFFER)
-                .descriptor_count(config::VULKAN_UBO_DESCRIPTOR_COUNT as u32)
-                .build(),
-            vk::DescriptorPoolSize::builder()
-                .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .descriptor_count(config::VULKAN_SAMPLER_DESCRIPTOR_COUNT as u32)
-                .build(),
-        ];
-
-
-
         Self {
             ctx: ctx.clone(),
 
@@ -228,10 +233,11 @@ impl GenericVulkanShaderBuilder {
             depth_test_enabled: false,
             is_wireframe: false,
 
-            desc_pool_sizes: pool_sizes,
-            desc_bindings: Default::default(),
+            use_set: Default::default(),
+            // desc_bindings: Default::default(),
 
-            global_textures: Vec::with_capacity(Self::MAX_GLOBAL_TEX_COUNT),
+            global_tex: Vec::with_capacity(Self::MAX_GLOBAL_TEX_COUNT),
+            tex_count: Default::default(),
 
             uniform_lookups: HashMap::new(),
             uniforms: Default::default(),
@@ -262,64 +268,55 @@ impl GenericVulkanShaderBuilder {
         self
     }
 
-    pub fn with_global_bindings(mut self) -> Self {
-        let bindings = [
-            // ubo
-            vk::DescriptorSetLayoutBinding::builder()
-                .binding(Self::BINDING_IDX_UBO)
-                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                .descriptor_count(1) // number of elements in array
-                .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
-                .build(),
-            // image sampler (if used)
-            vk::DescriptorSetLayoutBinding::builder()
-                .binding(Self::BINDING_IDX_SAMPLER)
-                .descriptor_count(1)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                .build()
-        ];
 
-        self.desc_bindings[GenericShaderScope::SET_IDX_GLOBAL] = Some(bindings);
-        self
+    // ------------------------------------------------------------------------
+
+
+    pub fn with_set_bindings(mut self, scope: GenericShaderScope) -> HellResult<Self> {
+        if let Some(set) = scope.set_idx() {
+            self.use_set[set] = true;
+            Ok(self)
+        } else {
+            Err(HellErrorHelper::render_msg_err("trying to use bindings for invalid set"))
+        }
+    }
+
+    pub fn with_global_bindings(mut self) -> Self {
+        self.with_set_bindings(GenericShaderScope::Global).unwrap()
     }
 
     pub fn with_instance_bindings(mut self) -> Self {
-        let bindings = [
-            // ubo
-            vk::DescriptorSetLayoutBinding::builder()
-                .binding(Self::BINDING_IDX_UBO)
-                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                .descriptor_count(1) // number of elements in array
-                .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
-                .build(),
-            // image sampler (if used)
-            vk::DescriptorSetLayoutBinding::builder()
-                .binding(Self::BINDING_IDX_SAMPLER)
-                .descriptor_count(1)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                .build()
-        ];
-
-        self.desc_bindings[GenericShaderScope::SET_IDX_INSTANCE] = Some(bindings);
-        self
+        self.with_set_bindings(GenericShaderScope::Instance).unwrap()
     }
 
-    fn push_uniform_create_info(&mut self, name: impl Into<String>, scope: GenericShaderScope, raw_size: usize, is_sampler: bool) {
+
+    // ------------------------------------------------------------------------
+
+
+    fn push_uniform(&mut self, name: impl Into<String>, scope: GenericShaderScope, mut size: usize, is_sampler: bool) -> HellResult<()> {
         let uniforms = &mut self.uniforms[scope as usize];
         let idx = uniforms.len();
-        let raw_offset = self.scope_sizes[scope as usize];
+        let mut offset = self.scope_sizes[scope as usize];
         let name = name.into();
+
+        if is_sampler {
+            offset = 0;
+            size = 0;
+
+            if !scope.supports_samplers() {
+                return Err(HellErrorHelper::render_msg_err("trying to push sampler to unsuported scope"));
+            }
+        }
 
         let info = match scope {
             GenericShaderScope::Global |
             GenericShaderScope::Instance => {
-                let raw_offset = if is_sampler { 0 } else { raw_offset };
-                UniformInfo::new_uniform(&name, scope, idx, raw_offset, raw_size)
+                let range = MemRange::new(offset, size);
+                UniformInfo::new_uniform(&name, scope, idx, range)
             }
             GenericShaderScope::Local => {
-                let info = UniformInfo::new_push_constant(&name, idx, raw_offset, raw_size);
+                let range = get_aligned_range(offset, size, 4);
+                let info = UniformInfo::new_push_constant(&name, idx, range);
                 self.push_constant_ranges.push(info.range);
                 info
             }
@@ -330,10 +327,12 @@ impl GenericVulkanShaderBuilder {
         self.scope_sizes[scope as usize] += info.range.range;
         uniforms.push(info);
         self.uniform_lookups.insert(name, UniformHandle::new(scope, idx));
+
+        Ok(())
     }
 
     pub fn with_uniform<T>(mut self, name: impl Into<String>, scope: GenericShaderScope) -> Self {
-        self.push_uniform_create_info(name, scope, mem::size_of::<T>(), false);
+        self.push_uniform(name, scope, mem::size_of::<T>(), false);
         self
     }
 
@@ -341,8 +340,35 @@ impl GenericVulkanShaderBuilder {
         self.with_uniform::<T>(name, GenericShaderScope::Global)
     }
 
+    pub fn with_sampler(mut self, name: impl Into<String>, scope: GenericShaderScope, cmds: &VulkanCommands) -> HellResult<Self> {
+        self.tex_count[scope as usize] += 1;
 
-    pub fn build(self, swapchain: &VulkanSwapchain, render_pass: &VulkanRenderPass) -> HellResult<GenericVulkanShader> {
+        match scope {
+            GenericShaderScope::Global => {
+                self.global_tex.push(
+                    VulkanTexture::new_default(&self.ctx, cmds)?
+                );
+            }
+            GenericShaderScope::Instance => {
+
+            },
+            _ => { panic!("invalid sampler scope"); }
+        }
+
+        self.push_uniform(name, scope, 0, true);
+
+        Ok(self)
+    }
+
+    pub fn with_global_sampler(self, name: impl Into<String>, cmds: &VulkanCommands) -> HellResult<Self> {
+        self.with_sampler(name, GenericShaderScope::Global, cmds)
+    }
+
+
+    // ------------------------------------------------------------------------
+
+
+    pub fn build(mut self, swapchain: &VulkanSwapchain, render_pass: &VulkanRenderPass) -> HellResult<GenericVulkanShader> {
         let ctx = &self.ctx;
         let device = &self.ctx.device.handle;
 
@@ -369,16 +395,44 @@ impl GenericVulkanShaderBuilder {
 
         // create descriptor-pool
         // ----------------------
+        let desc_pool_sizes = [
+            vk::DescriptorPoolSize::builder()
+                .ty(vk::DescriptorType::UNIFORM_BUFFER)
+                .descriptor_count(config::VULKAN_UBO_DESCRIPTOR_COUNT as u32)
+                .build(),
+            vk::DescriptorPoolSize::builder()
+                .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(config::VULKAN_SAMPLER_DESCRIPTOR_COUNT as u32)
+                .build(),
+        ];
+
         let pool_info = vk::DescriptorPoolCreateInfo::builder()
-            .pool_sizes(&self.desc_pool_sizes)
+            .pool_sizes(&desc_pool_sizes)
             // maximum number of descriptor sets that may be allocated
             .max_sets(config::MAX_DESCRIPTOR_SET_COUNT as u32)
             .build();
 
         let desc_pool = unsafe{ device.create_descriptor_pool(&pool_info, None)? };
+        let desc_sets: PerSet<VulkanDescriptorSetGroup> = array::from_fn(|idx| {
+            if self.use_set[idx] {
+                let tex_count = self.tex_count[idx];
+                let bindings = [
+                    // one ubo
+                    vk::DescriptorSetLayoutBinding::builder()
+                        .binding(Self::BINDING_IDX_UBO)
+                        .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                        .descriptor_count(1) // number of elements in array
+                        .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
+                        .build(),
+                    // multiple textures
+                    vk::DescriptorSetLayoutBinding::builder()
+                        .binding(Self::BINDING_IDX_SAMPLER)
+                        .descriptor_count(tex_count as u32)
+                        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                        .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                        .build(),
+                ];
 
-        let desc_sets: [_; GenericShaderScope::SET_COUNT] = array::from_fn(|idx| {
-            if let Some (bindings) = self.desc_bindings[idx] {
                 let layout = VulkanDescriptorSetGroup::create_descriptor_set_layout(device, &bindings).unwrap();
                 VulkanDescriptorSetGroup::new(&self.ctx, layout, 1)
             } else {
@@ -398,7 +452,9 @@ impl GenericVulkanShaderBuilder {
         let total_buffer_size = global_ubo_stride + (instance_ubo_stride * config::VULKAN_MAX_MATERIAL_COUNT);
 
         let ubo_ranges = [
+            // global
             MemRange::new(0, global_ubo_stride),
+            // instance
             MemRange::new(global_ubo_stride, instance_ubo_stride),
         ];
 
@@ -409,6 +465,9 @@ impl GenericVulkanShaderBuilder {
         buffer.mem.map_memory(0, total_buffer_size, vk::MemoryMapFlags::empty())?;
         // let buffer_map = buffer.map_memory(0, total_buffer_size, vk::MemoryMapFlags::empty())?;
 
+        // global textures
+        // ---------------
+        self.global_tex.shrink_to_fit();
 
         // create descriptor-sets
         // ----------------------
@@ -427,21 +486,18 @@ impl GenericVulkanShaderBuilder {
 
 
 
+
         Ok(GenericVulkanShader {
             ctx: self.ctx,
-
             desc_sets,
             desc_pool,
             global_desc_sets,
             ubo_ranges,
-
             uniforms: self.uniforms,
             uniform_lookups: self.uniform_lookups,
-
+            global_tex: self.global_tex,
             pipeline,
-
             buffer,
-
             instance_states,
 
         })
@@ -464,19 +520,15 @@ impl GenericVulkanShaderBuilder {
 #[allow(dead_code)]
 pub struct GenericVulkanShader {
     ctx: VulkanContextRef,
-
     desc_sets: [VulkanDescriptorSetGroup; GenericShaderScope::SET_COUNT],
     desc_pool: vk::DescriptorPool,
     global_desc_sets: Vec<vk::DescriptorSet>,
     ubo_ranges: [MemRange; GenericShaderScope::SET_COUNT],
-
     uniform_lookups: HashMap<String, UniformHandle>,
-    uniforms: [Vec<UniformInfo>; GenericShaderScope::SCOPE_COUNT],
-
+    uniforms: PerScope<Vec<UniformInfo>>,
+    global_tex: Vec<VulkanTexture>,
     pub pipeline: VulkanPipeline,
-
     buffer: VulkanBuffer,
-
     instance_states: [InstanceState; config::VULKAN_MAX_MATERIAL_COUNT],
 }
 
@@ -498,6 +550,10 @@ impl GenericVulkanShader {
         self.global_desc_sets[frame_idx]
     }
 
+
+    // ------------------------------------------------------------------------
+
+
     pub fn set_uniform<T>(&mut self, handle: UniformHandle, value: &[T]) -> HellResult<()> {
         let uniform = &self.uniforms[handle.scope as usize][handle.idx];
         println!("SET-UNIFORM: '{:?}' - '{:?}'", handle, uniform);
@@ -507,6 +563,9 @@ impl GenericVulkanShader {
 
         Ok(())
     }
+
+    // ------------------------------------------------------------------------
+
 
     pub fn apply_scope(&self, scope: GenericShaderScope, frame_idx: usize) -> HellResult<()> {
         println!("APPLY: {}", frame_idx);
@@ -521,6 +580,18 @@ impl GenericVulkanShader {
                 .build()
         ];
 
+
+        let mut image_infos: DynArray<vk::DescriptorImageInfo, {config::VULKAN_SHADER_MAX_GLOBAL_TEXTURES}> = DynArray::from_default();
+        for (idx, tex) in self.global_tex.iter().enumerate() {
+            image_infos.push(
+                vk::DescriptorImageInfo::builder()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(tex.img.view)
+                    .sampler(tex.sampler.handle)
+                    .build()
+            );
+        }
+
         let write_descriptors = [
             vk::WriteDescriptorSet::builder()
                 .dst_set(set)
@@ -529,9 +600,14 @@ impl GenericVulkanShader {
                 .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
                 .buffer_info(&buffer_infos)
                 .build(),
+            vk::WriteDescriptorSet::builder()
+                .dst_set(set)
+                .dst_binding(1)
+                .dst_array_element(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(image_infos.as_slice())
+                .build()
         ];
-
-        // TODO: sampler ...
 
         unsafe { self.ctx.device.handle.update_descriptor_sets(&write_descriptors, &[]); }
 

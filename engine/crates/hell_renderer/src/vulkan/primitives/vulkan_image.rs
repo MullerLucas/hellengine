@@ -1,6 +1,5 @@
 use ash::vk;
 use hell_error::HellResult;
-use hell_resources::resources::TextureResource;
 use std::ptr;
 
 
@@ -9,12 +8,10 @@ use crate::vulkan::VulkanContextRef;
 use super::{VulkanBuffer, VulkanSwapchain, VulkanCommandPool, VulkanCommands, has_stencil_component, VulkanQueue, VulkanDeviceMemory};
 
 
-
 // ----------------------------------------------------------------------------
 // vulkan image
 // ----------------------------------------------------------------------------
 
-// #[derive(Clone)]
 pub struct VulkanImage {
     ctx: VulkanContextRef,
     pub img: vk::Image,
@@ -38,8 +35,8 @@ impl VulkanImage {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         ctx: &VulkanContextRef,
-        width: u32,
-        height: u32,
+        width: usize,
+        height: usize,
         num_samples: vk::SampleCountFlags,
         format: vk::Format,
         tiling: vk::ImageTiling,
@@ -56,8 +53,8 @@ impl VulkanImage {
             image_type: vk::ImageType::TYPE_2D,
             format,
             extent: vk::Extent3D {
-                width,
-                height,
+                width: width as u32,
+                height: height as u32,
                 depth: 1,
             },
             mip_levels: 1,
@@ -71,40 +68,15 @@ impl VulkanImage {
             initial_layout: vk::ImageLayout::UNDEFINED,
         };
 
-        let img = unsafe {
-            device
-                .create_image(&img_info, None)
-                .expect("failed to create tex-img")
+        let img = unsafe { device
+            .create_image(&img_info, None)
+            .expect("failed to create tex-img")
         };
+
         let mem_requirements = unsafe { device.get_image_memory_requirements(img) };
-
-        // let memory_type_index = VulkanDeviceMemory::find_memory_type(
-        //     &ctx,
-        //     mem_requirements.memory_type_bits,
-        //     properties,
-        // );
-
-        // let alloc_info = vk::MemoryAllocateInfo {
-        //     s_type: vk::StructureType::MEMORY_ALLOCATE_INFO,
-        //     p_next: ptr::null(),
-        //     allocation_size: mem_requirements.size,
-        //     memory_type_index,
-        // };
-
-        // let mem = unsafe {
-        //     device
-        //         .allocate_memory(&alloc_info, None)
-        //         .expect("failed to allocate image memory")
-        // };
 
         let mem = VulkanDeviceMemory::new(ctx, mem_requirements, properties)?;
         mem.bind_to_image(img, 0)?;
-
-        // unsafe {
-        //     device
-        //         .bind_image_memory(img, mem, 0)
-        //         .expect("failed to bind texture img-mem");
-        // }
 
         let view = VulkanImage::create_img_view(device, img, format, aspect_mask);
 
@@ -255,35 +227,17 @@ impl VulkanImage {
 // Texture-Image
 // ----------------------------------------------------------------------------
 
-// #[derive(Clone)]
-// pub struct TextureImage {
-//     pub img: VulkanImage,
-// }
-
 impl VulkanImage {
-    pub fn from(ctx: &VulkanContextRef, cmds: &VulkanCommands, img_res: &TextureResource) -> HellResult<Self> {
+    pub fn new_tex_img(ctx: &VulkanContextRef, cmds: &VulkanCommands, data: &[u8], img_width: usize, img_height: usize) -> HellResult<Self> {
         let device = &ctx.device.handle;
 
-        let img = img_res.get_img();
-        let img_data = img.as_raw();
-        let img_width = img.width();
-        let img_height = img.height();
-        let img_size = std::mem::size_of::<u8>() * img_width as usize * img_height as usize * 4;
+        let data_size = data.len();
+        debug_assert_ne!(data.len(), 0);
 
-        if img_size == 0 {
-            panic!("failed to load image at");
-        }
-
-        let mut staging_buffer = VulkanBuffer::from_texture_staging(ctx, img_size)?;
-        let mem_map = staging_buffer.mem.map_memory(0, img_size, vk::MemoryMapFlags::empty())?;
-        mem_map.copy_from_nonoverlapping(img_data.as_slice(), 0);
+        let mut staging_buffer = VulkanBuffer::from_texture_staging(ctx, data_size)?;
+        let mem_map = staging_buffer.mem.map_memory(0, data_size, vk::MemoryMapFlags::empty())?;
+        mem_map.copy_from_nonoverlapping(data, 0);
         staging_buffer.mem.unmap_memory()?;
-
-        // unsafe {
-        //     let data_ptr = device.map_memory(staging_buffer.mem, 0, img_size as vk::DeviceSize, vk::MemoryMapFlags::empty()).to_render_hell_err()? as *mut u8;
-        //     data_ptr.copy_from_nonoverlapping(img_data.as_ptr(), img_data.len());
-        //     device.unmap_memory(staging_buffer.mem);
-        // }
 
         let img = VulkanImage::new(
             ctx,
@@ -321,6 +275,26 @@ impl VulkanImage {
 
         Ok(img)
     }
+
+    // TODO: do only once
+    pub fn new_tex_img_default(ctx: &VulkanContextRef, cmds: &VulkanCommands) -> HellResult<Self> {
+        const WIDTH:  usize = 512;
+        const HEIGHT: usize = 512;
+        const SIZE: usize = WIDTH * HEIGHT;
+        const BYTE_SIZE: usize = SIZE * 4;
+
+        println!("creating default tex with size '{}'", BYTE_SIZE);
+
+        let img = image::ImageBuffer::from_fn(WIDTH as u32, HEIGHT as u32, |x, y| {
+            if (x + y) % 2 == 0 {
+                image::Rgba([255, 0,   0, 255])
+            } else {
+                image::Rgba([0,   0, 255, 255])
+            }
+        });
+
+        Self::new_tex_img(ctx, cmds, img.as_raw().as_slice(), WIDTH, HEIGHT)
+    }
 }
 
 
@@ -329,10 +303,6 @@ impl VulkanImage {
 // depth image
 // ----------------------------------------------------------------------------
 
-// pub struct DepthImage {
-//     pub img: VulkanImage,
-// }
-
 impl VulkanImage {
     pub fn new_depth_img(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, cmds: &VulkanCommands) -> HellResult<Self> {
         let depth_format = ctx.phys_device.depth_format;
@@ -340,8 +310,8 @@ impl VulkanImage {
 
         let img = VulkanImage::new(
             ctx,
-            extent.width,
-            extent.height,
+            extent.width as usize,
+            extent.height as usize,
             vk::SampleCountFlags::TYPE_1,
             depth_format,
             vk::ImageTiling::OPTIMAL,

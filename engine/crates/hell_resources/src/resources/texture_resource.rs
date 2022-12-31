@@ -58,7 +58,7 @@ impl TextureResource {
         })
     }
 
-    pub fn get_img(&self) -> &RgbaImage{
+    pub fn img(&self) -> &RgbaImage{
         &self.rgba_img
     }
 }

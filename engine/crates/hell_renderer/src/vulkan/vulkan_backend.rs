@@ -16,7 +16,7 @@ use crate::shader::{SpriteShaderSceneData, SpriteShaderGlobalUniformObject, base
 use crate::vulkan::primitives::RenderPassClearFlags;
 
 use super::VulkanContextRef;
-use super::primitives::{VulkanSwapchain, VulkanCommands, VulkanCommandBuffer, VulkanRenderPassData, BultinRenderPassType, VulkanImage};
+use super::primitives::{VulkanSwapchain, VulkanCommands, VulkanCommandBuffer, VulkanRenderPassData, BultinRenderPassType, VulkanImage, VulkanTexture};
 use super::frame::VulkanFrameData;
 use super::pipeline::shader_data::{VulkanWorldMesh, VulkanUiMesh};
 use super::shader::generic_vulkan_shader::{GenericVulkanShader, NumberFormat};
@@ -71,6 +71,7 @@ impl VulkanBackend {
             .with_global_uniform::<glam::Mat4>("view")
             .with_global_uniform::<glam::Mat4>("proj")
             .with_global_uniform::<glam::Mat4>("view_proj")
+            .with_global_sampler("global_tex", &cmds)?
             // .with_instance_bindings()
             .build(&swapchain, &render_pass_data.ui_render_pass)?;
 
@@ -103,19 +104,15 @@ impl VulkanBackend {
     // TODO: improve
     pub fn create_textures(&mut self, resource_manager: &ResourceManager) -> HellResult<()>{
         let texture: HellResult<Vec<_>> = resource_manager.get_all_images().iter()
-            .map(|i| VulkanImage::from(&self.ctx, &self.cmd_pools, i))
+            .map(|i| {
+                let img = i.img();
+                let data = img.as_raw().as_slice();
+                VulkanTexture::new(&self.ctx, &self.cmd_pools, data, img.width() as usize, img.height() as usize)
+            })
             .collect();
         let texture = texture?;
 
         self.world_shader.set_texture_descriptor_sets(texture)?;
-
-
-        // let texture: HellResult<Vec<_>> = resource_manager.get_all_images().iter()
-        //     .map(|i| VulkanImage::from(&self.ctx, &self.cmd_pools, i))
-        //     .collect();
-        // let texture = texture?;
-        //
-        // self.test_shader.set_texture_descriptor_sets(texture)?;
 
         Ok(())
     }
