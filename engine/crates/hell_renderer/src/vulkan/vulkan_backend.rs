@@ -8,9 +8,9 @@ use ash::vk;
 use hell_collections::DynArray;
 use hell_common::window::HellWindowExtent;
 use hell_error::{HellResult, HellError, HellErrorKind, OptToHellErr, ErrToHellErr};
-use hell_resources::{ResourceManager, ResourceHandle};
 use crate::camera::HellCamera;
 use crate::render_types::{RenderData, RenderPackage};
+use crate::resources::{TextureManager, MaterialManager, ResourceHandle};
 use crate::shader::base_shader::CameraUniform;
 use crate::shader::{SpriteShaderSceneData, SpriteShaderGlobalUniformObject, base_shader};
 use crate::vulkan::primitives::RenderPassClearFlags;
@@ -32,6 +32,9 @@ use hell_core::config;
 // ----------------------------------------------------------------------------
 // renderer
 // ----------------------------------------------------------------------------
+
+pub type RenderBackend = VulkanBackend;
+pub type RenderTexture = VulkanTexture;
 
 pub struct VulkanBackend {
     pub frame: VulkanFrame,
@@ -82,6 +85,7 @@ impl VulkanBackend {
             cmds,
             world_shader,
             test_shader: RefCell::new(test_shader),
+
             ctx,
         })
     }
@@ -98,19 +102,13 @@ impl VulkanBackend {
     }
 
     // TODO: improve
-    pub fn create_textures(&mut self, resource_manager: &ResourceManager) -> HellResult<()>{
-        let texture: HellResult<Vec<_>> = resource_manager.get_all_images().iter()
-            .map(|i| {
-                let img = i.img();
-                let data = img.as_raw().as_slice();
-                VulkanTexture::new(&self.ctx, &self.cmds, data, img.width() as usize, img.height() as usize)
-            })
-            .collect();
-        let texture = texture?;
-
-        self.world_shader.set_texture_descriptor_sets(texture)?;
-
+    pub fn create_textures(&mut self, tex_man: &TextureManager) -> HellResult<()>{
+        self.world_shader.set_texture_descriptor_sets(tex_man.textures())?;
         Ok(())
+    }
+
+    pub fn create_texture(&self, data: &[u8], width: usize, height: usize) -> HellResult<VulkanTexture> {
+        VulkanTexture::new(&self.ctx, &self.cmds, data, width, height)
     }
 }
 
@@ -197,7 +195,7 @@ impl VulkanBackend {
         Ok(())
     }
 
-    pub fn draw_frame(&mut self, _delta_time: f32, render_pkg: &RenderPackage, resources: &ResourceManager) -> HellResult<()> {
+    pub fn draw_frame(&mut self, _delta_time: f32, render_pkg: &RenderPackage) -> HellResult<()> {
         let ctx = &self.ctx;
         let cmd_buffer = self.frame.gfx_cmd_buffer();
 
@@ -209,13 +207,13 @@ impl VulkanBackend {
 
         // world render pass
         self.begin_render_pass(BultinRenderPassType::World, &cmd_buffer);
-        self.record_world_cmd_buffer(&cmd_buffer, &render_pkg.world, resources)?;
+        self.record_world_cmd_buffer(&cmd_buffer, &render_pkg.world)?;
         self.end_renderpass(&cmd_buffer);
 
         // ui render pass
         self.update_test_shader()?;
         self.begin_render_pass(BultinRenderPassType::Ui, &cmd_buffer);
-        self.record_ui_cmd_buffer(&cmd_buffer, &render_pkg.ui, resources)?;
+        self.record_ui_cmd_buffer(&cmd_buffer, &render_pkg.ui)?;
         self.end_renderpass(&cmd_buffer);
 
         Ok(())
@@ -279,8 +277,8 @@ impl VulkanBackend {
         Ok(is_resized)
     }
 
-    fn record_world_cmd_buffer(&self, cmd_buffer: &VulkanCommandBuffer, render_data: &RenderData, _resources: &ResourceManager) -> HellResult<()> {
-        let mut curr_mat_handle = ResourceHandle::MAX;
+    fn record_world_cmd_buffer(&self, cmd_buffer: &VulkanCommandBuffer, render_data: &RenderData) -> HellResult<()> {
+        let mut curr_mat_handle = ResourceHandle::INVALID;
         let mut curr_mesh_idx = usize::MAX;
 
         // let mut curr_mat = resources.material_at(0).unwrap();
@@ -352,7 +350,7 @@ impl VulkanBackend {
         Ok(())
     }
 
-    fn record_ui_cmd_buffer(&self, cmd_buffer: &VulkanCommandBuffer, render_data: &RenderData, _resources: &ResourceManager) -> HellResult<()> {
+    fn record_ui_cmd_buffer(&self, cmd_buffer: &VulkanCommandBuffer, render_data: &RenderData) -> HellResult<()> {
         unsafe {
             let shader = &self.test_shader.borrow(); // TODO: ...
 

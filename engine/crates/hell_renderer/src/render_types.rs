@@ -26,7 +26,8 @@ pub struct RenderPackage {
 // -----------------------------------------------
 
 use hell_common::transform::Transform;
-use hell_resources::ResourceHandle;
+
+use crate::resources::ResourceHandle;
 
 pub struct RenderDataChunk<'a> {
     pub mesh_idx: usize,

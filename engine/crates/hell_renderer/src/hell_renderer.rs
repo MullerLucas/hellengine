@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use hell_common::window::{HellSurfaceInfo, HellWindowExtent};
 use hell_error::HellResult;
-use hell_resources::ResourceManager;
 
 use crate::camera::HellCamera;
 use crate::render_types::RenderPackage;
+use crate::resources::{TextureManager, MaterialManager, ResourceHandle};
 use crate::shader::SpriteShaderSceneData;
 use crate::vulkan::primitives::VulkanSwapchain;
 use crate::vulkan::{VulkanBackend, VulkanContext};
@@ -24,6 +24,9 @@ pub struct HellRenderer {
 
     // frame_idx: usize,
     camera: HellCamera,
+
+    pub mat_man: MaterialManager,
+    pub tex_man: TextureManager,
 }
 
 impl HellRenderer {
@@ -35,11 +38,17 @@ impl HellRenderer {
 
         let camera = HellCamera::new(aspect_ratio);
 
+        let mat_man = MaterialManager::default();
+        let tex_man = TextureManager::default();
+
         Ok(Self {
             info,
             backend,
             // frame_idx: 0,
             camera,
+
+            mat_man,
+            tex_man,
         })
     }
 }
@@ -54,22 +63,23 @@ impl HellRenderer {
         self.backend.on_window_changed(self.info.window_extent)
     }
 
-    pub fn prepare_renderer(&mut self, resource_manager: &ResourceManager) -> HellResult<()> {
-        // let shaders = resource_manager.unique_shader_keys();
-        // self.backend.create_shaders(shaders, resource_manager)?;
-        self.backend.create_textures(resource_manager)?;
-
-        Ok(())
+    pub fn prepare_renderer(&mut self) -> HellResult<()> {
+        self.backend.create_textures(&self.tex_man)
     }
 
-    pub fn draw_frame(&mut self, delta_time: f32, scene_data: &SpriteShaderSceneData, render_pkg: &RenderPackage, resources: &ResourceManager) -> HellResult<bool> {
+    pub fn draw_frame(&mut self, delta_time: f32, scene_data: &SpriteShaderSceneData, render_pkg: &RenderPackage) -> HellResult<bool> {
         self.backend.update_world_shader(self.camera.clone(), scene_data, &render_pkg.world)?;
 
         self.backend.begin_frame()?;
-        self.backend.draw_frame(delta_time, render_pkg, resources)?;
+        self.backend.draw_frame(delta_time, render_pkg)?;
         let is_resized = self.backend.end_frame()?;
 
         Ok(is_resized)
     }
+}
 
+impl HellRenderer {
+    pub fn acquire_material_from_file(&mut self, path: impl Into<String>) -> HellResult<ResourceHandle> {
+        self.mat_man.create_from_file(&self.backend, &mut self.tex_man, path.into())
+    }
 }

@@ -5,7 +5,6 @@ use hell_input::InputManager;
 use hell_renderer::render_types::RenderPackage;
 use hell_renderer::shader::SpriteShaderSceneData;
 use hell_renderer::{HellRenderer, HellRendererInfo};
-use hell_resources::ResourceManager;
 
 
 
@@ -19,7 +18,7 @@ pub trait HellGame {
     fn scene_data_mut(&mut self) -> &mut SpriteShaderSceneData;
     fn render_package(&self) -> &RenderPackage;
 
-    fn init_game(&mut self, resource_manager: &mut ResourceManager) -> HellResult<()>;
+    fn init_game(&mut self, renderer: &mut HellRenderer) -> HellResult<()>;
     fn update_game(&mut self, delta_time: f32, input: &InputManager) -> HellResult<()>;
 }
 
@@ -30,7 +29,6 @@ pub trait HellGame {
 // ----------------------------------------------------------------------------
 
 pub struct HellApp {
-    resource_manager: ResourceManager,
     renderer: HellRenderer,
     game: &'static mut dyn HellGame,
     pub input: InputManager,
@@ -49,12 +47,10 @@ impl HellApp {
             window_extent,
         };
 
-        let resource_manager = ResourceManager::new();
         let renderer = HellRenderer::new(info)?;
         let input = InputManager::new();
 
         Ok(Self {
-            resource_manager,
             renderer,
             game,
             input,
@@ -64,10 +60,8 @@ impl HellApp {
 
 impl HellApp {
     pub fn init_game(&mut self) -> HellResult<()> {
-        self.game.init_game(&mut self.resource_manager)?;
-
-        self.resource_manager.load_used_textures()?;
-        self.renderer.prepare_renderer(&self.resource_manager)?;
+        self.game.init_game(&mut self.renderer)?;
+        self.renderer.prepare_renderer()?;
 
         Ok(())
     }
@@ -103,6 +97,6 @@ impl HellApp {
         let scene_data = self.game.scene_data();
         let render_pkg = self.game.render_package();
 
-        self.renderer.draw_frame(delta_time, scene_data, render_pkg, &self.resource_manager)
+        self.renderer.draw_frame(delta_time, scene_data, render_pkg)
     }
 }

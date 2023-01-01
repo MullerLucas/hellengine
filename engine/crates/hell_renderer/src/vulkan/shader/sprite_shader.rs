@@ -26,7 +26,7 @@ pub struct VulkanSpriteShader {
     pub scene_ubo: VulkanBuffer, // one ubo for all frames
     pub object_ubos: PerFrame<VulkanBuffer>,
 
-    pub textures: Vec<VulkanTexture>,
+    // pub textures: Vec<VulkanTexture>,
     pub sampler: VulkanSampler,
 
     // descriptor sets
@@ -143,7 +143,7 @@ impl VulkanSpriteShader {
             scene_ubo,
             object_ubos,
 
-            textures: vec![],
+            // textures: vec![],
             sampler,
 
             desc_set_pool,
@@ -331,12 +331,10 @@ impl VulkanSpriteShader {
         Ok(group.handles.len() - 1)
     }
 
-    pub fn set_texture_descriptor_sets(&mut self, textures: Vec<VulkanTexture>) -> HellResult<()>{
-        for tex in &textures {
+    pub fn set_texture_descriptor_sets(&mut self, textures: &[VulkanTexture]) -> HellResult<()>{
+        for tex in textures {
             let _ = Self::add_texture_descriptor_sets(&self.ctx, self.desc_set_pool, &mut self.material_desc_group, tex, &self.sampler)?;
         }
-
-        self.textures = textures;
 
         Ok(())
     }
