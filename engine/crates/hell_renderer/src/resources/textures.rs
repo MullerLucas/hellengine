@@ -1,9 +1,9 @@
 use std::{path::Path, collections::HashMap};
 
-use hell_error::HellResult;
+use hell_error::{HellResult, HellErrorHelper};
 use image::{RgbaImage, DynamicImage};
 
-use crate::vulkan::{RenderBackend, RenderTexture, primitives::VulkanTexture};
+use crate::vulkan::{RenderTexture, RenderBackend};
 
 use super::ResourceHandle;
 
@@ -12,7 +12,7 @@ use super::ResourceHandle;
 
 pub struct TextureManager {
     handles:  HashMap<String, ResourceHandle>,
-    images:   Vec<RgbaImage>,
+    images:   Vec<Option<RgbaImage>>,
     textures: Vec<RenderTexture>,
 }
 
@@ -31,17 +31,23 @@ impl TextureManager {
         }
     }
 
-    pub fn acquire_textuer(&mut self, backend: &RenderBackend, path: String, flipv: bool, fliph: bool) -> HellResult<ResourceHandle> {
-        if let Some(handle) = self.handle(&path) {
+    pub fn acquire_textuer(&mut self, backend: &RenderBackend, key: String, path: Option<String>, flipv: bool, fliph: bool) -> HellResult<ResourceHandle> {
+        if let Some(handle) = self.handle(&key) {
             return Ok(handle);
         }
 
-        let img = Self::load_img(&path, flipv, fliph)?;
-        let data = img.as_raw().as_slice();
-        let internal = backend.create_texture(data, img.width() as usize, img.height() as usize)?;
+        let (img, internal) = if let Some(path) = path {
+            let img = Self::load_img(&path, flipv, fliph)?;
+            let data = img.as_raw().as_slice();
+            let internal = backend.texture_create(data, img.width() as usize, img.height() as usize)?;
+            (Some(img), internal)
+        } else {
+            let internal = backend.texture_create_default()?;
+            (None, internal)
+        };
 
-        let handle = ResourceHandle::new(self.images.len());
-        self.handles.insert(path, handle);
+        let handle = ResourceHandle::new(self.textures.len());
+        self.handles.insert(key, handle);
         self.images.push(img);
         self.textures.push(internal);
 
@@ -52,12 +58,16 @@ impl TextureManager {
         self.handles.get(path).copied()
     }
 
-    pub fn textures(&self) -> &[VulkanTexture] {
+    pub fn textures(&self) -> &[RenderTexture] {
         &self.textures
     }
 
     pub fn texture(&self, handle: ResourceHandle) -> Option<&RenderTexture> {
         self.textures.get(handle.id)
+    }
+
+    pub fn texture_res(&self, handle: ResourceHandle) -> HellResult<&RenderTexture> {
+        self.textures.get(handle.id).ok_or_else(|| HellErrorHelper::render_msg_err("failed to get texture"))
     }
 }
 

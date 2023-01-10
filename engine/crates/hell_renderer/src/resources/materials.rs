@@ -61,7 +61,7 @@ impl MaterialManager {
         self.handles.get(path).copied()
     }
 
-    pub fn create(&mut self, backend: &RenderBackend, tex_man: &mut TextureManager, path: String, info: MaterialInfo) -> HellResult<ResourceHandle> {
+    pub fn acquire(&mut self, backend: &RenderBackend, tex_man: &mut TextureManager, path: String, info: MaterialInfo) -> HellResult<ResourceHandle> {
         if let Some(handle) = self.handle(&path) {
             return Ok(handle);
         }
@@ -70,7 +70,7 @@ impl MaterialManager {
 
         let textures: HellResult<HashMap<_, _>> = info.textures.into_iter()
             .map(|(k, v)| {
-                let handle = tex_man.acquire_textuer(backend, v.path, false, false)?;
+                let handle = tex_man.acquire_textuer(backend, v.path.clone(), Some(v.path), false, false)?;
                 Ok((k, handle))
             })
             .collect();
@@ -83,9 +83,9 @@ impl MaterialManager {
         Ok(handle)
     }
 
-    pub fn create_from_file(&mut self, backend: &RenderBackend, tex_man: &mut TextureManager, path: String) -> HellResult<ResourceHandle> {
+    pub fn acquire_from_file(&mut self, backend: &RenderBackend, tex_man: &mut TextureManager, path: String) -> HellResult<ResourceHandle> {
         let file = Self::load_file(&path)?;
-        self.create(backend, tex_man, path, file.material)
+        self.acquire(backend, tex_man, path, file.material)
     }
 }
 

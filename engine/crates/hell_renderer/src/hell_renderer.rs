@@ -5,7 +5,7 @@ use hell_error::HellResult;
 
 use crate::camera::HellCamera;
 use crate::render_types::RenderPackage;
-use crate::resources::{TextureManager, MaterialManager, ResourceHandle};
+use crate::resources::{TextureManager, MaterialManager, ShaderManager, ResourceHandle};
 use crate::shader::SpriteShaderSceneData;
 use crate::vulkan::primitives::VulkanSwapchain;
 use crate::vulkan::{VulkanBackend, VulkanContext};
@@ -27,6 +27,7 @@ pub struct HellRenderer {
 
     pub mat_man: MaterialManager,
     pub tex_man: TextureManager,
+    pub sha_man: ShaderManager,
 }
 
 impl HellRenderer {
@@ -40,15 +41,16 @@ impl HellRenderer {
 
         let mat_man = MaterialManager::default();
         let tex_man = TextureManager::default();
+        let sha_man = ShaderManager::default();
 
         Ok(Self {
             info,
             backend,
-            // frame_idx: 0,
             camera,
 
             mat_man,
             tex_man,
+            sha_man,
         })
     }
 }
@@ -63,15 +65,21 @@ impl HellRenderer {
         self.backend.on_window_changed(self.info.window_extent)
     }
 
+    #[allow(unused)]
     pub fn prepare_renderer(&mut self) -> HellResult<()> {
-        self.backend.create_textures(&self.tex_man)
+        self.backend.create_textures(&self.tex_man)?;
+        let handle = self.acquire_shader("test")?;
+        let shader = self.sha_man.shader_mut(handle);
+        let res = shader.acquire_instance_resource()?;
+
+        Ok(())
     }
 
     pub fn draw_frame(&mut self, delta_time: f32, scene_data: &SpriteShaderSceneData, render_pkg: &RenderPackage) -> HellResult<bool> {
         self.backend.update_world_shader(self.camera.clone(), scene_data, &render_pkg.world)?;
 
         self.backend.begin_frame()?;
-        self.backend.draw_frame(delta_time, render_pkg)?;
+        self.backend.draw_frame(delta_time, render_pkg, &mut self.sha_man, &self.tex_man)?;
         let is_resized = self.backend.end_frame()?;
 
         Ok(is_resized)
@@ -79,7 +87,14 @@ impl HellRenderer {
 }
 
 impl HellRenderer {
-    pub fn acquire_material_from_file(&mut self, path: impl Into<String>) -> HellResult<ResourceHandle> {
-        self.mat_man.create_from_file(&self.backend, &mut self.tex_man, path.into())
+    // TODO:
+    pub fn acquire_shader(&mut self, key: &str) -> HellResult<ResourceHandle> {
+        let tex = self.tex_man.acquire_textuer(&self.backend, "test_global".to_string(), None, false, false)?;
+        let shader = self.sha_man.create_shader(&self.backend, key, tex)?;
+        Ok(shader)
+    }
+
+    pub fn acquire_material(&mut self, path: impl Into<String>) -> HellResult<ResourceHandle> {
+        self.mat_man.acquire_from_file(&self.backend, &mut self.tex_man, path.into())
     }
 }

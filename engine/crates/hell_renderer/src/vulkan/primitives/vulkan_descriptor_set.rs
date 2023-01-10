@@ -53,7 +53,7 @@ impl VulkanDescriptorSetGroup {
         })
     }
 
-    pub fn allocate_sets_for_layout(ctx: &VulkanContextRef, layout: vk::DescriptorSetLayout, pool: vk::DescriptorPool) -> HellResult<Vec<vk::DescriptorSet>> {
+    pub fn allocate_sets_for_layout(ctx: &VulkanContextRef, layout: vk::DescriptorSetLayout, pool: vk::DescriptorPool) -> HellResult<PerFrame<vk::DescriptorSet>> {
         let layouts: PerFrame<vk::DescriptorSetLayout> = array::from_fn(|_| layout);
 
         // create sets
@@ -64,6 +64,7 @@ impl VulkanDescriptorSetGroup {
             .build();
 
         let sets = unsafe { ctx.device.handle.allocate_descriptor_sets(&alloc_info)? };
+        let sets: PerFrame<vk::DescriptorSet> = array::from_fn(|idx| sets[idx]);
 
         Ok(sets)
     }

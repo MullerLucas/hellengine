@@ -6,9 +6,9 @@ use std::{array, collections::HashMap, mem};
 use ash::vk;
 use hell_collections::DynArray;
 use hell_core::config;
-use hell_error::{HellResult, HellError, HellErrorKind, HellErrorHelper};
+use hell_error::{HellResult, HellError, HellErrorKind, HellErrorHelper, OptToHellErr};
 
-use crate::vulkan::{VulkanContextRef, primitives::{VulkanDescriptorSetGroup, VulkanSwapchain,  VulkanRenderPass, VulkanImage, VulkanBuffer, VulkanMemoryMap, VulkanCommands, VulkanSampler, VulkanTexture, VulkanCommandBuffer}, pipeline::{VulkanShader, VulkanPipeline}, VulkanFrame};
+use crate::{vulkan::{VulkanContextRef, primitives::{VulkanDescriptorSetGroup, VulkanSwapchain,  VulkanRenderPass, VulkanImage, VulkanBuffer, VulkanMemoryMap, VulkanCommands, VulkanSampler, VulkanTexture, VulkanCommandBuffer}, pipeline::{VulkanShader, VulkanPipeline}, VulkanFrame}, resources::{ResourceHandle, TextureManager}, render_types::PerFrame};
 
 #[allow(non_camel_case_types)]
 #[derive(Default, Debug, Clone, Copy)]
@@ -103,7 +103,7 @@ impl GenericShaderScope {
     pub const INIT_IDX_LOCAL:    usize = 2;
 
     pub const SET_IDX_GLOBAL:   usize = 0;
-    pub const SET_IDX_INSTANCE: usize = 0;
+    pub const SET_IDX_INSTANCE: usize = 1;
 
     pub fn set_idx(&self) -> Option<usize> {
         match self {
@@ -200,7 +200,7 @@ pub struct GenericVulkanShaderBuilder {
     use_set: PerScope<bool>,
     // desc_bindings: [Option<[vk::DescriptorSetLayoutBinding; Self::DESC_COUNT]>; GenericShaderScope::SET_COUNT],
 
-    global_tex: Vec<VulkanTexture>,
+    global_tex: Vec<ResourceHandle>,
     tex_count: PerScope<usize>,
 
     uniform_lookups: HashMap<String, UniformHandle>,
@@ -340,14 +340,16 @@ impl GenericVulkanShaderBuilder {
         self.with_uniform::<T>(name, GenericShaderScope::Global)
     }
 
-    pub fn with_sampler(mut self, name: impl Into<String>, scope: GenericShaderScope, cmds: &VulkanCommands) -> HellResult<Self> {
+    pub fn with_instance_uniform<T>(self, name: impl Into<String>) -> Self {
+        self.with_uniform::<T>(name, GenericShaderScope::Instance)
+    }
+
+    pub fn with_sampler(mut self, name: impl Into<String>, scope: GenericShaderScope, texture: ResourceHandle) -> HellResult<Self> {
         self.tex_count[scope as usize] += 1;
 
         match scope {
             GenericShaderScope::Global => {
-                self.global_tex.push(
-                    VulkanTexture::new_default(&self.ctx, cmds)?
-                );
+                self.global_tex.push(texture);
             }
             GenericShaderScope::Instance => {
 
@@ -360,8 +362,8 @@ impl GenericVulkanShaderBuilder {
         Ok(self)
     }
 
-    pub fn with_global_sampler(self, name: impl Into<String>, cmds: &VulkanCommands) -> HellResult<Self> {
-        self.with_sampler(name, GenericShaderScope::Global, cmds)
+    pub fn with_global_sampler(self, name: impl Into<String>, texture: ResourceHandle) -> HellResult<Self> {
+        self.with_sampler(name, GenericShaderScope::Global, texture)
     }
 
 
@@ -413,36 +415,46 @@ impl GenericVulkanShaderBuilder {
             .build();
 
         let desc_pool = unsafe{ device.create_descriptor_pool(&pool_info, None)? };
-        let desc_sets: PerSet<VulkanDescriptorSetGroup> = array::from_fn(|idx| {
-            if self.use_set[idx] {
-                let tex_count = self.tex_count[idx];
-                let bindings = [
-                    // one ubo
-                    vk::DescriptorSetLayoutBinding::builder()
-                        .binding(Self::BINDING_IDX_UBO)
-                        .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                        .descriptor_count(1) // number of elements in array
-                        .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
-                        .build(),
+
+        // create descriptor sets layouts
+        // ------------------------------
+        let mut desc_layouts: DynArray<vk::DescriptorSetLayout, {GenericShaderScope::SET_COUNT}> = DynArray::from_default();
+        for (idx, use_set) in self.use_set.iter().enumerate() {
+            // sets have to be contigous -> there can't be a set 3 when there is no set 2
+            if !use_set {
+                break;
+            }
+
+            let tex_count = self.tex_count[idx];
+
+            let mut bindings: DynArray<vk::DescriptorSetLayoutBinding, 2> = DynArray::from_default();
+            // one ubo
+            bindings.push(
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(Self::BINDING_IDX_UBO)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_count(1) // number of elements in array
+                    .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
+                    .build()
+            );
+
+            if tex_count > 0 {
+                bindings.push(
                     // multiple textures
                     vk::DescriptorSetLayoutBinding::builder()
                         .binding(Self::BINDING_IDX_SAMPLER)
                         .descriptor_count(tex_count as u32)
                         .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                         .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                        .build(),
-                ];
-
-                let layout = VulkanDescriptorSetGroup::create_descriptor_set_layout(device, &bindings).unwrap();
-                VulkanDescriptorSetGroup::new(&self.ctx, layout, 1)
-            } else {
-                VulkanDescriptorSetGroup::new(ctx, vk::DescriptorSetLayout::default(), 0)
+                        .build()
+                );
             }
-        });
 
-        let desc_layouts: [_; GenericShaderScope::SET_COUNT] = array::from_fn(|idx| {
-            desc_sets[idx].layout
-        });
+            desc_layouts.push(
+                VulkanDescriptorSetGroup::create_descriptor_set_layout(device, bindings.as_slice())?
+            );
+        }
+        println!("---> shader created with layout: '{:?}'", desc_layouts);
 
         // global ubos
         // -----------
@@ -457,6 +469,7 @@ impl GenericVulkanShaderBuilder {
             // instance
             MemRange::new(global_ubo_stride, instance_ubo_stride),
         ];
+        println!("---> shader created with ubo-ranges: '{:?}'", ubo_ranges);
 
         // allocate buffer
         // ---------------
@@ -471,7 +484,7 @@ impl GenericVulkanShaderBuilder {
 
         // create descriptor-sets
         // ----------------------
-        let global_layout = desc_sets[GenericShaderScope::Global as usize].layout;
+        let global_layout = desc_layouts[GenericShaderScope::Global as usize];
         let global_desc_sets = VulkanDescriptorSetGroup::allocate_sets_for_layout(ctx, global_layout, desc_pool)?;
 
         // create instance states
@@ -482,24 +495,23 @@ impl GenericVulkanShaderBuilder {
         // ---------------
         let shader = VulkanShader::from_file(ctx, &self.shader_path)?;
         // TODO: desc_layouts
-        let pipeline = VulkanPipeline::new(ctx, swapchain, shader, render_pass, &vert_binding_desc, vert_attrb_desc.as_slice(), &desc_layouts[0..=0], self.depth_test_enabled, self.is_wireframe)?;
-
+        let pipeline = VulkanPipeline::new(ctx, swapchain, shader, render_pass, &vert_binding_desc, vert_attrb_desc.as_slice(), desc_layouts.as_slice(), self.depth_test_enabled, self.is_wireframe)?;
 
 
 
         Ok(GenericVulkanShader {
             ctx: self.ctx,
-            desc_sets,
+            desc_layouts,
             desc_pool,
-            global_desc_sets,
-            ubo_ranges,
+            globa_buffer_desc_sets: global_desc_sets,
+            scope_ranges: ubo_ranges,
             uniforms: self.uniforms,
             uniform_lookups: self.uniform_lookups,
             global_tex: self.global_tex,
             pipeline,
             buffer,
             instance_states,
-
+            instance_buffer_desc_sets: vec![],
         })
     }
 
@@ -517,19 +529,22 @@ impl GenericVulkanShaderBuilder {
 
 // ----------------------------------------------------------------------------
 
+
 #[allow(dead_code)]
 pub struct GenericVulkanShader {
     ctx: VulkanContextRef,
-    desc_sets: [VulkanDescriptorSetGroup; GenericShaderScope::SET_COUNT],
+    desc_layouts: DynArray<vk::DescriptorSetLayout, {GenericShaderScope::SET_COUNT}>,
     desc_pool: vk::DescriptorPool,
-    global_desc_sets: Vec<vk::DescriptorSet>,
-    ubo_ranges: [MemRange; GenericShaderScope::SET_COUNT],
+    globa_buffer_desc_sets: PerFrame<vk::DescriptorSet>,
+    scope_ranges: [MemRange; GenericShaderScope::SET_COUNT],
     uniform_lookups: HashMap<String, UniformHandle>,
     uniforms: PerScope<Vec<UniformInfo>>,
-    global_tex: Vec<VulkanTexture>,
+    global_tex: Vec<ResourceHandle>,
     pub pipeline: VulkanPipeline,
     buffer: VulkanBuffer,
+
     instance_states: [InstanceState; config::VULKAN_MAX_MATERIAL_COUNT],
+    instance_buffer_desc_sets: Vec<PerFrame<vk::DescriptorSet>>,
 }
 
 impl Drop for GenericVulkanShader {
@@ -546,44 +561,72 @@ impl GenericVulkanShader {
         self.uniform_lookups.get(name).copied()
     }
 
-    pub fn global_descriptor(&self, frame_idx: usize) -> vk::DescriptorSet {
-        self.global_desc_sets[frame_idx]
-    }
-
-
     // ------------------------------------------------------------------------
 
 
     pub fn set_uniform<T>(&mut self, handle: UniformHandle, value: &[T]) -> HellResult<()> {
+        let scope_range = self.scope_ranges[handle.scope as usize];
         let uniform = &self.uniforms[handle.scope as usize][handle.idx];
+
+        // base-offset + relative-offset
+        let offset = scope_range.offset + uniform.range.offset;
+
         println!("SET-UNIFORM: '{:?}' - '{:?}'", handle, uniform);
         self.buffer.mem
             .mapped_memory_mut()?
-            .copy_from_nonoverlapping(value, uniform.range.offset as isize);
+            .copy_from_nonoverlapping(value, offset as isize);
 
         Ok(())
     }
 
     // ------------------------------------------------------------------------
 
+    pub fn acquire_instance_resource(&mut self) -> HellResult<ResourceHandle> {
+        let layout = *self.desc_layouts.get(GenericShaderScope::Instance as usize).ok_or_render_herr("failed to get instance desc-layout")?;
 
-    pub fn apply_scope(&self, scope: GenericShaderScope, frame: &VulkanFrame) -> HellResult<()> {
-        println!("APPLY: {}", frame.idx());
-        let set = self.global_desc_sets[frame.idx()];
-        let ubo_range = &self.ubo_ranges[scope as usize];
+        let desc_sets = VulkanDescriptorSetGroup::allocate_sets_for_layout(&self.ctx, layout, self.desc_pool)?;
+        self.instance_buffer_desc_sets.push(desc_sets);
 
-        // update desc-set
-        // ---------------
+        let idx = self.instance_buffer_desc_sets.len() - 1;
+        println!("acquired instance resource: '{}'", idx);
+        Ok(ResourceHandle::new(idx))
+    }
+
+    // ------------------------------------------------------------------------
+
+
+    // TODO
+    pub fn apply_scope(&self, scope: GenericShaderScope, frame: &VulkanFrame, tex_man: &TextureManager, desc_set: vk::DescriptorSet, tex_handles: &[ResourceHandle]) -> HellResult<()> {
+        println!("apply-scope: frame '{}' - scope '{:?}'", frame.idx(), scope);
+        let scope_range = &self.scope_ranges[scope as usize];
+
+        let mut write_desc: DynArray<vk::WriteDescriptorSet, 2> = DynArray::from_default();
+
+        // add buffer writes
+        // -----------------
         let buffer_infos = [
             vk::DescriptorBufferInfo::builder()
                 .buffer(self.buffer.handle)
-                .offset(ubo_range.offset as u64)
-                .range(ubo_range.range as u64)
+                .offset(scope_range.offset as u64)
+                .range(scope_range.range as u64)
                 .build()
         ];
+        write_desc.push(
+            vk::WriteDescriptorSet::builder()
+                .dst_set(desc_set)
+                .dst_binding(0) // corresponds to shader binding
+                .dst_array_element(0)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .buffer_info(&buffer_infos)
+                .build()
+        );
 
+        // add image writes
+        // -----------------
         let mut image_infos: DynArray<vk::DescriptorImageInfo, {config::VULKAN_SHADER_MAX_GLOBAL_TEXTURES}> = DynArray::from_default();
-        for (idx, tex) in self.global_tex.iter().enumerate() {
+        for (idx, handle) in tex_handles.iter().enumerate() {
+            let tex = tex_man.texture_res(*handle)?;
+
             image_infos.push(
                 vk::DescriptorImageInfo::builder()
                     .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
@@ -593,39 +636,50 @@ impl GenericVulkanShader {
             );
         }
 
-        let write_descriptors = [
-            vk::WriteDescriptorSet::builder()
-                .dst_set(set)
-                .dst_binding(0) // corresponds to shader binding
-                .dst_array_element(0)
-                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                .buffer_info(&buffer_infos)
-                .build(),
-            vk::WriteDescriptorSet::builder()
-                .dst_set(set)
-                .dst_binding(1)
-                .dst_array_element(0)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(image_infos.as_slice())
-                .build()
-        ];
+        if !image_infos.is_empty() {
+            write_desc.push(
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(desc_set)
+                    .dst_binding(1)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(image_infos.as_slice())
+                    .build()
+            );
+        }
 
-        unsafe { self.ctx.device.handle.update_descriptor_sets(&write_descriptors, &[]); }
+        // update descriptor sets
+        // ----------------------
+        unsafe { self.ctx.device.handle.update_descriptor_sets(write_desc.as_slice(), &[]); }
 
         // bind desc-set
         // -------------
-        let descriptor_set = [ self.global_descriptor(frame.idx()) ];
+        // let descriptor_set = match scope {
+        //     GenericShaderScope::Global   => [ self.global_buffer_descriptor(frame.idx()) ],
+        //     GenericShaderScope::Instance => [ self.instance_buffer_desc_sets[frame.idx()] ],
+        //     _ => todo!()
+        // };
+
+        // TODO: breaks with instance sets
         let cmd_buff = frame.gfx_cmd_buffer();
-        cmd_buff.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, self.pipeline.layout, 0, &descriptor_set, &[]);
+        // cmd_buff.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, self.pipeline.layout, 0, &descriptor_set, &[]);
+        cmd_buff.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, self.pipeline.layout, 0, &[desc_set], &[]);
 
         Ok(())
     }
 
-    pub fn apply_globals(&self, frame: &VulkanFrame) -> HellResult<()> {
-        self.apply_scope(GenericShaderScope::Global, frame)
+    pub fn apply_global_scope(&self, frame: &VulkanFrame, tex_man: &TextureManager) -> HellResult<()> {
+        let buff_set = self.globa_buffer_desc_sets[frame.idx()];
+        let tex_sets = self.global_tex.as_slice();
+        self.apply_scope(GenericShaderScope::Global, frame, tex_man, buff_set, tex_sets)
     }
 
-    pub fn apply_locals(&self, frame: &VulkanFrame) -> HellResult<()> {
-        self.apply_scope(GenericShaderScope::Local, frame)
+    pub fn apply_instance_scope(&self, frame: &VulkanFrame, tex_man: &TextureManager, buff_res: ResourceHandle, tex_handles: &[ResourceHandle]) -> HellResult<()> {
+        let buff_set = self.instance_buffer_desc_sets[buff_res.id][frame.idx()];
+        self.apply_scope(GenericShaderScope::Instance, frame, tex_man, buff_set, tex_handles)
     }
+
+    // pub fn apply_local_scope(&self, frame: &VulkanFrame, tex_man: &TextureManager) -> HellResult<()> {
+    //     self.apply_scope(GenericShaderScope::Local, frame, tex_man)
+    // }
 }

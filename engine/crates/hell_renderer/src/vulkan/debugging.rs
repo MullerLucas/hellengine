@@ -82,6 +82,12 @@ unsafe extern "system" fn vulkan_debug_utils_callback(
 
     println!("[DEBUG]{severity}{types}{message:?}");
 
+    if message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::ERROR ||
+       message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+    {
+        panic!("THERE WAS AN VK-ERROR!");
+    }
+
     // vulkan call that triggered validation-layer messsage should be aborted?
     vk::FALSE
 }
