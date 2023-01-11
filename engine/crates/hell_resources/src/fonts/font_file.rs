@@ -24,14 +24,16 @@ pub struct FntFile {
 
 
 impl FntFile {
+    #[allow(unused)]
     pub fn from_file(path: &Path) -> HellResult<Self> {
         let chars = Vec::new();
 
         // let file = std::fs::read_to_string(path)?;
         let buff_reader = BufReader::new(File::open(path)?);
 
+        // TODO:
         for line in buff_reader.lines().flatten() {
-            println!("ROW: '{}'", line);
+            // println!("ROW: '{}'", line);
         }
 
         Ok(Self {

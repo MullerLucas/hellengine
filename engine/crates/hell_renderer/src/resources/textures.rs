@@ -63,11 +63,11 @@ impl TextureManager {
     }
 
     pub fn texture(&self, handle: ResourceHandle) -> Option<&RenderTexture> {
-        self.textures.get(handle.id)
+        self.textures.get(handle.idx)
     }
 
     pub fn texture_res(&self, handle: ResourceHandle) -> HellResult<&RenderTexture> {
-        self.textures.get(handle.id).ok_or_else(|| HellErrorHelper::render_msg_err("failed to get texture"))
+        self.textures.get(handle.idx).ok_or_else(|| HellErrorHelper::render_msg_err("failed to get texture"))
     }
 }
 

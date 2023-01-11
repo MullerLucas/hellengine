@@ -18,6 +18,7 @@ use super::primitives::{VulkanSwapchain, VulkanRenderPass};
 // command-pools
 // ----------------------------------------------------------------------------
 
+#[derive(Debug)]
 pub struct VulkanPipeline {
     ctx: VulkanContextRef,
     pub layout: vk::PipelineLayout,

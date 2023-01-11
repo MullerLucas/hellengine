@@ -49,56 +49,69 @@ impl<'a> VulkanCommandBuffer<'a> {
         *self.handle
     }
 
+    #[inline]
     pub fn begin_cmd_buffer(&self, ctx: &VulkanContextRef, begin_info: vk::CommandBufferBeginInfo) -> HellResult<()> {
         unsafe { ctx.device.handle.begin_command_buffer(self.handle(), &begin_info).to_render_hell_err() }
     }
 
+    #[inline]
     pub fn reset_cmd_buffer(&self, ctx: &VulkanContextRef) -> HellResult<()> {
         unsafe { ctx.device.handle.reset_command_buffer(self.handle(), vk::CommandBufferResetFlags::empty()).to_render_hell_err() }
     }
 
+    #[inline]
     pub fn end_command_buffer(&self, ctx: &VulkanContextRef) -> HellResult<()> {
         unsafe { ctx.device.handle.end_command_buffer(self.handle()).to_render_hell_err() }
     }
 }
 
 impl<'a> VulkanCommandBuffer<'a> {
+    #[inline]
     pub fn cmd_set_viewport(&self, ctx: &VulkanContextRef, first_viewport: u32, viewports: &[vk::Viewport]) {
         unsafe { ctx.device.handle.cmd_set_viewport(self.handle(), first_viewport, viewports); }
     }
 
+    #[inline]
     pub fn cmd_set_scissor(&self, ctx: &VulkanContextRef, first_scissor: u32, scissors: &[vk::Rect2D]) {
         unsafe { ctx.device.handle.cmd_set_scissor(self.handle(), first_scissor, scissors); }
     }
 
+    #[inline]
     pub fn cmd_begin_render_pass(&self, ctx: &VulkanContextRef, create_info: &vk::RenderPassBeginInfo, contents: vk::SubpassContents) {
         unsafe { ctx.device.handle.cmd_begin_render_pass(self.handle(), create_info, contents); }
     }
 
+    #[inline]
     pub fn cmd_end_render_pass(&self, ctx: &VulkanContextRef) {
         unsafe { ctx.device.handle.cmd_end_render_pass(self.handle()); }
     }
 
+    #[inline]
     pub fn cmd_bind_descriptor_sets(&self, ctx: &VulkanContextRef, pipeline_bind_point: vk::PipelineBindPoint, layout: vk::PipelineLayout, first_set: u32, descriptor_sets: &[vk::DescriptorSet], dynamic_offsets: &[u32]) {
         unsafe { ctx.device.handle.cmd_bind_descriptor_sets(self.handle(), pipeline_bind_point, layout, first_set, descriptor_sets, dynamic_offsets); }
     }
 
+    #[inline]
     pub fn cmd_bind_pipeline(&self, ctx: &VulkanContextRef, pipeline_bind_point: vk::PipelineBindPoint, pipeline: vk::Pipeline) {
         unsafe { ctx.device.handle.cmd_bind_pipeline(self.handle(), pipeline_bind_point, pipeline); }
     }
 
+    #[inline]
     pub fn cmd_bind_vertex_buffers(&self, ctx: &VulkanContextRef, first_binding: u32, buffers: &[vk::Buffer], offsets: &[vk::DeviceSize]) {
         unsafe { ctx.device.handle.cmd_bind_vertex_buffers(self.handle(), first_binding, buffers, offsets); }
     }
 
+    #[inline]
     pub fn cmd_bind_index_buffer(&self, ctx: &VulkanContextRef, buffer: vk::Buffer, offset: vk::DeviceSize, index_type: vk::IndexType) {
         unsafe { ctx.device.handle.cmd_bind_index_buffer(self.handle(), buffer, offset, index_type); }
     }
 
+    #[inline]
     pub fn cmd_push_constants(&self, ctx: &VulkanContextRef, layout: vk::PipelineLayout, stage_flags: vk::ShaderStageFlags, offset: u32, constants: &[u8]) {
         unsafe { ctx.device.handle.cmd_push_constants(self.handle(), layout, stage_flags, offset, constants); }
     }
 
+    #[inline]
     pub fn cmd_draw_indexed(&self, ctx: &VulkanContextRef, index_count: u32, instance_count: u32, first_index: u32, vertex_offset: i32, first_instance: u32) {
         unsafe { ctx.device.handle.cmd_draw_indexed(self.handle(), index_count, instance_count, first_index, vertex_offset, first_instance); }
     }

@@ -70,7 +70,8 @@ impl HellRenderer {
         self.backend.create_textures(&self.tex_man)?;
         let handle = self.acquire_shader("test")?;
         let shader = self.sha_man.shader_mut(handle);
-        let res = shader.acquire_instance_resource()?;
+        let res = shader.acquire_instance_resource(&[])?;
+        let res = shader.acquire_instance_resource(&[])?;
 
         Ok(())
     }

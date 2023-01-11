@@ -61,6 +61,7 @@ pub const VULKAN_NVIDIA_REQUIRED_ALIGNMENT: usize= 256;
 pub const MAX_DESCRIPTOR_SET_COUNT: usize = 1024;
 
 pub const VULKAN_MAX_MATERIAL_COUNT: usize = 1024;
+pub const VULKAN_MAX_SAMPLERS_PER_SHADER: usize = 16;
 
 pub const VULKAN_SHADER_MAX_STAGES: usize =  8;
 pub const VULKAN_SHADER_MAX_GLOBAL_TEXTURES: usize =  31;

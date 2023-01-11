@@ -288,7 +288,7 @@ impl VulkanBackend {
                 // curr_mat = resources.material_at(curr_mat_handle.id).to_hell_err(HellErrorKind::RenderError)?;
 
                 // bind material descriptors
-                let descriptor_set = [ curr_shader.get_material_set(rd.material.id, self.frame.idx())? ];
+                let descriptor_set = [ curr_shader.get_material_set(rd.material.idx, self.frame.idx())? ];
                 cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 2, &descriptor_set, &[]);
             }
 
@@ -372,6 +372,7 @@ impl VulkanBackend {
         let cam = HellCamera::new(self.swapchain.aspect_ratio());
 
         let mut shader = sha_man.shader_mut(sha_man.handle("test").unwrap());
+        shader.bind_globals();
 
         if let Some(mut uni) = shader.uniform_handle("view") {
             shader.set_uniform(uni, &[cam.view])?;
@@ -391,9 +392,13 @@ impl VulkanBackend {
 
         if let Some(mut uni) = shader.uniform_handle("my_color") {
             println!("SET-MY-COLOR: {:?}", uni);
-            shader.set_uniform(uni, &[glam::vec4(1.0, 1.0, 0.0, 1.0)])?;
-            const TMP_HANDLE: ResourceHandle = ResourceHandle::new(0);
-            shader.apply_instance_scope(&self.frame, tex_man, TMP_HANDLE, &[]);
+            const TMP_HANDLE_0: ResourceHandle = ResourceHandle::new(0);
+            const TMP_HANDLE_1: ResourceHandle = ResourceHandle::new(1);
+            shader.bind_instance(0);
+            shader.set_uniform(uni, &[glam::vec4(0.0, 1.0, 0.0, 1.0)])?;
+            shader.bind_instance(1);
+            shader.set_uniform(uni, &[glam::vec4(1.0, 0.2, 1.0, 1.0)])?;
+            shader.apply_instance_scope(&self.frame, tex_man, TMP_HANDLE_0);
         }
 
         Ok(())
@@ -427,6 +432,8 @@ impl VulkanBackend {
             .with_instance_bindings()
             .with_instance_uniform::<glam::Vec4>("my_color")
             .build(&self.swapchain, &self.render_pass_data.ui_render_pass)?;
+
+        println!("create test shader: \n{:#?}", test_shader);
 
 
         Ok(test_shader)

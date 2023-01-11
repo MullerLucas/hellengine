@@ -1,14 +1,14 @@
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct ResourceHandle {
-    pub id: usize,
+    pub idx: usize,
 }
 
 impl ResourceHandle {
     pub const INVALID: ResourceHandle = Self::new(usize::MAX);
 
-    pub const fn new(id: usize) -> Self {
+    pub const fn new(idx: usize) -> Self {
         Self {
-            id
+            idx
         }
     }
 }

@@ -39,10 +39,10 @@ impl ShaderManager {
     }
 
     pub fn shader(&self, handle: ResourceHandle) -> &GenericVulkanShader {
-        self.shaders.get(handle.id).unwrap()
+        self.shaders.get(handle.idx).unwrap()
     }
 
     pub fn shader_mut(&mut self, handle: ResourceHandle) -> &mut GenericVulkanShader {
-        self.shaders.get_mut(handle.id).unwrap()
+        self.shaders.get_mut(handle.idx).unwrap()
     }
 }

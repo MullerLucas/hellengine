@@ -14,6 +14,8 @@ hell_utils.workspace = true
 hell_resources.workspace = true
 
 num.workspace = true
+num-derive.workspace = true
+num-traits.workspace = true
 glam.workspace = true
 ash.workspace = true
 memoffset.workspace = true

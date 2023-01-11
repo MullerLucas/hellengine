@@ -2,8 +2,6 @@
 #![deny(warnings)]
 // crate-config: end
 
-
-
 pub mod vulkan;
 
 mod error;
