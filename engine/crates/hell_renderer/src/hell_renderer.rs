@@ -6,7 +6,6 @@ use hell_error::HellResult;
 use crate::camera::HellCamera;
 use crate::render_types::RenderPackage;
 use crate::resources::{TextureManager, MaterialManager, ShaderManager, ResourceHandle};
-use crate::shader::SpriteShaderSceneData;
 use crate::vulkan::primitives::VulkanSwapchain;
 use crate::vulkan::{VulkanBackend, VulkanContext};
 
@@ -67,31 +66,38 @@ impl HellRenderer {
 
     #[allow(unused)]
     pub fn prepare_renderer(&mut self) -> HellResult<()> {
-        self.backend.create_textures(&self.tex_man)?;
-        let handle = self.acquire_shader("test")?;
+        let sprite_handle = self.acquire_shader("sprite", true)?;
+        let sprite_shader = self.sha_man.shader_mut(sprite_handle);
+        let player_tex = self.tex_man.acquire_textuer(&self.backend, "player_tex".to_string(), Some("assets/characters/player_char.png".to_string()), false, false)?;
+        let enemy_tex  = self.tex_man.acquire_textuer(&self.backend, "enemy_tex".to_string(), Some("assets/characters/enemy_t1_char.png".to_string()), false, false)?;
+        let ground_tex = self.tex_man.acquire_textuer(&self.backend, "enemy_tex".to_string(), Some("assets/environment/ground_v1.png".to_string()), false, false)?;
+        let _ = sprite_shader.acquire_instance_resource(&[enemy_tex])?;
+        let _ = sprite_shader.acquire_instance_resource(&[player_tex])?;
+        let _ = sprite_shader.acquire_instance_resource(&[ground_tex])?;
+
+        let handle = self.acquire_shader("test", false)?;
         let shader = self.sha_man.shader_mut(handle);
-        let res = shader.acquire_instance_resource(&[])?;
-        let res = shader.acquire_instance_resource(&[])?;
+        let tex_1 = self.tex_man.acquire_textuer(&self.backend, "instance_tex_1".to_string(), Some("assets/characters/enemy_t1_char.png".to_string()), false, false)?;
+        let tex_2 = self.tex_man.acquire_textuer(&self.backend, "instance_tex_2".to_string(), Some("assets/characters/player_char.png".to_string()), false, false)?;
+        let res = shader.acquire_instance_resource(&[tex_1])?;
+        let res = shader.acquire_instance_resource(&[tex_2])?;
 
         Ok(())
     }
 
-    pub fn draw_frame(&mut self, delta_time: f32, scene_data: &SpriteShaderSceneData, render_pkg: &RenderPackage) -> HellResult<bool> {
-        self.backend.update_world_shader(self.camera.clone(), scene_data, &render_pkg.world)?;
-
+    pub fn draw_frame(&mut self, delta_time: f32, render_pkg: &RenderPackage) -> HellResult<bool> {
         self.backend.begin_frame()?;
-        self.backend.draw_frame(delta_time, render_pkg, &mut self.sha_man, &self.tex_man)?;
+        self.backend.draw_frame(delta_time, render_pkg, &mut self.sha_man, &self.tex_man, &self.camera)?;
         let is_resized = self.backend.end_frame()?;
-
         Ok(is_resized)
     }
 }
 
 impl HellRenderer {
-    // TODO:
-    pub fn acquire_shader(&mut self, key: &str) -> HellResult<ResourceHandle> {
+    // TODO: this sux
+    pub fn acquire_shader(&mut self, key: &str, is_sprite_shader: bool) -> HellResult<ResourceHandle> {
         let tex = self.tex_man.acquire_textuer(&self.backend, "test_global".to_string(), None, false, false)?;
-        let shader = self.sha_man.create_shader(&self.backend, key, tex)?;
+        let shader = self.sha_man.create_shader(&self.backend, key, tex, is_sprite_shader)?;
         Ok(shader)
     }
 

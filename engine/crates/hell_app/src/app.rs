@@ -3,7 +3,6 @@ use hell_core::config;
 use hell_error::HellResult;
 use hell_input::InputManager;
 use hell_renderer::render_types::RenderPackage;
-use hell_renderer::shader::SpriteShaderSceneData;
 use hell_renderer::{HellRenderer, HellRendererInfo};
 
 
@@ -14,8 +13,6 @@ use hell_renderer::{HellRenderer, HellRendererInfo};
 // ----------------------------------------------------------------------------
 
 pub trait HellGame {
-    fn scene_data(&self) -> &SpriteShaderSceneData;
-    fn scene_data_mut(&mut self) -> &mut SpriteShaderSceneData;
     fn render_package(&self) -> &RenderPackage;
 
     fn init_game(&mut self, renderer: &mut HellRenderer) -> HellResult<()>;
@@ -93,10 +90,7 @@ impl HellApp {
         // let delta_time = 0.1;
 
         self.update_game(delta_time)?;
-
-        let scene_data = self.game.scene_data();
         let render_pkg = self.game.render_package();
-
-        self.renderer.draw_frame(delta_time, scene_data, render_pkg)
+        self.renderer.draw_frame(delta_time, render_pkg)
     }
 }

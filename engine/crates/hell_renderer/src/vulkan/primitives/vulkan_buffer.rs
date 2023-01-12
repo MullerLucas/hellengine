@@ -1,7 +1,7 @@
 use ash::vk;
 use hell_error::HellResult;
 
-use crate::vulkan::{VulkanContextRef, Vertex3D, shader::shader_utils::VulkanUboData};
+use crate::vulkan::{VulkanContextRef, Vertex3D};
 
 use super::{VulkanCommands, VulkanCommandPool, VulkanDeviceMemory};
 
@@ -171,45 +171,6 @@ impl VulkanBuffer {
             None
         )
     }
-}
-
-
-impl VulkanBuffer {
-    pub fn upload_data_buffer<T: VulkanUboData>(&mut self, data: &[T]) -> HellResult<()> {
-        let buff_size = T::device_size();
-
-        let mem_map = self.mem.map_memory(0, buff_size as usize, vk::MemoryMapFlags::empty())?;
-        mem_map.copy_from_nonoverlapping(data, 0);
-        self.mem.unmap_memory()?;
-
-        Ok(())
-    }
-
-    pub fn upload_data_buffer_array<T: VulkanUboData>(&mut self, min_ubo_alignment: u64, data: &[T], idx: usize) -> HellResult<()> {
-        let offset = T::padded_device_size(min_ubo_alignment) * idx as u64;
-        let buff_size = T::device_size();
-
-        let mem_map = self.mem.map_memory(offset as usize, buff_size as usize, vk::MemoryMapFlags::empty())?;
-        mem_map.copy_from_nonoverlapping(data, 0);
-        self.mem.unmap_memory()?;
-
-        Ok(())
-    }
-
-    /// # Safety
-    /// There is no safety don't use this function :)
-    pub unsafe fn upload_data_storage_buffer<T: VulkanUboData>(&mut self, data: *const T, data_count: usize) -> HellResult<()> {
-        let buff_size = T::device_size() * data_count as u64;
-
-        let data = std::slice::from_raw_parts(data, data_count);
-
-        let mem_map = self.mem.map_memory(0, buff_size as usize, vk::MemoryMapFlags::empty())?;
-        mem_map.copy_from_nonoverlapping(data, 0);
-        self.mem.unmap_memory()?;
-
-        Ok(())
-    }
-
 }
 
 impl VulkanBuffer {

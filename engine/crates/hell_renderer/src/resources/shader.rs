@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use hell_error::HellResult;
+use hell_error::{HellResult, OptToHellErr};
 
 use crate::vulkan::{shader::generic_vulkan_shader::GenericVulkanShader, RenderBackend};
 
@@ -25,14 +25,18 @@ impl ShaderManager {
         self.handles.get(key).copied()
     }
 
-    pub fn create_shader(&mut self, backend: &RenderBackend, key: &str, global_tex: ResourceHandle) -> HellResult<ResourceHandle> {
+    pub fn handle_res(&self, key: &str) -> HellResult<ResourceHandle> {
+        self.handles.get(key).copied().ok_or_render_herr("failed to get shader handle")
+    }
+
+    pub fn create_shader(&mut self, backend: &RenderBackend, key: &str, global_tex: ResourceHandle, is_sprite_shader: bool) -> HellResult<ResourceHandle> {
         if let Some(handle) = self.handle(key) {
             Ok(handle)
         } else {
             println!("create shader '{}'", key);
             let handle = ResourceHandle::new(self.shaders.len());
             self.handles.insert(key.to_string(), handle);
-            let shader = backend.shader_create(global_tex)?;
+            let shader = if is_sprite_shader { backend.create_sprite_shader(global_tex)? } else { backend.create_test_shader(global_tex)? };
             self.shaders.push(shader);
             Ok(handle)
         }

@@ -371,26 +371,19 @@ impl GenericVulkanShaderBuilder {
         self.with_uniform::<T>(name, GenericShaderScope::Instance)
     }
 
-    pub fn with_sampler(mut self, name: impl Into<String>, scope: GenericShaderScope, texture: ResourceHandle) -> HellResult<Self> {
+    pub fn with_sampler(mut self, name: impl Into<String>, scope: GenericShaderScope) -> HellResult<Self> {
         self.sampler_counts[scope as usize] += 1;
-
-        match scope {
-            GenericShaderScope::Global => {
-                self.global_tex.push(texture);
-            }
-            GenericShaderScope::Instance => {
-
-            },
-            _ => { panic!("invalid sampler scope"); }
-        }
-
         self.push_uniform(name, scope, 0, true);
-
         Ok(self)
     }
 
-    pub fn with_global_sampler(self, name: impl Into<String>, texture: ResourceHandle) -> HellResult<Self> {
-        self.with_sampler(name, GenericShaderScope::Global, texture)
+    pub fn with_global_sampler(mut self, name: impl Into<String>, texture: ResourceHandle) -> HellResult<Self> {
+        self.global_tex.push(texture);
+        self.with_sampler(name, GenericShaderScope::Global)
+    }
+
+    pub fn with_instance_sampler(self, name: impl Into<String>) -> HellResult<Self> {
+        self.with_sampler(name, GenericShaderScope::Instance)
     }
 
 
@@ -610,6 +603,10 @@ impl GenericVulkanShader {
         self.uniform_lookups.get(name).copied()
     }
 
+    pub fn uniform_handle_res(&self, name: &str) -> HellResult<UniformHandle> {
+        self.uniform_handle(name).ok_or_render_herr("failed to get uniform")
+    }
+
     // ------------------------------------------------------------------------
 
     pub fn bind_globals(&mut self) {
@@ -683,6 +680,7 @@ impl GenericVulkanShader {
 
 
     #[allow(clippy::too_many_arguments)]
+    // TODO: breaks when there is no ubo-buffer (size problem)
     pub fn apply_scope(&self, scope: GenericShaderScope, frame: &VulkanFrame, tex_man: &TextureManager, desc_set: vk::DescriptorSet, tex_handles: &[ResourceHandle], buff_offset: usize, buff_stride: usize) -> HellResult<()> {
         println!("apply-scope: scope '{:?}' - off: '{}' - stride: '{}'", scope, buff_offset, buff_stride);
 

@@ -17,6 +17,7 @@ pub struct VulkanShader {
 
 impl VulkanShader {
     pub fn from_file(ctx: &VulkanContextRef, path: &str) -> HellResult<Self> {
+        println!("create vulkan shader from path: '{}'", path);
         let vert_path = format!("{}.vert.spv", path);
         let frag_path = format!("{}.frag.spv", path);
 
