@@ -19,5 +19,5 @@ pub use vulkan_backend::*;
 mod vulkan_data;
 pub use vulkan_data::*;
 
-pub mod shader;
+pub mod shader_program;
 pub mod primitives;

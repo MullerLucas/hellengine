@@ -1,3 +1,4 @@
+use ash::vk;
 use hell_core::config;
 
 
@@ -112,3 +113,69 @@ impl<'a> Iterator for RenderDataIter<'a> {
         }
     }
 }
+
+// ----------------------------------------------------------------------------
+
+
+#[allow(non_camel_case_types)]
+#[derive(Default, Debug, Clone, Copy)]
+pub enum NumberFormat {
+    #[default] UNDEFINED,
+    R32G32_SFLOAT,
+    R32G32B32_SFLOAT,
+    R32G32B32A32_SFLOAT,
+}
+
+impl NumberFormat {
+    const fn size_of<T>(count: usize) -> usize {
+        std::mem::size_of::<T>() * count
+    }
+
+    pub const fn to_vk_format(&self) -> vk::Format {
+        match self {
+            NumberFormat::R32G32_SFLOAT       => vk::Format::R32G32_SFLOAT,
+            NumberFormat::R32G32B32_SFLOAT    => vk::Format::R32G32B32_SFLOAT,
+            NumberFormat::R32G32B32A32_SFLOAT => vk::Format::R32G32B32A32_SFLOAT,
+            _ => vk::Format::UNDEFINED,
+        }
+    }
+
+    pub const fn size(&self) -> usize {
+        match self {
+            NumberFormat::R32G32_SFLOAT       => Self::size_of::<f32>(2),
+            NumberFormat::R32G32B32_SFLOAT    => Self::size_of::<f32>(3),
+            NumberFormat::R32G32B32A32_SFLOAT => Self::size_of::<f32>(4),
+            _ => 0,
+        }
+    }
+}
+
+// ----------------------------------------------
+
+#[derive(Debug, Clone, Copy)]
+pub struct ValueRange<T> {
+    pub offset: T,
+    pub range: T,
+}
+
+impl<T> ValueRange<T> {
+    pub const fn new(offset: T, range: T) -> Self {
+        Self { offset, range }
+    }
+}
+
+impl<T> Default for ValueRange<T>
+where T: Default
+{
+    fn default() -> Self {
+        Self {
+            offset: T::default(),
+            range: T::default(),
+        }
+    }
+}
+
+pub type MemRange = ValueRange<usize>;
+
+// ----------------------------------------------------------------------------
+

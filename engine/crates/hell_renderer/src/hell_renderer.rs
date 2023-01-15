@@ -68,9 +68,9 @@ impl HellRenderer {
     pub fn prepare_renderer(&mut self) -> HellResult<()> {
         let sprite_handle = self.acquire_shader("sprite", true)?;
         let sprite_shader = self.sha_man.shader_mut(sprite_handle);
-        let player_tex = self.tex_man.acquire_textuer(&self.backend, "player_tex".to_string(), Some("assets/characters/player_char.png".to_string()), false, false)?;
-        let enemy_tex  = self.tex_man.acquire_textuer(&self.backend, "enemy_tex".to_string(), Some("assets/characters/enemy_t1_char.png".to_string()), false, false)?;
-        let ground_tex = self.tex_man.acquire_textuer(&self.backend, "enemy_tex".to_string(), Some("assets/environment/ground_v1.png".to_string()), false, false)?;
+        let player_tex = self.tex_man.acquire_textuer(&self.backend, "player_tex".to_string(), Some("assets/characters/player_char.png".to_string()),   false, false)?;
+        let enemy_tex  = self.tex_man.acquire_textuer(&self.backend, "enemy_tex".to_string(),  Some("assets/characters/enemy_t1_char.png".to_string()), false, false)?;
+        let ground_tex = self.tex_man.acquire_textuer(&self.backend, "enemy_tex".to_string(),  Some("assets/environment/ground_v1.png".to_string()),    false, false)?;
         let _ = sprite_shader.acquire_instance_resource(&[enemy_tex])?;
         let _ = sprite_shader.acquire_instance_resource(&[player_tex])?;
         let _ = sprite_shader.acquire_instance_resource(&[ground_tex])?;
@@ -79,8 +79,10 @@ impl HellRenderer {
         let shader = self.sha_man.shader_mut(handle);
         let tex_1 = self.tex_man.acquire_textuer(&self.backend, "instance_tex_1".to_string(), Some("assets/characters/enemy_t1_char.png".to_string()), false, false)?;
         let tex_2 = self.tex_man.acquire_textuer(&self.backend, "instance_tex_2".to_string(), Some("assets/characters/player_char.png".to_string()), false, false)?;
-        let res = shader.acquire_instance_resource(&[tex_1])?;
-        let res = shader.acquire_instance_resource(&[tex_2])?;
+        let _ = shader.acquire_shared_resource(&[])?;
+        let _ = shader.acquire_instance_resource(&[tex_1])?;
+        let _ = shader.acquire_instance_resource(&[tex_2])?;
+        let _ = shader.acquire_local_resource(&[])?;
 
         Ok(())
     }

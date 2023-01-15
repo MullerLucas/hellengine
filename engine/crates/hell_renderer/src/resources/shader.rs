@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use hell_error::{HellResult, OptToHellErr};
 
-use crate::vulkan::{shader::generic_vulkan_shader::GenericVulkanShader, RenderBackend};
+use crate::vulkan::{shader_program::ShaderProgram, RenderBackend};
 
 use super::ResourceHandle;
 
@@ -10,7 +10,7 @@ use super::ResourceHandle;
 pub struct ShaderManager {
     handles:  HashMap<String, ResourceHandle>,
     // TODO: abstract vulkan specific details
-    shaders: Vec<GenericVulkanShader>,
+    shaders: Vec<ShaderProgram>,
 }
 
 impl ShaderManager {
@@ -42,11 +42,11 @@ impl ShaderManager {
         }
     }
 
-    pub fn shader(&self, handle: ResourceHandle) -> &GenericVulkanShader {
+    pub fn shader(&self, handle: ResourceHandle) -> &ShaderProgram {
         self.shaders.get(handle.idx).unwrap()
     }
 
-    pub fn shader_mut(&mut self, handle: ResourceHandle) -> &mut GenericVulkanShader {
+    pub fn shader_mut(&mut self, handle: ResourceHandle) -> &mut ShaderProgram {
         self.shaders.get_mut(handle.idx).unwrap()
     }
 }

@@ -9,17 +9,16 @@ use hell_collections::DynArray;
 use hell_common::window::HellWindowExtent;
 use hell_error::{HellResult, HellError, HellErrorKind, OptToHellErr, ErrToHellErr};
 use crate::camera::HellCamera;
-use crate::render_types::{RenderData, RenderPackage};
+use crate::render_types::{RenderData, RenderPackage, NumberFormat};
 use crate::resources::{TextureManager, MaterialManager, ResourceHandle, ShaderManager};
 use crate::vulkan::primitives::RenderPassClearFlags;
+use crate::vulkan::shader_program::ShaderProgramBuilder;
 
+use super::shader_program::ShaderProgram;
 use super::{VulkanContextRef, VulkanFrame};
 use super::primitives::{VulkanSwapchain, VulkanCommands, VulkanCommandBuffer, VulkanRenderPassData, BultinRenderPassType, VulkanImage, VulkanTexture};
 use super::pipeline::shader_data::{VulkanWorldMesh, VulkanUiMesh};
-use super::shader::generic_vulkan_shader::{GenericVulkanShader, NumberFormat, GenericVulkanShaderBuilder};
 use hell_core::config;
-
-
 
 
 
@@ -40,9 +39,6 @@ pub struct VulkanBackend {
     pub swapchain: VulkanSwapchain,
     pub swap_idx: usize,
     pub render_pass_data: VulkanRenderPassData,
-
-    // pub world_shader: VulkanSpriteShader,
-
     pub ctx: VulkanContextRef,
 }
 
@@ -50,16 +46,11 @@ impl VulkanBackend {
     pub fn new(ctx: VulkanContextRef, swapchain: VulkanSwapchain) -> HellResult<Self> {
         let frame = VulkanFrame::new(&ctx)?;
         let cmds = VulkanCommands::new(&ctx)?;
-
         let quad_mesh_3d = VulkanWorldMesh::new_quad_3d(&ctx, &cmds)?;
         let world_meshes = vec![quad_mesh_3d];
         let quad_mesh_2d = VulkanUiMesh::new_quad_2d(&ctx, &cmds)?;
         let ui_meshes = vec![quad_mesh_2d];
         let render_pass_data = VulkanRenderPassData::new(&ctx, &swapchain, &cmds)?;
-
-        // let world_shader  = VulkanSpriteShader::new(&ctx, &swapchain, config::SPRITE_SHADER_PATH, &render_pass_data)?;
-
-
 
         Ok(Self {
             frame,
@@ -183,7 +174,6 @@ impl VulkanBackend {
         // world render pass
         self.update_sprite_shader(sha_man, tex_man, camera)?;
         self.begin_render_pass(BultinRenderPassType::World, &cmd_buffer);
-        // self.record_world_cmd_buffer(&cmd_buffer, &render_pkg.world)?;
         self.record_generic_cmd_buffer(&cmd_buffer, &render_pkg.world, sha_man, "sprite")?;
         self.end_renderpass(&cmd_buffer);
 
@@ -254,79 +244,6 @@ impl VulkanBackend {
         Ok(is_resized)
     }
 
-    // fn record_world_cmd_buffer(&self, cmd_buffer: &VulkanCommandBuffer, render_data: &RenderData) -> HellResult<()> {
-    //     let mut curr_mat_handle = ResourceHandle::INVALID;
-    //     let mut curr_mesh_idx = usize::MAX;
-    //
-    //     // let mut curr_mat = resources.material_at(0).unwrap();
-    //     let curr_shader = &self.world_shader; // TODO: ...
-    //     let mut curr_mesh = &self.world_meshes[0];
-    //     // let mut curr_shader_key: &str = "";
-    //
-    //     // bind static descriptor sets once
-    //     let descriptor_set = [
-    //         curr_shader.get_global_set(0, self.frame.idx())?,
-    //         curr_shader.get_object_set(0, self.frame.idx())?,
-    //     ];
-    //
-    //     let min_ubo_alignment = self.ctx.phys_device.device_props.limits.min_uniform_buffer_offset_alignment;
-    //     let dynamic_descriptor_offsets = [
-    //         SpriteShaderSceneData::padded_device_size(min_ubo_alignment) as u32 * self.frame.idx() as u32,
-    //     ];
-    //
-    //     cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 0, &descriptor_set, &dynamic_descriptor_offsets);
-    //
-    //     // TODO: moved here
-    //     cmd_buffer.cmd_bind_pipeline(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.pipeline);
-    //
-    //     // draw each object
-    //     for (idx, rd) in render_data.iter().enumerate() {
-    //         if curr_mat_handle != rd.material {
-    //             curr_mat_handle = rd.material;
-    //             // curr_mat = resources.material_at(curr_mat_handle.id).to_hell_err(HellErrorKind::RenderError)?;
-    //
-    //             // bind material descriptors
-    //             let descriptor_set = [ curr_shader.get_material_set(rd.material.idx, self.frame.idx())? ];
-    //             cmd_buffer.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.layout, 2, &descriptor_set, &[]);
-    //         }
-    //
-    //         // bind pipeline
-    //         // TODO: remove
-    //         // if curr_shader_key != curr_mat.shader {
-    //         //     curr_shader_key = &curr_mat.shader;
-    //         //     curr_pipeline = &self.pipelines[curr_pipeline_idx];
-    //         //     curr_shader = &self.world_shader;
-    //         //     cmd_buffer.cmd_bind_pipeline(&self.ctx, vk::PipelineBindPoint::GRAPHICS, curr_shader.pipeline.pipeline);
-    //         // }
-    //
-    //         // bind mesh
-    //         if curr_mesh_idx != rd.mesh_idx {
-    //             curr_mesh_idx = rd.mesh_idx;
-    //             curr_mesh = &self.world_meshes[curr_mesh_idx];
-    //
-    //             let vertex_buffers = [curr_mesh.vertex_buffer.handle];
-    //             cmd_buffer.cmd_bind_vertex_buffers(&self.ctx, 0, &vertex_buffers, &[0]);
-    //             cmd_buffer.cmd_bind_index_buffer(&self.ctx, curr_mesh.index_buffer.handle, 0, VulkanWorldMesh::INDEX_TYPE);
-    //         }
-    //
-    //         // bind push constants
-    //         // let push_constants = [
-    //         //     MeshPushConstants {
-    //         //         model: rd.transform.create_model_mat()
-    //         //     }
-    //         // ];
-    //
-    //         // let push_const_bytes = std::slice::from_raw_parts(push_constants.as_ptr() as *const u8, std::mem::size_of_val(&push_constants));
-    //         // cmd_buffer.cmd_push_constants(&self.ctx, curr_shader.pipeline.layout, vk::ShaderStageFlags::VERTEX, 0, push_const_bytes);
-    //
-    //         // draw
-    //         // value of 'first_instance' is used in the vertex shader to index into the object storage
-    //         cmd_buffer.cmd_draw_indexed(&self.ctx, curr_mesh.indices_count() as u32, 1, 0, 0, idx as u32);
-    //     }
-    //
-    //     Ok(())
-    // }
-
     fn record_generic_cmd_buffer(&self, cmd_buffer: &VulkanCommandBuffer, render_data: &RenderData, sha_man: &ShaderManager, shader: &str) -> HellResult<()> {
         unsafe {
             // bind vertex data
@@ -357,7 +274,7 @@ impl VulkanBackend {
 
         // global
         // --------
-        shader.bind_globals();
+        shader.bind_global();
 
         shader.set_uniform(
             shader.uniform_handle_res("view")?,
@@ -378,8 +295,8 @@ impl VulkanBackend {
         let dummy = shader.uniform_handle_res("dummy")?;
         shader.bind_instance(0);
         shader.set_uniform(dummy, &[glam::vec4(0.0, 1.0, 0.0, 1.0)])?;
-        const TMP_HANDLE_0: ResourceHandle = ResourceHandle::new(0);
-        shader.apply_instance_scope(&self.frame, tex_man, TMP_HANDLE_0);
+        const TMP_HANDLE: ResourceHandle = ResourceHandle::new(1);
+        shader.apply_instance_scope(&self.frame, tex_man, TMP_HANDLE);
 
         Ok(())
     }
@@ -389,7 +306,10 @@ impl VulkanBackend {
         let cam = HellCamera::new(self.swapchain.aspect_ratio());
 
         let mut shader = sha_man.shader_mut(sha_man.handle("test").unwrap());
-        shader.bind_globals();
+
+        // --------------------------------------
+
+        shader.bind_global();
 
         if let Some(mut uni) = shader.uniform_handle("view") {
             shader.set_uniform(uni, &[cam.view])?;
@@ -403,19 +323,36 @@ impl VulkanBackend {
             shader.set_uniform(uni, &[cam.view_proj])?;
         }
 
-        shader.apply_global_scope(&self.frame, tex_man);
+        shader.apply_global_scope(&self.frame, tex_man)?;
 
         // --------------------------------------
 
-        if let Some(mut uni) = shader.uniform_handle("my_color") {
-            println!("SET-MY-COLOR: {:?}", uni);
-            const TMP_HANDLE_0: ResourceHandle = ResourceHandle::new(0);
-            const TMP_HANDLE_1: ResourceHandle = ResourceHandle::new(1);
+        if let Some(mut uni) = shader.uniform_handle("shared_color") {
+            const ENTYR_0: ResourceHandle = ResourceHandle::new(0);
+            shader.bind_shared(0);
+            shader.set_uniform(uni, &[glam::vec4(1.0, 0.0, 0.0, 1.0)])?;
+            shader.apply_shared_scope(&self.frame, tex_man, ENTYR_0);
+        }
+
+        // --------------------------------------
+
+        if let Some(mut uni) = shader.uniform_handle("instance_color") {
+            const ENTRY_0: ResourceHandle = ResourceHandle::new(0);
+            const ENTRY_1: ResourceHandle = ResourceHandle::new(1);
             shader.bind_instance(0);
             shader.set_uniform(uni, &[glam::vec4(0.0, 1.0, 0.0, 1.0)])?;
             shader.bind_instance(1);
             shader.set_uniform(uni, &[glam::vec4(1.0, 0.2, 1.0, 1.0)])?;
-            shader.apply_instance_scope(&self.frame, tex_man, TMP_HANDLE_0);
+            shader.apply_instance_scope(&self.frame, tex_man, ENTRY_0);
+        }
+
+        // --------------------------------------
+
+        if let Some(mut uni) = shader.uniform_handle("local_color") {
+            const ENTYR_0: ResourceHandle = ResourceHandle::new(0);
+            shader.bind_local(0);
+            shader.set_uniform(uni, &[glam::vec4(0.0, 0.0, 1.0, 1.0)])?;
+            shader.apply_local_scope(&self.frame, tex_man, ENTYR_0);
         }
 
         Ok(())
@@ -431,16 +368,14 @@ impl VulkanBackend {
         VulkanTexture::new_default(&self.ctx, &self.cmds)
     }
 
-    pub fn create_sprite_shader(&self, global_tex: ResourceHandle) -> HellResult<GenericVulkanShader> {
-        let shader = GenericVulkanShaderBuilder::new(&self.ctx, config::SPRITE_SHADER_PATH)
+    pub fn create_sprite_shader(&self, global_tex: ResourceHandle) -> HellResult<ShaderProgram> {
+        let shader = ShaderProgramBuilder::new(&self.ctx, config::SPRITE_SHADER_PATH)
             .with_depth_test()
-            .with_global_bindings()
             .with_attribute(NumberFormat::R32G32B32_SFLOAT)
             .with_attribute(NumberFormat::R32G32_SFLOAT)
             .with_global_uniform::<glam::Mat4>("view")
             .with_global_uniform::<glam::Mat4>("proj")
             .with_global_uniform::<glam::Mat4>("view_proj")
-            .with_instance_bindings()
             .with_instance_uniform::<glam::Mat4>("dummy")
             .with_instance_sampler("instance_tex_0")?
             .build(&self.swapchain, &self.render_pass_data.world_render_pass)?;
@@ -450,18 +385,18 @@ impl VulkanBackend {
         Ok(shader)
     }
 
-    pub fn create_test_shader(&self, global_tex: ResourceHandle) -> HellResult<GenericVulkanShader> {
-        let shader = GenericVulkanShaderBuilder::new(&self.ctx, config::TEST_SHADER_PATH)
-            .with_global_bindings()
+    pub fn create_test_shader(&self, global_tex: ResourceHandle) -> HellResult<ShaderProgram> {
+        let shader = ShaderProgramBuilder::new(&self.ctx, config::TEST_SHADER_PATH)
             .with_attribute(NumberFormat::R32G32B32_SFLOAT)
             .with_attribute(NumberFormat::R32G32_SFLOAT)
             .with_global_uniform::<glam::Mat4>("view")
             .with_global_uniform::<glam::Mat4>("proj")
             .with_global_uniform::<glam::Mat4>("view_proj")
             .with_global_sampler("global_tex", global_tex)?
-            .with_instance_bindings()
-            .with_instance_uniform::<glam::Vec4>("my_color")
+            .with_shared_uniform::<glam::Vec4>("shared_color")
+            .with_instance_uniform::<glam::Vec4>("instance_color")
             .with_instance_sampler("instance_tex")?
+            .with_local_uniform::<glam::Vec4>("local_color")
             .build(&self.swapchain, &self.render_pass_data.ui_render_pass)?;
 
         println!("create test shader: \n{:#?}", shader);
