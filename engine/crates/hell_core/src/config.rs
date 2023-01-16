@@ -67,3 +67,5 @@ pub const VULKAN_SHADER_MAX_STAGES: usize =  8;
 pub const VULKAN_SHADER_MAX_GLOBAL_TEXTURES: usize =  31;
 pub const VULKAN_SHADER_MAX_INSTANCE_TEXTURES: usize =  31;
 pub const VULKAN_SHADER_MAX_ATTRIBUTES: usize = 16;
+pub const VULKAN_SHADER_MAX_PUSH_CONSTANTS: usize = 16;
+

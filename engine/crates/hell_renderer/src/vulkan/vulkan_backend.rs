@@ -244,24 +244,24 @@ impl VulkanBackend {
         Ok(is_resized)
     }
 
-    fn record_generic_cmd_buffer(&self, cmd_buffer: &VulkanCommandBuffer, render_data: &RenderData, sha_man: &ShaderManager, shader: &str) -> HellResult<()> {
-        unsafe {
-            // bind vertex data
-            // ----------------
-            let mesh = &self.world_meshes[0];
-            let vertex_buffers = [mesh.vertex_buffer.handle];
-            cmd_buffer.cmd_bind_vertex_buffers(&self.ctx, 0, &vertex_buffers, &[0]);
-            cmd_buffer.cmd_bind_index_buffer(&self.ctx, mesh.index_buffer.handle, 0, VulkanWorldMesh::INDEX_TYPE);
+    fn record_generic_cmd_buffer(&self, cmd_buffer: &VulkanCommandBuffer, render_data: &RenderData, sha_man: &mut ShaderManager, shader: &str) -> HellResult<()> {
+        // bind vertex data
+        // ----------------
+        let mesh = &self.world_meshes[0];
+        let vertex_buffers = [mesh.vertex_buffer.handle];
+        cmd_buffer.cmd_bind_vertex_buffers(&self.ctx, 0, &vertex_buffers, &[0]);
+        cmd_buffer.cmd_bind_index_buffer(&self.ctx, mesh.index_buffer.handle, 0, VulkanWorldMesh::INDEX_TYPE);
+        let shader = sha_man.shader_mut(sha_man.handle_res(shader)?);
+        cmd_buffer.cmd_bind_pipeline(&self.ctx, vk::PipelineBindPoint::GRAPHICS, shader.pipeline.pipeline);
+        let push_handle = shader.push_constant_handle_res("model")?;
 
-            let shader = sha_man.shader(sha_man.handle_res(shader)?);
-            cmd_buffer.cmd_bind_pipeline(&self.ctx, vk::PipelineBindPoint::GRAPHICS, shader.pipeline.pipeline);
+        // draw each object
+        for (idx, rd) in render_data.iter().enumerate() {
+            let push_val = rd.transform.create_model_mat();
+            shader.set_push_constant(push_handle, &[push_val], &self.frame)?;
 
-            // draw each object
-            for (idx, rd) in render_data.iter().enumerate() {
-                // draw
-                // value of 'first_instance' is used in the vertex shader to index into the object storage
-                cmd_buffer.cmd_draw_indexed(&self.ctx, mesh.indices_count() as u32, 1, 0, 0, 0);
-            }
+            // value of 'first_instance' is used in the vertex shader to index into the object storage
+            cmd_buffer.cmd_draw_indexed(&self.ctx, mesh.indices_count() as u32, 1, 0, 0, 0);
         }
 
         Ok(())
@@ -378,6 +378,7 @@ impl VulkanBackend {
             .with_global_uniform::<glam::Mat4>("view_proj")
             .with_instance_uniform::<glam::Mat4>("dummy")
             .with_instance_sampler("instance_tex_0")?
+            .with_push_constant::<glam::Mat4>("model")
             .build(&self.swapchain, &self.render_pass_data.world_render_pass)?;
 
         println!("create sprite shader: \n{:#?}", shader);
@@ -397,6 +398,7 @@ impl VulkanBackend {
             .with_instance_uniform::<glam::Vec4>("instance_color")
             .with_instance_sampler("instance_tex")?
             .with_local_uniform::<glam::Vec4>("local_color")
+            .with_push_constant::<glam::Mat4>("model")
             .build(&self.swapchain, &self.render_pass_data.ui_render_pass)?;
 
         println!("create test shader: \n{:#?}", shader);

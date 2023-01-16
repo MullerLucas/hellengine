@@ -21,7 +21,7 @@ pub const fn get_aligned(operand: usize, alignment: usize) -> usize{
 }
 
 pub const fn get_aligned_range(offset: usize, size: usize, alignment: usize) -> ValueRange<usize> {
-    ValueRange::new(get_aligned(offset, size), get_aligned(offset, alignment))
+    ValueRange::new(get_aligned(offset, alignment), get_aligned(size, alignment))
 }
 
 // ----------------------------------------------------------------------------
@@ -116,6 +116,14 @@ impl UniformInfo {
     }
 }
 
+// ----------------------------------------------
+
+#[derive(Debug)]
+pub struct PushConstantInfo {
+    pub name: String,
+    pub handle: ResourceHandle,
+    pub range: MemRange,
+}
 
 // ----------------------------------------------
 
@@ -170,7 +178,10 @@ pub struct ShaderProgramBuilder {
     scope_sizes: PerScope<usize>,
     scope_entry_count: PerScope<usize>,
     global_tex: Vec<ResourceHandle>,
-    push_constant_ranges: Vec<MemRange>,
+
+    push_constant_size: usize,
+    push_constants: Vec<PushConstantInfo>,
+    push_constant_lookups: HashMap<String, ResourceHandle>,
 }
 
 impl ShaderProgramBuilder {
@@ -179,6 +190,7 @@ impl ShaderProgramBuilder {
     const BINDING_IDX_SAMPLER: u32 = 1;
     const MAX_GLOBAL_TEX_COUNT: usize = 16;
     const MAX_ATTRIBUTE_COUNT: usize = 32;
+    const PUSH_CONSTANT_ALIGNMENT: usize = 4;
 }
 
 impl ShaderProgramBuilder {
@@ -205,7 +217,11 @@ impl ShaderProgramBuilder {
             scope_sizes: Default::default(),
             scope_entry_count: scope_limits,
             global_tex: Vec::with_capacity(Self::MAX_GLOBAL_TEX_COUNT),
-            push_constant_ranges: Vec::new(),
+
+            push_constant_size: 0,
+            // push_constant_ranges: Vec::new(),
+            push_constants: Vec::new(),
+            push_constant_lookups: HashMap::new(),
         }
     }
 
@@ -247,12 +263,6 @@ impl ShaderProgramBuilder {
         let range = MemRange::new(offset, size);
         let info = UniformInfo::new_uniform(&name, scope, idx, range);
 
-        // TODO: push constants
-        // let range = get_aligned_range(offset, size, 4);
-        // let info = UniformInfo::new_push_constant(&name, idx, range);
-        // self.push_constant_ranges.push(info.range);
-        // info
-
         println!("PUSH-UNIFORM: {:?}", info);
         // NOTE: use final size stored in info struct
         self.scope_sizes[scope as usize] += info.range.range;
@@ -284,6 +294,27 @@ impl ShaderProgramBuilder {
 
     pub fn with_local_uniform<T>(self, name: impl Into<String>) -> Self {
         self.with_uniform::<T>(name, ShaderScope::Local)
+    }
+
+    // ------------------------------------------
+
+    pub fn with_push_constant<T>(mut self, name: impl Into<String>) -> Self {
+        let raw_size = std::mem::size_of::<T>();
+        let range = get_aligned_range(self.push_constant_size, raw_size, Self::PUSH_CONSTANT_ALIGNMENT);
+        self.push_constant_size += range.range;
+
+        let handle = ResourceHandle::new(self.push_constant_lookups.len());
+        let name = name.into();
+        self.push_constants.push(PushConstantInfo {
+            name: name.clone(),
+            handle,
+            range,
+        });
+        self.push_constant_lookups.insert(name, handle);
+
+        println!("with-push-constant: '{:?}'", range);
+
+        self
     }
 
     // ------------------------------------------
@@ -437,7 +468,7 @@ impl ShaderProgramBuilder {
         // create pipeline
         // ---------------
         let shader = VulkanShader::from_file(ctx, &self.shader_path)?;
-        let pipeline = VulkanPipeline::new(ctx, swapchain, shader, render_pass, &vert_binding_desc, vert_attrb_desc.as_slice(), set_desc_layouts.as_slice(), self.depth_test_enabled, self.is_wireframe)?;
+        let pipeline = VulkanPipeline::new(ctx, swapchain, shader, render_pass, &vert_binding_desc, vert_attrb_desc.as_slice(), set_desc_layouts.as_slice(), &self.push_constants, self.depth_test_enabled, self.is_wireframe)?;
 
         // scope states
         // ------------
@@ -474,6 +505,9 @@ impl ShaderProgramBuilder {
             bound_offset: 0,
             scope_entry_states: scope_states,
             global_entry: ResourceHandle::new(0),
+
+            push_constants: self.push_constants,
+            push_constant_lookups: self.push_constant_lookups,
         })
     }
 
@@ -511,6 +545,9 @@ pub struct ShaderProgram {
     bound_offset: usize,
     scope_entry_states: PerScope<Vec<ScopeState>>,
     global_entry: ResourceHandle,
+
+    push_constants: Vec<PushConstantInfo>,
+    push_constant_lookups: HashMap<String, ResourceHandle>,
 }
 
 impl Drop for ShaderProgram {
@@ -533,6 +570,14 @@ impl ShaderProgram {
 
     pub fn uniform_handle_res(&self, name: &str) -> HellResult<UniformHandle> {
         self.uniform_handle(name).ok_or_render_herr("failed to get uniform")
+    }
+
+    pub fn push_constant_handle(&self, name: &str) -> Option<ResourceHandle> {
+        self.push_constant_lookups.get(name).copied()
+    }
+
+    pub fn push_constant_handle_res(&self, name: &str) -> HellResult<ResourceHandle> {
+        self.push_constant_handle(name).ok_or_render_herr("failed to get push-constant-handle")
     }
 
     // ------------------------------------------------------------------------
@@ -573,6 +618,14 @@ impl ShaderProgram {
         self.buffer.mem
             .mapped_memory_mut()?
             .copy_from_nonoverlapping(value, offset as isize);
+        Ok(())
+    }
+
+    // ------------------------------------------------------------------------
+
+    pub fn set_push_constant<T>(&mut self, handle: ResourceHandle, value: &[T], frame: &VulkanFrame) -> HellResult<()> {
+        let uniform = &self.push_constants[handle.idx];
+        frame.gfx_cmd_buffer().cmd_push_constants_slice(&self.ctx, self.pipeline.layout, vk::ShaderStageFlags::ALL_GRAPHICS, uniform.range.offset, value);
         Ok(())
     }
 

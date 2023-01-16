@@ -1,4 +1,6 @@
 mod shader;
+use hell_collections::DynArray;
+use hell_core::config;
 pub use shader::*;
 pub mod shader_data;
 
@@ -8,7 +10,7 @@ use ash::vk;
 use hell_error::{HellResult, HellError, HellErrorKind};
 use crate::vulkan::VulkanContextRef;
 
-use super::primitives::{VulkanSwapchain, VulkanRenderPass};
+use super::{primitives::{VulkanSwapchain, VulkanRenderPass}, shader_program::PushConstantInfo};
 
 
 
@@ -39,7 +41,7 @@ impl Drop for VulkanPipeline {
 
 impl VulkanPipeline {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass: &VulkanRenderPass, vert_binding_desc: &[vk::VertexInputBindingDescription], vert_attrb_desc: &[vk::VertexInputAttributeDescription], descriptor_set_layouts: &[vk::DescriptorSetLayout], depth_test_enabled: bool, is_wireframe: bool) -> HellResult<Self> {
+    pub fn new(ctx: &VulkanContextRef, swapchain: &VulkanSwapchain, shader: VulkanShader, render_pass: &VulkanRenderPass, vert_binding_desc: &[vk::VertexInputBindingDescription], vert_attrb_desc: &[vk::VertexInputAttributeDescription], descriptor_set_layouts: &[vk::DescriptorSetLayout], push_constant_infos: &[PushConstantInfo], depth_test_enabled: bool, is_wireframe: bool) -> HellResult<Self> {
         let device = &ctx.device.handle;
         let sample_count = vk::SampleCountFlags::TYPE_1;
 
@@ -49,8 +51,6 @@ impl VulkanPipeline {
 
         // vertices
         // --------
-        // let vertex_binding_desc = [Vertex3D::get_binding_desc()];
-        // let vertex_attr_desc = Vertex3D::get_attribute_desc();
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
             .vertex_binding_descriptions(vert_binding_desc)
             .vertex_attribute_descriptions(vert_attrb_desc)
@@ -129,14 +129,14 @@ impl VulkanPipeline {
 
         // push-constants
         // --------------
-        // let push_constants = [
-        //     vk::PushConstantRange::builder()
-        //         .offset(0)
-        //         .size(std::mem::size_of::<MeshPushConstants>() as u32)
-        //         .stage_flags(vk::ShaderStageFlags::VERTEX)
-        //         .build()
-        // ];
-
+        let mut push_constants: DynArray<vk::PushConstantRange, {config::VULKAN_SHADER_MAX_PUSH_CONSTANTS}> = DynArray::from_default();
+        for pcr in push_constant_infos {
+            push_constants.push(vk::PushConstantRange::builder()
+                .offset(pcr.range.offset as u32)
+                .size(pcr.range.range as u32)
+                .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS) // TODO: make selectable
+                .build())
+        }
 
         // dyn-state
         // ---------
@@ -159,7 +159,7 @@ impl VulkanPipeline {
         // ---------------
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder()
             .set_layouts(descriptor_set_layouts)
-            // .push_constant_ranges(&push_constants)
+            .push_constant_ranges(push_constants.as_slice())
             .build();
 
         let pipeline_layout = unsafe { device.create_pipeline_layout(&pipeline_layout_info, None) }?;

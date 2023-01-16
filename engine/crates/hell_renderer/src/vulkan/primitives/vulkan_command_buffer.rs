@@ -107,8 +107,20 @@ impl<'a> VulkanCommandBuffer<'a> {
     }
 
     #[inline]
-    pub fn cmd_push_constants(&self, ctx: &VulkanContextRef, layout: vk::PipelineLayout, stage_flags: vk::ShaderStageFlags, offset: u32, constants: &[u8]) {
-        unsafe { ctx.device.handle.cmd_push_constants(self.handle(), layout, stage_flags, offset, constants); }
+    pub fn cmd_push_constants(&self, ctx: &VulkanContextRef, layout: vk::PipelineLayout, stage_flags: vk::ShaderStageFlags, offset: usize, constants: &[u8]) {
+        unsafe { ctx.device.handle.cmd_push_constants(self.handle(), layout, stage_flags, offset as u32, constants); }
+    }
+
+    #[inline]
+    pub fn cmd_push_constants_slice<T>(&self, ctx: &VulkanContextRef, layout: vk::PipelineLayout, stage_flags: vk::ShaderStageFlags, offset: usize, constants: &[T]) {
+        unsafe {
+            let push_const_bytes = std::slice::from_raw_parts(
+                constants.as_ptr() as *const u8,
+                std::mem::size_of::<T>() * constants.len()
+            );
+
+            ctx.device.handle.cmd_push_constants(self.handle(), layout, stage_flags, offset as u32, push_const_bytes);
+        }
     }
 
     #[inline]
