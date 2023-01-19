@@ -74,6 +74,8 @@ impl HellRenderer {
         let _ = sprite_shader.acquire_instance_resource(&[enemy_tex])?;
         let _ = sprite_shader.acquire_instance_resource(&[player_tex])?;
         let _ = sprite_shader.acquire_instance_resource(&[ground_tex])?;
+        // TODO: local instances
+        let _ = sprite_shader.acquire_local_resource(&[])?;
 
         let handle = self.acquire_shader("test", false)?;
         let shader = self.sha_man.shader_mut(handle);
@@ -82,6 +84,7 @@ impl HellRenderer {
         let _ = shader.acquire_shared_resource(&[])?;
         let _ = shader.acquire_instance_resource(&[tex_1])?;
         let _ = shader.acquire_instance_resource(&[tex_2])?;
+        // TODO: local instances
         let _ = shader.acquire_local_resource(&[])?;
 
         Ok(())

@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 #![allow(unused)]
 
-use std::{array, collections::HashMap, mem};
+use std::{array, collections::HashMap, mem::{self, size_of}};
 
-use ash::vk;
+use ash::vk::{self, WriteDescriptorSet};
 use hell_collections::DynArray;
 use hell_core::config;
 use hell_error::{HellResult, HellError, HellErrorKind, HellErrorHelper, OptToHellErr};
@@ -269,6 +269,10 @@ impl ShaderProgramBuilder {
         uniforms.push(info);
         self.uniform_lookups.insert(name, UniformHandle::new(scope, idx));
 
+        if scope == ShaderScope::Local {
+            self.add_push_constant::<u32>("local_idx");
+        }
+
         Ok(())
     }
 
@@ -298,7 +302,7 @@ impl ShaderProgramBuilder {
 
     // ------------------------------------------
 
-    pub fn with_push_constant<T>(mut self, name: impl Into<String>) -> Self {
+    fn add_push_constant<T>(&mut self, name: impl Into<String>) {
         let raw_size = std::mem::size_of::<T>();
         let range = get_aligned_range(self.push_constant_size, raw_size, Self::PUSH_CONSTANT_ALIGNMENT);
         self.push_constant_size += range.range;
@@ -313,8 +317,6 @@ impl ShaderProgramBuilder {
         self.push_constant_lookups.insert(name, handle);
 
         println!("with-push-constant: '{:?}'", range);
-
-        self
     }
 
     // ------------------------------------------
@@ -382,6 +384,11 @@ impl ShaderProgramBuilder {
                 .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .descriptor_count(config::VULKAN_SAMPLER_DESCRIPTOR_COUNT as u32)
                 .build(),
+            // storage buffer
+            vk::DescriptorPoolSize::builder()
+                .ty(vk::DescriptorType::STORAGE_BUFFER)
+                .descriptor_count(config::VULKAN_STORAGE_UBO_DESCRIPTOR_COUNT as u32)
+                .build(),
         ];
 
         let pool_info = vk::DescriptorPoolCreateInfo::builder()
@@ -397,14 +404,17 @@ impl ShaderProgramBuilder {
         let mut set_desc_layouts: DynArray<vk::DescriptorSetLayout, {ShaderScope::SCOPE_COUNT}> = DynArray::from_default();
         let mut scope_desc_layouts: PerScope<Option<vk::DescriptorSetLayout>> = Default::default();
         let mut scope_ranges: PerScope<_> = Default::default();
-        let mut total_buffer_size = 0;
+        let mut main_buffer_size = 0;
         let mut scope_strides: PerScope<usize> = Default::default();
         let mut set_idx = 0;
         let mut scope_set_mapping: PerScope<Option<_>> = Default::default();
 
         for (idx, use_set) in self.use_set.iter().enumerate() {
             // sets have to be contigous -> there can't be a set 3 when there is no set 2
-            if !use_set { continue; }
+            if !use_set {
+                println!("skipping layoutfor set '{}'", idx);
+                continue;
+            }
             println!("creating layoutfor set '{}'", idx);
 
             // scope-set-mapping
@@ -418,22 +428,36 @@ impl ShaderProgramBuilder {
             let ubo_stride = self.calculate_ubo_stride(ShaderScope::from(idx));
             let scope_size = ubo_stride * entry_count;
             scope_strides[idx] =  ubo_stride;
-            scope_ranges[idx] = Some(MemRange::new(total_buffer_size, scope_size));
-            total_buffer_size += scope_size;
+            scope_ranges[idx] = Some(MemRange::new(main_buffer_size, scope_size));
+            main_buffer_size += scope_size;
 
             // create layout
             // -------------
             let sampler_count = self.sampler_counts[idx];
             let mut bindings: DynArray<vk::DescriptorSetLayoutBinding, 2> = DynArray::from_default();
-            // one ubo
-            bindings.push(
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(Self::BINDING_IDX_UBO)
-                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .descriptor_count(1) // number of elements in array
-                    .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
-                    .build()
-            );
+
+            // main-layouts => uniform
+            if idx != ShaderScope::Local as usize {
+                bindings.push(
+                    vk::DescriptorSetLayoutBinding::builder()
+                        .binding(Self::BINDING_IDX_UBO)
+                        .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                        .descriptor_count(1) // number of elements in array
+                        .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
+                        .build()
+                );
+            }
+            // local layout => storage
+            else {
+                bindings.push(
+                    vk::DescriptorSetLayoutBinding::builder()
+                        .binding(Self::BINDING_IDX_UBO)
+                        .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                        .descriptor_count(1) // number of elements in array
+                        .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
+                        .build()
+                );
+            }
 
             // multiple samplers
             if sampler_count > 0 {
@@ -453,15 +477,23 @@ impl ShaderProgramBuilder {
             scope_desc_layouts[idx] = Some(layout);
         }
 
-        // allocate buffer
-        // ---------------
+        // allocate main-buffer
+        // --------------------
         // HACK: handle this differentyl
-        debug_assert!(total_buffer_size > 0);
-        let mut buffer = VulkanBuffer::from_uniform(ctx, total_buffer_size)?;
-        buffer.mem.map_memory(0, total_buffer_size, vk::MemoryMapFlags::empty())?;
+        debug_assert!(main_buffer_size > 0);
+        let mut main_buffer = VulkanBuffer::from_uniform(ctx, main_buffer_size)?;
+        main_buffer.mem.map_memory(0, main_buffer_size, vk::MemoryMapFlags::empty())?;
 
-        // create descriptor-sets
-        // ----------------------
+        // allocate main-buffer
+        // --------------------
+        // TODO: do somewhere elese
+        scope_strides[ShaderScope::Local as usize] = std::mem::size_of::<glam::Mat4>() * 10000;
+        let local_buffer_size = std::mem::size_of::<glam::Mat4>() * 10000;
+        let mut local_buffer = VulkanBuffer::from_storage(ctx, local_buffer_size)?;
+        local_buffer.mem.map_memory(0, local_buffer_size, vk::MemoryMapFlags::empty())?;
+
+        // create global descriptor-sets
+        // -----------------------------
         let global_layout = set_desc_layouts[ShaderScope::Global as usize];
         let global_desc_sets = VulkanDescriptorSetGroup::allocate_sets_for_layout(ctx, global_layout, desc_pool)?;
 
@@ -495,7 +527,8 @@ impl ShaderProgramBuilder {
             uniforms: self.uniforms,
             uniform_lookups: self.uniform_lookups,
             pipeline,
-            buffer,
+            main_buffer,
+            local_buffer,
             sampler_counts: self.sampler_counts,
             scope_sizes: self.scope_sizes,
             scope_strides,
@@ -525,6 +558,7 @@ impl ShaderProgramBuilder {
 
 // ----------------------------------------------------------------------------
 
+// TODO(lm): use one buffer per frame
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct ShaderProgram {
@@ -533,7 +567,8 @@ pub struct ShaderProgram {
     desc_pool: vk::DescriptorPool,
     uniform_lookups: HashMap<String, UniformHandle>,
     uniforms: PerScope<Vec<UniformInfo>>,
-    buffer: VulkanBuffer,
+    main_buffer: VulkanBuffer,
+    local_buffer: VulkanBuffer,
     scope_ranges: PerScope<Option<MemRange>>,
     scope_desc_layouts: PerScope<Option<vk::DescriptorSetLayout>>,
     sampler_counts: PerScope<usize>,
@@ -615,18 +650,34 @@ impl ShaderProgram {
         let uniform = &self.uniforms[handle.scope as usize][handle.idx];
         let offset = self.bound_offset + uniform.range.offset;
 
-        self.buffer.mem
+        self.main_buffer.mem
             .mapped_memory_mut()?
             .copy_from_nonoverlapping(value, offset as isize);
         Ok(())
     }
 
+    pub fn set_local_storage<T>(&mut self, value: &[T]) -> HellResult<()> {
+        let buff_size = std::mem::size_of::<T>() * value.len();
+
+        self.local_buffer.mem
+            .mapped_memory_mut()?
+            .copy_from_nonoverlapping(value, 0);
+
+        Ok(())
+    }
+
     // ------------------------------------------------------------------------
 
-    pub fn set_push_constant<T>(&mut self, handle: ResourceHandle, value: &[T], frame: &VulkanFrame) -> HellResult<()> {
+    fn set_push_constant<T>(&mut self, handle: ResourceHandle, value: &[T], frame: &VulkanFrame) -> HellResult<()> {
         let uniform = &self.push_constants[handle.idx];
         frame.gfx_cmd_buffer().cmd_push_constants_slice(&self.ctx, self.pipeline.layout, vk::ShaderStageFlags::ALL_GRAPHICS, uniform.range.offset, value);
         Ok(())
+    }
+
+    // TODO: improve
+    pub fn set_local_idx(&mut self, frame: &VulkanFrame, idx: u32) -> HellResult<()> {
+        let handle = self.push_constant_handle_res("local_idx")?;
+        self.set_push_constant(handle, &[idx], frame)
     }
 
     // ------------------------------------------------------------------------
@@ -679,10 +730,8 @@ impl ShaderProgram {
 
     // ------------------------------------------------------------------------
 
-    pub fn apply_scope_intern(&self, scope: ShaderScope, frame: &VulkanFrame, tex_man: &TextureManager, entry: ResourceHandle) -> HellResult<()> {
+    pub fn apply_main_scope_intern(&self, scope: ShaderScope, frame: &VulkanFrame, tex_man: &TextureManager, entry: ResourceHandle) -> HellResult<()> {
         let state = self.scope_entry_states[scope as usize].get(entry.idx).ok_or_render_herr("failed to get scope state")?;
-        let buff_offset = state.buffer_offset;
-        let buff_stride = state.buffer_stride;
         let desc_set = state.buffer_desc_set(frame.idx());
         let tex_handles = state.textures();
 
@@ -692,11 +741,13 @@ impl ShaderProgram {
         // -----------------
         let buffer_infos = [
             vk::DescriptorBufferInfo::builder()
-                .buffer(self.buffer.handle)
+                // .buffer(self.main_buffer.handle)
+                .buffer(self.main_buffer.handle)
                 .offset(state.buffer_offset as u64)
                 .range(state.buffer_stride as u64)
                 .build()
         ];
+
         write_desc.push(
             vk::WriteDescriptorSet::builder()
                 .dst_set(desc_set)
@@ -743,7 +794,18 @@ impl ShaderProgram {
 
         // update descriptor sets
         // ----------------------
-        unsafe { self.ctx.device.handle.update_descriptor_sets(write_desc.as_slice(), &[]); }
+        // unsafe { self.ctx.device.handle.update_descriptor_sets(write_desc.as_slice(), &[]); }
+        //
+        // let cmd_buff = frame.gfx_cmd_buffer();
+        // let first_set = self.scope_set_mapping[scope as usize].ok_or_render_herr("failed to get scope mapping")? as u32;
+        // cmd_buff.cmd_bind_descriptor_sets(&self.ctx, vk::PipelineBindPoint::GRAPHICS, self.pipeline.layout, first_set, &[desc_set], &[]);
+        self.bind_and_udpate_scope(scope, frame, write_desc.as_slice(), desc_set)?;
+
+        Ok(())
+    }
+
+    fn bind_and_udpate_scope(&self, scope: ShaderScope, frame: &VulkanFrame, write_desc: &[WriteDescriptorSet], desc_set: vk::DescriptorSet) -> HellResult<()> {
+        unsafe { self.ctx.device.handle.update_descriptor_sets(write_desc, &[]); }
 
         let cmd_buff = frame.gfx_cmd_buffer();
         let first_set = self.scope_set_mapping[scope as usize].ok_or_render_herr("failed to get scope mapping")? as u32;
@@ -753,18 +815,43 @@ impl ShaderProgram {
     }
 
     pub fn apply_global_scope(&self, frame: &VulkanFrame, tex_man: &TextureManager) -> HellResult<()> {
-        self.apply_scope_intern(ShaderScope::Global, frame, tex_man, self.global_entry)
+        self.apply_main_scope_intern(ShaderScope::Global, frame, tex_man, self.global_entry)
     }
 
     pub fn apply_shared_scope(&self, frame: &VulkanFrame, tex_man: &TextureManager, entry: ResourceHandle) -> HellResult<()> {
-        self.apply_scope_intern(ShaderScope::Shared, frame, tex_man, entry)
+        self.apply_main_scope_intern(ShaderScope::Shared, frame, tex_man, entry)
     }
 
     pub fn apply_instance_scope(&self, frame: &VulkanFrame, tex_man: &TextureManager, entry: ResourceHandle) -> HellResult<()> {
-        self.apply_scope_intern(ShaderScope::Instance, frame, tex_man, entry)
+        self.apply_main_scope_intern(ShaderScope::Instance, frame, tex_man, entry)
     }
 
-    pub fn apply_local_scope(&self, frame: &VulkanFrame, tex_man: &TextureManager, entry: ResourceHandle) -> HellResult<()> {
-        self.apply_scope_intern(ShaderScope::Local, frame, tex_man, entry)
+    // pub fn apply_local_scope(&self, frame: &VulkanFrame, tex_man: &TextureManager, entry: ResourceHandle) -> HellResult<()> {
+    pub fn apply_local_scope(&self, frame: &VulkanFrame) -> HellResult<()> {
+        let scope = ShaderScope::Local;
+        let buffer_offset = 0;
+        let buffer_stride = self.scope_strides[scope as usize];
+        let desc_set = self.scope_entry_states[scope as usize][0].buffer_desc_set(frame.idx());
+
+        let buffer_infos = [
+            vk::DescriptorBufferInfo::builder()
+                .buffer(self.local_buffer.handle)
+                .offset(buffer_offset as u64)
+                .range(buffer_stride as u64)
+                .build()
+        ];
+        let write_desc = [
+            vk::WriteDescriptorSet::builder()
+                .dst_set(desc_set)
+                .dst_binding(0) // corresponds to shader binding
+                .dst_array_element(0)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                .buffer_info(&buffer_infos)
+                .build()
+        ];
+
+        self.bind_and_udpate_scope(scope, frame, write_desc.as_slice(), desc_set)?;
+
+        Ok(())
     }
 }

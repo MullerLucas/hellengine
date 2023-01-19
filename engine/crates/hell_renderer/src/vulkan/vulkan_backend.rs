@@ -6,6 +6,7 @@ use std::cell::RefCell;
 
 use ash::vk;
 use hell_collections::DynArray;
+use hell_common::transform::Transform;
 use hell_common::window::HellWindowExtent;
 use hell_error::{HellResult, HellError, HellErrorKind, OptToHellErr, ErrToHellErr};
 use crate::camera::HellCamera;
@@ -172,13 +173,13 @@ impl VulkanBackend {
         cmd_buffer.cmd_set_scissor(ctx, 0, &self.swapchain.sissor);
 
         // world render pass
-        self.update_sprite_shader(sha_man, tex_man, camera)?;
+        self.update_sprite_shader(sha_man, tex_man, camera, &render_pkg.world)?;
         self.begin_render_pass(BultinRenderPassType::World, &cmd_buffer);
         self.record_generic_cmd_buffer(&cmd_buffer, &render_pkg.world, sha_man, "sprite")?;
         self.end_renderpass(&cmd_buffer);
 
         // ui render pass
-        self.update_test_shader(sha_man, tex_man)?;
+        self.update_test_shader(sha_man, tex_man, &render_pkg.ui)?;
         self.begin_render_pass(BultinRenderPassType::Ui, &cmd_buffer);
         self.record_generic_cmd_buffer(&cmd_buffer, &render_pkg.ui, sha_man, "test")?;
         self.end_renderpass(&cmd_buffer);
@@ -253,12 +254,10 @@ impl VulkanBackend {
         cmd_buffer.cmd_bind_index_buffer(&self.ctx, mesh.index_buffer.handle, 0, VulkanWorldMesh::INDEX_TYPE);
         let shader = sha_man.shader_mut(sha_man.handle_res(shader)?);
         cmd_buffer.cmd_bind_pipeline(&self.ctx, vk::PipelineBindPoint::GRAPHICS, shader.pipeline.pipeline);
-        let push_handle = shader.push_constant_handle_res("model")?;
 
         // draw each object
         for (idx, rd) in render_data.iter().enumerate() {
-            let push_val = rd.transform.create_model_mat();
-            shader.set_push_constant(push_handle, &[push_val], &self.frame)?;
+            shader.set_local_idx(&self.frame, idx as u32)?;
 
             // value of 'first_instance' is used in the vertex shader to index into the object storage
             cmd_buffer.cmd_draw_indexed(&self.ctx, mesh.indices_count() as u32, 1, 0, 0, 0);
@@ -269,7 +268,7 @@ impl VulkanBackend {
 }
 
 impl VulkanBackend {
-    pub fn update_sprite_shader(&self, sha_man: &mut ShaderManager, tex_man: &TextureManager, camera: &HellCamera) -> HellResult<()> {
+    pub fn update_sprite_shader(&self, sha_man: &mut ShaderManager, tex_man: &TextureManager, camera: &HellCamera, render_data: &RenderData) -> HellResult<()> {
         let shader = sha_man.shader_mut(sha_man.handle_res("sprite")?);
 
         // global
@@ -298,11 +297,18 @@ impl VulkanBackend {
         const TMP_HANDLE: ResourceHandle = ResourceHandle::new(1);
         shader.apply_instance_scope(&self.frame, tex_man, TMP_HANDLE);
 
+        // local
+        // -----
+        shader.bind_local(0);
+        let local_val: Vec<_> = render_data.transforms.iter().map(|t| t.create_model_mat()).collect();
+        shader.set_local_storage(&local_val);
+        shader.apply_local_scope(&self.frame);
+
         Ok(())
     }
 
     #[allow(unused)]
-    pub fn update_test_shader(&self, sha_man: &mut ShaderManager, tex_man: &TextureManager) -> HellResult<()> {
+    pub fn update_test_shader(&self, sha_man: &mut ShaderManager, tex_man: &TextureManager, render_data: &RenderData) -> HellResult<()> {
         let cam = HellCamera::new(self.swapchain.aspect_ratio());
 
         let mut shader = sha_man.shader_mut(sha_man.handle("test").unwrap());
@@ -348,12 +354,10 @@ impl VulkanBackend {
 
         // --------------------------------------
 
-        if let Some(mut uni) = shader.uniform_handle("local_color") {
-            const ENTYR_0: ResourceHandle = ResourceHandle::new(0);
-            shader.bind_local(0);
-            shader.set_uniform(uni, &[glam::vec4(0.0, 0.0, 1.0, 1.0)])?;
-            shader.apply_local_scope(&self.frame, tex_man, ENTYR_0);
-        }
+        shader.bind_local(0);
+        let local_val: Vec<_> = render_data.transforms.iter().map(|t| t.create_model_mat()).collect();
+        shader.set_local_storage(&local_val);
+        shader.apply_local_scope(&self.frame);
 
         Ok(())
     }
@@ -378,7 +382,7 @@ impl VulkanBackend {
             .with_global_uniform::<glam::Mat4>("view_proj")
             .with_instance_uniform::<glam::Mat4>("dummy")
             .with_instance_sampler("instance_tex_0")?
-            .with_push_constant::<glam::Mat4>("model")
+            .with_local_uniform::<glam::Mat4>("model")
             .build(&self.swapchain, &self.render_pass_data.world_render_pass)?;
 
         println!("create sprite shader: \n{:#?}", shader);
@@ -397,8 +401,7 @@ impl VulkanBackend {
             .with_shared_uniform::<glam::Vec4>("shared_color")
             .with_instance_uniform::<glam::Vec4>("instance_color")
             .with_instance_sampler("instance_tex")?
-            .with_local_uniform::<glam::Vec4>("local_color")
-            .with_push_constant::<glam::Mat4>("model")
+            .with_local_uniform::<glam::Mat4>("model")
             .build(&self.swapchain, &self.render_pass_data.ui_render_pass)?;
 
         println!("create test shader: \n{:#?}", shader);

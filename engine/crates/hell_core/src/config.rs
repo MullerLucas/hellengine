@@ -52,8 +52,9 @@ pub const TEST_SHADER_PATH:   &str = "shaders/test";
 
 pub const VULKAN_UBO_DESCRIPTOR_COUNT: usize = 1024;
 pub const VULKAN_SAMPLER_DESCRIPTOR_COUNT: usize = 4096;
+pub const VULKAN_STORAGE_UBO_DESCRIPTOR_COUNT: usize = 1024;
 
-pub const VULKAN_GUARANTEED_PUSH_CONSTANT_STRIDE: usize= 128;
+pub const VULKAN_GUARANTEED_PUSH_CONSTANT_STRIDE: usize = 128;
 pub const VULKAN_NVIDIA_REQUIRED_ALIGNMENT: usize= 256;
 
 // TODO: think about values
