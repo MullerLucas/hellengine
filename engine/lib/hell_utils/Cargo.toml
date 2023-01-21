@@ -1,9 +1,10 @@
 [package]
-name = "hell_math"
-version = "0.1.0"
-edition = "2021"
+name = "hell_utils"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-num.workspace = true
+hell_error.workspace = true

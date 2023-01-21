@@ -1,0 +1,8 @@
+[package]
+name = "hell_math"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+num.workspace = true

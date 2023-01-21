@@ -1,0 +1,14 @@
+[package]
+name = "hell_app"
+version.workspace = true
+edition.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hell_error.workspace = true
+hell_core.workspace = true
+hell_common.workspace = true
+hell_input.workspace = true
+hell_renderer.workspace = true
+hell_resources.workspace = true

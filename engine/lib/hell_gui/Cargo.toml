@@ -4,6 +4,6 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-hell_common = { path = "../hell_common" }
+hell_common.workspace = true
 
 glam.workspace = true

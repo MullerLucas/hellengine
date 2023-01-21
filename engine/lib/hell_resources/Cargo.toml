@@ -1,0 +1,13 @@
+[package]
+name = "hell_resources"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+hell_core.workspace = true
+hell_error.workspace = true
+
+image.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
