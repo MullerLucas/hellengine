@@ -1,20 +1,30 @@
-SCOPE: GLOBAL
+#INFO
+{
+    crap_ver = 0.1.0;
+    name = "testing/test_shader";
+}
+
+#SCOPE: GLOBAL
 {
     uniform buffer {
         vec4 color;
         mat2 model;
     } global;
 
-    uniform sampler2D texture;
+    uniform sampler2D global_tex;
 }
 
-SCOPE: LOCAL
+#SCOPE: INSTANCE
 {
+    uniform sampler2D instance_tex;
 }
 
-SHADER: VERT
+#SHADER: VERT
 {
-    HELLPROGRAM
+    uniform GLOBAL::global;
+    uniform INSTANCE::instance_tex;
+
+    #HELLPROGRAM
 
     layout(location = 0) in vec3 in_pos;
     layout(location = 1) in vec2 in_tex_coord;
@@ -27,12 +37,14 @@ SHADER: VERT
         // gl_Position = global_ubo.view_proj * push_constants.model * vec4(in_pos, 1.0);
     }
 
-    ENDHELL
+    #ENDHELL
 }
 
-SHADER: FRAG
+#SHADER: FRAG
 {
-    HELLPROGRAM
+    uniform GLOBAL::global_tex;
+
+    #HELLPROGRAM
 
     layout(location = 0) in vec2 in_tex_coord;
     layout(location = 0) out vec4 out_color;
@@ -45,5 +57,5 @@ SHADER: FRAG
         out_color = vec4(1.0, 0.0, 0.0, 1.0);
     }
 
-    ENDHELL
+    #ENDHELL
 }

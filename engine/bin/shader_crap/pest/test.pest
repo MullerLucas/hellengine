@@ -1,26 +1,34 @@
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
-file = { SOI ~ (scope_decl | shader_decl)* ~ EOI }
+file = { SOI ~ (info_decl | scope_decl | shader_decl)* ~ EOI }
 
-scope_decl     = { ^"scope:" ~ ident ~ scope_block }
+info_decl  = { ^"#info" ~ ":"? ~ info_block }
+info_block = { "{" ~ info_var* ~ "}" }
+info_var   = { ident ~ "=" ~ (str_val| ver_val) ~ ";" }
+
+scope_decl     = { ^"#scope:" ~ ident ~ scope_block }
 scope_block    = { "{" ~ (uniform_buffer | uniform_sampler)* ~ "}" }
 
 uniform_buffer  = { "uniform buffer" ~ "{" ~ var_ubo* ~ "}" ~ ident ~ ";" }
 uniform_sampler = { "uniform" ~ type_sampler ~ ident ~ ";" }
+uniform_usage   = { "uniform" ~ ident ~ "::" ~ ident ~ ";" }
 
-shader_decl  = { ^"shader:" ~ ident ~ shader_block }
-shader_block = { "{" ~ "HELLPROGRAM" ~ raw_code ~ "ENDHELL" ~ "}" }
+shader_decl  = { ^"#shader:" ~ ident ~ shader_block }
+shader_block = { "{" ~ uniform_usage* ~ "#HELLPROGRAM" ~ raw_code ~ "#ENDHELL" ~ "}" }
 
-raw_code      = { raw_code_line+ }
-raw_code_line = ${ !("HELLPROGRAM" | "ENDHELL") ~ (!"\n" ~ ANY)* }
-__raw_code_line = ${ !("HELLPROGRAM" | "ENDHELL") ~ (ASCII_ALPHANUMERIC | "[" | "]" | "/" | "." | "," | "*" | "_" | " " | "(" | ")" | "{" | "}" | "=" | ";")* }
+raw_code        = { raw_code_line+ }
+raw_code_line   = ${ !("#HELLPROGRAM" | "#ENDHELL") ~ (!"\n" ~ ANY)* }
+__raw_code_line = ${ !("#HELLPROGRAM" | "#ENDHELL") ~ (ASCII_ALPHANUMERIC | "[" | "]" | "/" | "." | "," | "*" | "_" | " " | "(" | ")" | "{" | "}" | "=" | ";")* }
 
-ident = @{ ASCII_ALPHANUMERIC+ }
-
+ident   = @{ (ASCII_ALPHANUMERIC | "_" )+ }
 var_ubo      = { type_ubo ~ ident ~ ";" ~ NEWLINE? }
 type_ubo     = { (type_scalar | type_vec | type_mat) }
 type_scalar  = { "bool" | "int" | "uint" | "float" }
 type_vec     = { ("b" | "i" | "u" | "d")? ~ "vec" ~ '2'..'4' }
 type_mat     = { "d"? ~ "mat" ~ '2'..'4' }
 type_sampler = { "sampler2D" ~ "_ARRAY"? }
+
+ver_val       = @{ (ASCII_ALPHANUMERIC ~ "."?)+ }
+str_val       = ${ "\"" ~ str_val_inner ~ "\"" }
+str_val_inner = ${ (ASCII_ALPHANUMERIC | "/" | "_" | ".")* }
 
