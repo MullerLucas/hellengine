@@ -4,7 +4,7 @@ file = { SOI ~ (info_decl | scope_decl | shader_decl)* ~ EOI }
 
 info_decl  = { ^"#info" ~ ":"? ~ info_block }
 info_block = { "{" ~ info_var* ~ "}" }
-info_var   = { ident ~ "=" ~ (str_val| ver_val) ~ ";" }
+info_var   = { ident ~ "=" ~ (str_val | ver_val) ~ ";" }
 
 scope_decl     = { ^"#scope:" ~ ident ~ scope_block }
 scope_block    = { "{" ~ (uniform_buffer | uniform_sampler)* ~ "}" }

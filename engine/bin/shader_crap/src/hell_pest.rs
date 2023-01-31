@@ -26,14 +26,14 @@ pub fn run() -> HellResult<()> {
 
         match pair.as_rule() {
             Rule::info_decl   => {
-                res.info = Some(CrapInfoDef::new(pair.into_inner())?);
+                res.info = Some(CrapInfoDef::new(pair.into_inner()));
             },
             Rule::scope_decl  => {
-                let scope = CrapScopeDef::new(pair.into_inner())?;
+                let scope = CrapScopeDef::new(pair.into_inner());
                 res.scopes.insert(scope.name.clone().to_string(), scope);
             },
             Rule::shader_decl => {
-                let shader = CrapShaderDef::new(pair.into_inner())?;
+                let shader = CrapShaderDef::new(pair.into_inner());
                 res.shaders.insert(shader.name.clone(), shader);
             },
             Rule::EOI => { }
@@ -73,12 +73,41 @@ impl CrapFile {
 // ----------------------------------------------------------------------------
 
 #[derive(Debug)]
-pub struct CrapInfoDef { }
+pub struct CrapInfoDef {
+    pub crap_ver: CrapInfoVarDef,
+    pub name: CrapInfoVarDef,
+}
 
 impl CrapInfoDef {
-    pub fn new(pairs: Pairs<Rule>) -> HellResult<Self> {
-        println!("info =============: {:?}", pairs);
-        Ok(Self { })
+    pub fn new(mut pairs: Pairs<Rule>) -> Self {
+        let mut info_block = pairs.next().unwrap().into_inner();
+        let crap_ver = CrapInfoVarDef::new(info_block.next().unwrap().into_inner());
+        let name = CrapInfoVarDef::new(info_block.next().unwrap().into_inner());
+
+        Self {
+            crap_ver,
+            name,
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+#[derive(Debug)]
+pub struct CrapInfoVarDef {
+    pub ident: String,
+    pub val: String,
+}
+
+impl CrapInfoVarDef {
+    pub fn new(mut pairs: Pairs<Rule>) -> Self {
+        let ident = pairs.next().unwrap().as_str().to_lowercase();
+        let val = pairs.next().unwrap().as_str().to_lowercase();
+
+        Self {
+            ident,
+            val,
+        }
     }
 }
 
@@ -87,16 +116,102 @@ impl CrapInfoDef {
 #[derive(Debug)]
 pub struct CrapScopeDef {
     pub name: String,
+    pub buffers: Vec<CrapUniformBufferDef>,
+    pub samplers: Vec<CrapUniformSamplerDef>,
 }
 
 impl CrapScopeDef {
-    pub fn new(mut pairs: Pairs<Rule>) -> HellResult<Self> {
-        println!("scope =============: {:?}", pairs);
-        let name = pairs.next().unwrap().as_str().to_lowercase();
+    pub fn new(mut pairs: Pairs<Rule>) -> Self {
+        // println!("scope =============: {:?}", pairs);
 
-        Ok(Self {
+        let name = pairs.next().unwrap().as_str().to_lowercase();
+        let scope_block = pairs.next().unwrap().into_inner();
+
+        let mut buffers = Vec::new();
+        let mut samplers = Vec::new();
+
+        for pair in scope_block {
+            match pair.as_rule() {
+                Rule::uniform_buffer => {
+                    buffers.push(CrapUniformBufferDef::new(pair.into_inner()));
+                }
+                Rule::uniform_sampler => {
+                    samplers.push(CrapUniformSamplerDef::new(pair.into_inner()));
+                },
+                _ => unreachable!()
+            }
+        }
+
+        Self {
             name,
-        })
+            buffers,
+            samplers,
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+#[derive(Debug)]
+pub struct CrapUniformBufferDef {
+    pub var_ubos: Vec<CrapVarUboDef>,
+    pub ident: String,
+}
+
+impl CrapUniformBufferDef {
+    pub fn new(mut pairs: Pairs<Rule>) -> Self {
+        let mut var_ubos = Vec::new();
+
+        while let Rule::var_ubo = pairs.peek().unwrap().as_rule() {
+            var_ubos.push(CrapVarUboDef::new(pairs.next().unwrap().into_inner()));
+        }
+
+        let ident = pairs.next().unwrap().as_str().to_lowercase();
+
+        Self {
+            ident,
+            var_ubos,
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+#[derive(Debug)]
+pub struct CrapVarUboDef {
+    pub type_ubo: String,
+    pub ident: String
+}
+
+impl CrapVarUboDef {
+    pub fn new(mut pairs: Pairs<Rule>) -> Self {
+        let type_ubo = pairs.next().unwrap().as_str().to_lowercase();
+        let ident = pairs.next().unwrap().as_str().to_lowercase();
+
+        Self {
+            type_ubo,
+            ident,
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+#[derive(Debug)]
+pub struct CrapUniformSamplerDef {
+    pub type_sampler: String,
+    pub ident: String,
+}
+
+impl CrapUniformSamplerDef {
+    pub fn new(mut pairs: Pairs<Rule>) -> Self {
+        let type_sampler = pairs.next().unwrap().as_str().to_string();
+        let ident = pairs.next().unwrap().as_str().to_lowercase();
+
+        Self {
+            ident,
+            type_sampler,
+        }
     }
 }
 
@@ -108,13 +223,13 @@ pub struct CrapShaderDef {
 }
 
 impl CrapShaderDef {
-    pub fn new(mut pairs: Pairs<Rule>) -> HellResult<Self> {
+    pub fn new(mut pairs: Pairs<Rule>) -> Self {
         println!("shader =============: {:?}", pairs);
         let name = pairs.next().unwrap().as_str().to_lowercase();
 
-        Ok(Self {
+        Self {
             name,
-        })
+        }
     }
 }
 
