@@ -220,17 +220,68 @@ impl CrapUniformSamplerDef {
 #[derive(Debug)]
 pub struct CrapShaderDef {
     pub name: String,
+    pub uniform_usages: Vec<CrapUniformUsage>,
+    pub raw_code: CrapRawCode,
 }
 
 impl CrapShaderDef {
     pub fn new(mut pairs: Pairs<Rule>) -> Self {
         println!("shader =============: {:?}", pairs);
         let name = pairs.next().unwrap().as_str().to_lowercase();
+        let mut shader_block = pairs.next().unwrap().into_inner();
+        let mut uniform_usages = Vec::new();
+
+        while let(Rule::uniform_usage) = shader_block.peek().unwrap().as_rule() {
+            uniform_usages.push(CrapUniformUsage::new(shader_block.next().unwrap().into_inner()))
+        }
+
+        let raw_code = CrapRawCode::new(&shader_block.next().unwrap());
+
 
         Self {
             name,
+            uniform_usages,
+            raw_code,
         }
     }
 }
+
+// -----------------------------------------------------------------------------
+
+#[derive(Debug)]
+pub struct CrapUniformUsage {
+    pub scope_ident: String,
+    pub field_ident: String,
+}
+
+impl CrapUniformUsage {
+    pub fn new(mut pairs: Pairs<Rule>) -> Self {
+        let scope_ident = pairs.next().unwrap().as_str().to_lowercase();
+        let field_ident = pairs.next().unwrap().as_str().to_lowercase();
+
+        Self {
+            scope_ident,
+            field_ident,
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+#[derive(Debug)]
+pub struct CrapRawCode {
+    pub code: String,
+}
+
+impl CrapRawCode {
+    pub fn new(pair: &Pair<Rule>) -> Self {
+        let code = pair.as_str().to_owned();
+
+        Self {
+            code ,
+        }
+    }
+}
+
 
 // -----------------------------------------------------------------------------
