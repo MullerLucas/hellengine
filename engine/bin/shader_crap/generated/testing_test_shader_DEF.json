@@ -1,0 +1,66 @@
+{
+  "info": {
+    "version": "0.1.0",
+    "name": "testing/test_shader"
+  },
+  "scopes": {
+    "global": {
+      "name": "global",
+      "buffers": [
+        {
+          "ident": "global",
+          "var_ubos": [
+            {
+              "type_ubo": "Vec4",
+              "ident": "color"
+            },
+            {
+              "type_ubo": "Mat2",
+              "ident": "model"
+            }
+          ]
+        }
+      ],
+      "samplers": [
+        {
+          "type_sampler": "Sampler2d",
+          "ident": "global_tex"
+        }
+      ]
+    },
+    "instance": {
+      "name": "instance",
+      "buffers": [],
+      "samplers": [
+        {
+          "type_sampler": "Sampler2d",
+          "ident": "instance_tex"
+        }
+      ]
+    }
+  },
+  "shaders": {
+    "frag": {
+      "name": "frag",
+      "uniform_usages": [
+        {
+          "scope_type": "Global",
+          "ident": "global_tex"
+        }
+      ]
+    },
+    "vert": {
+      "name": "vert",
+      "uniform_usages": [
+        {
+          "scope_type": "Global",
+          "ident": "global"
+        },
+        {
+          "scope_type": "Instance",
+          "ident": "instance_tex"
+        }
+      ]
+    }
+  }
+}

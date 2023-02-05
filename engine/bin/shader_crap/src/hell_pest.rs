@@ -1,40 +1,37 @@
-use std::{hint::unreachable_unchecked, collections::HashMap};
+use std::{hint::unreachable_unchecked, collections::HashMap, borrow::Borrow, path::Path, fs};
 
+use hell_collections::DynArray;
 use hell_error::HellResult;
 use pest::{self, Parser, iterators::{Pair, Pairs}};
 use pest_derive::{self, Parser};
 
+use crate::{shader_definition::{ShaderProgramInfoConfig, ShaderProgramConfig, ShaderProgramScopeConfig, ShaderProgramBufferConfig, ShaderProgramUboVarConfig, ShaderProgramSamplerConfig, ShaderProgramShaderConfig, ShaderProgramUniformUsage}, GlslType, ShaderScopeType};
+
 
 #[derive(Parser)]
 #[grammar = "pest/test.pest"]
-pub struct CSVParser;
+pub struct CrapParser;
 
 pub fn run() -> HellResult<()> {
     let input = std::fs::read_to_string("pest/test.glsl").unwrap();
-    println!("START");
-    let file = CSVParser::parse(Rule::file, &input).unwrap()
+    let file = CrapParser::parse(Rule::file, &input).unwrap()
         .next().unwrap()
         .into_inner();
 
-    println!("DONE");
-
-    // println!("{:#?}", file);
-    let mut res = CrapFile::new();
+    let mut result = CrapFile::new();
 
     for pair in file {
-        // println!("PAIR: {:?}", pair);
-
         match pair.as_rule() {
             Rule::info_decl   => {
-                res.info = Some(CrapInfoDef::new(pair.into_inner()));
+                result.info = Some(CrapInfoDef::new(pair.into_inner()));
             },
             Rule::scope_decl  => {
                 let scope = CrapScopeDef::new(pair.into_inner());
-                res.scopes.insert(scope.name.clone().to_string(), scope);
+                result.scopes.insert(scope.name, scope);
             },
             Rule::shader_decl => {
                 let shader = CrapShaderDef::new(pair.into_inner());
-                res.shaders.insert(shader.name.clone(), shader);
+                result.shaders.insert(shader.ident, shader);
             },
             Rule::EOI => { }
             _ => {
@@ -45,8 +42,19 @@ pub fn run() -> HellResult<()> {
         }
     }
 
-    println!("RESULT: ======================================================================");
-    println!("{:#?}", res);
+    let config: ShaderProgramConfig = result.borrow().into();
+    let shader_file = config.info.generate_path();
+    let out_dir = std::path::Path::new("./generated");
+    std::fs::write(
+        out_dir.join(format!("{}_DEF.json", shader_file)),
+        serde_json::to_string_pretty(&config).unwrap()
+    );
+    std::fs::write(
+        out_dir.join(format!("{}_DEF.yaml", shader_file)),
+        serde_yaml::to_string(&config).unwrap()
+    );
+
+    result.shaders.iter().for_each(|(k, s)| s.write_files(out_dir, shader_file.clone(), &result.scopes).unwrap());
 
     Ok(())
 }
@@ -54,13 +62,13 @@ pub fn run() -> HellResult<()> {
 // ----------------------------------------------------------------------------
 
 #[derive(Debug)]
-pub struct CrapFile {
-    pub info: Option<CrapInfoDef>,
-    pub scopes: HashMap<String, CrapScopeDef>,
-    pub shaders: HashMap<String, CrapShaderDef>,
+pub struct CrapFile<'a> {
+    pub info: Option<CrapInfoDef<'a>>,
+    pub scopes: HashMap<&'a str, CrapScopeDef<'a>>,
+    pub shaders: HashMap<&'a str, CrapShaderDef<'a>>,
 }
 
-impl CrapFile {
+impl<'a> CrapFile<'a> {
     pub fn new() -> Self {
         Self {
             info: None,
@@ -70,43 +78,62 @@ impl CrapFile {
     }
 }
 
+impl Into<ShaderProgramConfig> for &CrapFile<'_> {
+    fn into(self) -> ShaderProgramConfig {
+        ShaderProgramConfig {
+            info: self.info.as_ref().unwrap().into(),
+            scopes: self.scopes.iter().map(|(k , s)| (k.to_lowercase(), s.into())).collect(),
+            shaders: self.shaders.iter().map(|(k , s)| (k.to_lowercase(), s.into())).collect(),
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 
 #[derive(Debug)]
-pub struct CrapInfoDef {
-    pub crap_ver: CrapInfoVarDef,
-    pub name: CrapInfoVarDef,
+pub struct CrapInfoDef<'a> {
+    pub fields: HashMap<&'a str, CrapInfoVarDef<'a>>,
 }
 
-impl CrapInfoDef {
-    pub fn new(mut pairs: Pairs<Rule>) -> Self {
+impl<'a> CrapInfoDef<'a> {
+    pub fn new(mut pairs: Pairs<'a, Rule>) -> Self {
         let mut info_block = pairs.next().unwrap().into_inner();
-        let crap_ver = CrapInfoVarDef::new(info_block.next().unwrap().into_inner());
-        let name = CrapInfoVarDef::new(info_block.next().unwrap().into_inner());
+        let mut fields = HashMap::new();
 
-        Self {
-            crap_ver,
-            name,
+        while let Some(Rule::info_var) = info_block.peek().and_then(|b| Some(b.as_rule())) {
+            let field = CrapInfoVarDef::new(info_block.next().unwrap().into_inner());
+            fields.insert(field.ident, field);
         }
+
+        Self { fields }
+    }
+}
+
+impl Into<ShaderProgramInfoConfig> for &CrapInfoDef<'_> {
+    fn into(self) -> ShaderProgramInfoConfig {
+        ShaderProgramInfoConfig::from_raw(
+            self.fields["version"].value,
+            self.fields["name"].value,
+        )
     }
 }
 
 // -----------------------------------------------------------------------------
 
 #[derive(Debug)]
-pub struct CrapInfoVarDef {
-    pub ident: String,
-    pub val: String,
+pub struct CrapInfoVarDef<'a> {
+    pub ident: &'a str,
+    pub value: &'a str,
 }
 
-impl CrapInfoVarDef {
-    pub fn new(mut pairs: Pairs<Rule>) -> Self {
-        let ident = pairs.next().unwrap().as_str().to_lowercase();
-        let val = pairs.next().unwrap().as_str().to_lowercase();
+impl<'a> CrapInfoVarDef<'a> {
+    pub fn new(mut pairs: Pairs<'a, Rule>) -> Self {
+        let ident = pairs.next().unwrap().as_str();
+        let val = pairs.next().unwrap().as_str();
 
         Self {
             ident,
-            val,
+            value: val,
         }
     }
 }
@@ -114,21 +141,24 @@ impl CrapInfoVarDef {
 // -----------------------------------------------------------------------------
 
 #[derive(Debug)]
-pub struct CrapScopeDef {
-    pub name: String,
-    pub buffers: Vec<CrapUniformBufferDef>,
-    pub samplers: Vec<CrapUniformSamplerDef>,
+pub struct CrapScopeDef<'a> {
+    pub name: &'a str,
+    pub buffers: DynArray<CrapUniformBufferDef<'a>, {CrapScopeDef::MAX_BUFFERS}>,
+    pub samplers: DynArray<CrapUniformSamplerDef<'a>, {CrapScopeDef::MAX_SAMPLERS}>,
 }
 
-impl CrapScopeDef {
-    pub fn new(mut pairs: Pairs<Rule>) -> Self {
+impl<'a> CrapScopeDef<'a> {
+    pub const MAX_BUFFERS: usize = 10;
+    pub const MAX_SAMPLERS: usize = 10;
+
+    pub fn new(mut pairs: Pairs<'a, Rule>) -> Self {
         // println!("scope =============: {:?}", pairs);
 
-        let name = pairs.next().unwrap().as_str().to_lowercase();
+        let name = pairs.next().unwrap().as_str();
         let scope_block = pairs.next().unwrap().into_inner();
 
-        let mut buffers = Vec::new();
-        let mut samplers = Vec::new();
+        let mut buffers = DynArray::from_default();
+        let mut samplers = DynArray::from_default();
 
         for pair in scope_block {
             match pair.as_rule() {
@@ -150,23 +180,35 @@ impl CrapScopeDef {
     }
 }
 
-// -----------------------------------------------------------------------------
-
-#[derive(Debug)]
-pub struct CrapUniformBufferDef {
-    pub var_ubos: Vec<CrapVarUboDef>,
-    pub ident: String,
+impl Into<ShaderProgramScopeConfig> for &CrapScopeDef<'_> {
+    fn into(self) -> ShaderProgramScopeConfig {
+        ShaderProgramScopeConfig::from_raw(
+            self.name,
+            self.buffers.as_slice().iter().map(|b| b.into()).collect(),
+            self.samplers.as_slice().iter().map(|s| s.into()).collect(),
+        )
+    }
 }
 
-impl CrapUniformBufferDef {
-    pub fn new(mut pairs: Pairs<Rule>) -> Self {
-        let mut var_ubos = Vec::new();
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Default)]
+pub struct CrapUniformBufferDef<'a> {
+    pub var_ubos: DynArray<CrapVarUboDef<'a>, {CrapUniformBufferDef::MAX_VARS}>,
+    pub ident: &'a str,
+}
+
+impl<'a> CrapUniformBufferDef<'a> {
+    pub const MAX_VARS: usize = 100;
+
+    pub fn new(mut pairs: Pairs<'a, Rule>) -> Self {
+        let mut var_ubos = DynArray::from_fn(|_| CrapVarUboDef::default());
 
         while let Rule::var_ubo = pairs.peek().unwrap().as_rule() {
             var_ubos.push(CrapVarUboDef::new(pairs.next().unwrap().into_inner()));
         }
 
-        let ident = pairs.next().unwrap().as_str().to_lowercase();
+        let ident = pairs.next().unwrap().as_str();
 
         Self {
             ident,
@@ -175,18 +217,27 @@ impl CrapUniformBufferDef {
     }
 }
 
-// -----------------------------------------------------------------------------
-
-#[derive(Debug)]
-pub struct CrapVarUboDef {
-    pub type_ubo: String,
-    pub ident: String
+impl Into<ShaderProgramBufferConfig> for &CrapUniformBufferDef<'_> {
+    fn into(self) -> ShaderProgramBufferConfig {
+        ShaderProgramBufferConfig::from_raw(
+            self.ident,
+            self.var_ubos.as_slice().iter().map(|v| v.into()).collect(),
+        ).unwrap()
+    }
 }
 
-impl CrapVarUboDef {
-    pub fn new(mut pairs: Pairs<Rule>) -> Self {
-        let type_ubo = pairs.next().unwrap().as_str().to_lowercase();
-        let ident = pairs.next().unwrap().as_str().to_lowercase();
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Default)]
+pub struct CrapVarUboDef<'a> {
+    pub type_ubo: &'a str,
+    pub ident: &'a str
+}
+
+impl<'a> CrapVarUboDef<'a> {
+    pub fn new(mut pairs: Pairs<'a, Rule>) -> Self {
+        let type_ubo = pairs.next().unwrap().as_str();
+        let ident = pairs.next().unwrap().as_str();
 
         Self {
             type_ubo,
@@ -195,18 +246,24 @@ impl CrapVarUboDef {
     }
 }
 
-// -----------------------------------------------------------------------------
-
-#[derive(Debug)]
-pub struct CrapUniformSamplerDef {
-    pub type_sampler: String,
-    pub ident: String,
+impl Into<ShaderProgramUboVarConfig> for &CrapVarUboDef<'_> {
+    fn into(self) -> ShaderProgramUboVarConfig {
+        ShaderProgramUboVarConfig::from_raw(self.type_ubo, self.ident).unwrap()
+    }
 }
 
-impl CrapUniformSamplerDef {
-    pub fn new(mut pairs: Pairs<Rule>) -> Self {
-        let type_sampler = pairs.next().unwrap().as_str().to_string();
-        let ident = pairs.next().unwrap().as_str().to_lowercase();
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Default)]
+pub struct CrapUniformSamplerDef<'a> {
+    pub type_sampler: &'a str,
+    pub ident: &'a str,
+}
+
+impl<'a> CrapUniformSamplerDef<'a> {
+    pub fn new(mut pairs: Pairs<'a, Rule>) -> Self {
+        let type_sampler = pairs.next().unwrap().as_str();
+        let ident = pairs.next().unwrap().as_str();
 
         Self {
             ident,
@@ -215,70 +272,105 @@ impl CrapUniformSamplerDef {
     }
 }
 
+impl Into<ShaderProgramSamplerConfig> for &CrapUniformSamplerDef<'_> {
+    fn into(self) -> ShaderProgramSamplerConfig {
+        ShaderProgramSamplerConfig::from_raw(self.type_sampler, self.ident).unwrap()
+    }
+}
+
 // -----------------------------------------------------------------------------
 
 #[derive(Debug)]
-pub struct CrapShaderDef {
-    pub name: String,
-    pub uniform_usages: Vec<CrapUniformUsage>,
-    pub raw_code: CrapRawCode,
+pub struct CrapShaderDef<'a> {
+    pub ident: &'a str,
+    pub uniform_usages: DynArray<CrapUniformUsage<'a>, {CrapShaderDef::MAX_UNIFORM_USAGES}>,
+    pub raw_code: CrapRawCode<'a>,
 }
 
-impl CrapShaderDef {
-    pub fn new(mut pairs: Pairs<Rule>) -> Self {
-        println!("shader =============: {:?}", pairs);
-        let name = pairs.next().unwrap().as_str().to_lowercase();
+impl<'a> CrapShaderDef<'a> {
+    pub const MAX_UNIFORM_USAGES: usize = 100;
+
+    pub fn new(mut pairs: Pairs<'a, Rule>) -> Self {
+        let name = pairs.next().unwrap().as_str();
         let mut shader_block = pairs.next().unwrap().into_inner();
-        let mut uniform_usages = Vec::new();
+
+        let mut uniform_usages = DynArray::from_default();
 
         while let(Rule::uniform_usage) = shader_block.peek().unwrap().as_rule() {
             uniform_usages.push(CrapUniformUsage::new(shader_block.next().unwrap().into_inner()))
         }
 
-        let raw_code = CrapRawCode::new(&shader_block.next().unwrap());
-
+        let raw_code = CrapRawCode::new(shader_block.next().unwrap());
 
         Self {
-            name,
+            ident: name,
             uniform_usages,
             raw_code,
         }
     }
+
+    pub fn write_files(&self, base_path: &Path, mut file_stem: String, scopes: &HashMap<&str, CrapScopeDef>) -> HellResult<()> {
+        let file_name = format!("{}_{}.glsl", file_stem, self.ident);
+        let file_path = base_path.join(file_name);
+
+        let mut code = self.raw_code.code.to_owned();
+        code.insert_str(0, "\t");
+
+        fs::create_dir_all(base_path)?;
+        fs::write(file_path, code)?;
+
+        Ok(())
+    }
+}
+
+impl Into<ShaderProgramShaderConfig> for &CrapShaderDef<'_> {
+    fn into(self) -> ShaderProgramShaderConfig {
+        ShaderProgramShaderConfig::from_raw(
+            self.ident,
+            self.uniform_usages.as_slice().iter().map(|u| u.into()).collect(),
+        )
+    }
 }
 
 // -----------------------------------------------------------------------------
 
-#[derive(Debug)]
-pub struct CrapUniformUsage {
-    pub scope_ident: String,
-    pub field_ident: String,
+#[derive(Debug, Default)]
+pub struct CrapUniformUsage<'a> {
+    pub scope_type: &'a str,
+    pub ident: &'a str,
 }
 
-impl CrapUniformUsage {
-    pub fn new(mut pairs: Pairs<Rule>) -> Self {
-        let scope_ident = pairs.next().unwrap().as_str().to_lowercase();
-        let field_ident = pairs.next().unwrap().as_str().to_lowercase();
+impl<'a> CrapUniformUsage<'a> {
+    pub fn new(mut pairs: Pairs<'a, Rule>) -> Self {
+        let scope_ident = pairs.next().unwrap().as_str();
+        let field_ident = pairs.next().unwrap().as_str();
 
         Self {
-            scope_ident,
-            field_ident,
+            scope_type: scope_ident,
+            ident: field_ident,
         }
+    }
+}
+
+impl Into<ShaderProgramUniformUsage> for &CrapUniformUsage<'_> {
+    fn into(self) -> ShaderProgramUniformUsage {
+        ShaderProgramUniformUsage::from_raw(self.scope_type, self.ident).unwrap()
     }
 }
 
 // -----------------------------------------------------------------------------
 
 #[derive(Debug)]
-pub struct CrapRawCode {
-    pub code: String,
+pub struct CrapRawCode<'a> {
+    pub code: &'a str,
 }
 
-impl CrapRawCode {
-    pub fn new(pair: &Pair<Rule>) -> Self {
-        let code = pair.as_str().to_owned();
+impl<'a> CrapRawCode<'a> {
+    pub fn new(pair: Pair<'a, Rule>) -> Self {
+        let code = pair.as_str();
 
         Self {
-            code ,
+            code,
         }
     }
 }

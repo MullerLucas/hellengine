@@ -20,13 +20,13 @@ raw_code        = { raw_code_line+ }
 raw_code_line   = ${ !("#HELLPROGRAM" | "#ENDHELL") ~ (!"\n" ~ ANY)* }
 __raw_code_line = ${ !("#HELLPROGRAM" | "#ENDHELL") ~ (ASCII_ALPHANUMERIC | "[" | "]" | "/" | "." | "," | "*" | "_" | " " | "(" | ")" | "{" | "}" | "=" | ";")* }
 
-ident   = @{ (ASCII_ALPHANUMERIC | "_" )+ }
+ident        = @{ (ASCII_ALPHANUMERIC | "_" )+ }
 var_ubo      = { type_ubo ~ ident ~ ";" ~ NEWLINE? }
 type_ubo     = { (type_scalar | type_vec | type_mat) }
 type_scalar  = { "bool" | "int" | "uint" | "float" }
 type_vec     = { ("b" | "i" | "u" | "d")? ~ "vec" ~ '2'..'4' }
 type_mat     = { "d"? ~ "mat" ~ '2'..'4' }
-type_sampler = { "sampler2D" ~ "_ARRAY"? }
+type_sampler = @{ "sampler2D" ~ "_ARRAY"? }
 
 ver_val       = @{ (ASCII_ALPHANUMERIC ~ "."?)+ }
 str_val       = ${ "\"" ~ str_val_inner ~ "\"" }

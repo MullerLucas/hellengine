@@ -1,6 +1,6 @@
 #INFO
 {
-    crap_ver = 0.1.0;
+    version = 0.1.0;
     name = "testing/test_shader";
 }
 

@@ -1,6 +1,7 @@
 #![allow(unused)]
 
 mod hell_pest;
+mod shader_definition;
 
 
 use num_derive::FromPrimitive;
@@ -12,7 +13,7 @@ use std::{fs, str::{Lines, FromStr}, path::Path, array};
 use hell_error::{HellResult, HellError, HellErrorHelper};
 
 /// [opengl-wiki](https://www.khronos.org/opengl/wiki/Data_Type_(GLSL))
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub enum GlslType {
     // Scalars
     Bool,
@@ -84,6 +85,13 @@ impl GlslType {
             GlslType::Sampler2dArray => { true }
             _ => { false }
         }
+    }
+}
+
+impl TryFrom<&str> for GlslType {
+    type Error = HellError;
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::from_str(value)
     }
 }
 
@@ -203,41 +211,8 @@ pub enum GlslValue {
 
 // ----------------------------------------------------------------------------
 
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-struct GlslVarDeclaration<'a> {
-    pub var_type: GlslType,
-    pub var_name: &'a str,
-    pub var_val: Option<GlslValue>
-}
-
-impl<'a> GlslVarDeclaration<'a> {
-    pub fn parse_txt(txt: &'a str) -> Option<Self> {
-        if let Some((var_type_raw, var_name)) = txt.trim_start().split_once(" ") {
-            let var_type = GlslType::from_str(var_type_raw).ok()?;
-            let var_name = var_name.trim_end_matches(';');
-
-            return Some(Self {
-                var_type,
-                var_name,
-                var_val: None,
-            });
-        }
-
-        None
-    }
-}
-
-impl<'a> std::fmt::Display for GlslVarDeclaration<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {};", self.var_type, self.var_name)
-    }
-}
-
-// ----------------------------------------------------------------------------
-
-#[derive(Default, Debug, Clone, Copy, FromPrimitive)]
-enum ShaderScopeType {
+#[derive(Default, Debug, Clone, Copy, FromPrimitive, serde::Serialize, serde::Deserialize)]
+pub enum ShaderScopeType {
     #[default]
     Global = 0,
     Shared,
@@ -270,14 +245,22 @@ impl ShaderScopeType {
 impl ShaderScopeType {
     fn parse_txt(txt: &str) -> Option<Self> {
         match txt.trim() {
-            "global"   => Some(Self::Global),
-            "shared"   => Some(Self::Shared),
-            "instance" => Some(Self::Instance),
-            "local"    => Some(Self::Local),
+            "global"|"GLOBAL"   => Some(Self::Global),
+            "shared"|"SHARED"   => Some(Self::Shared),
+            "instance"|"INSTANCE" => Some(Self::Instance),
+            "local"|"LOCAL"    => Some(Self::Local),
             _ => None,
         }
     }
 }
+
+impl TryFrom<&str> for ShaderScopeType {
+    type Error = HellError;
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::parse_txt(value).ok_or_else(|| HellErrorHelper::render_msg_err("failed to parse shader-scope"))
+    }
+}
+
 
 // ----------------------------------------------------------------------------
 
@@ -303,316 +286,7 @@ impl ShaderType {
 
 // ----------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy)]
-enum HellInstruction {
-    DefineScope(ShaderScopeType),
-    UseScope(ShaderScopeType),
-    DefineShader(ShaderType),
-    // DefineUniform(&'str),
-}
-
-impl HellInstruction {
-    pub fn define_scope(after: &str) -> Option<Self> {
-        ShaderScopeType::parse_txt(after).and_then(|s| Some(Self::DefineScope(s)))
-    }
-
-    pub fn use_scope(after: &str) -> Option<Self> {
-        ShaderScopeType::parse_txt(after).and_then(|s| Some(Self::UseScope(s)))
-    }
-
-    pub fn define_shader(after: &str) -> Option<Self> {
-        ShaderType::parse_txt(after).and_then(|s| Some(Self::DefineShader(s)))
-    }
-}
-
-// ----------------------------------------------------------------------------
-
-impl HellInstruction {
-    pub fn parse_txt(txt: &str) -> Option<HellInstruction> {
-        const PATTERNS: &[&str] = &[
-            "scope",
-            "use-scope",
-            "shader",
-        ];
-
-        const GENERATORS: &[fn(&str) -> Option<HellInstruction>] = &[
-            HellInstruction::define_scope,
-            HellInstruction::use_scope,
-            HellInstruction::define_shader,
-        ];
-
-        let txt = txt.trim_start();
-        println!("parse-instr: '{}'", txt);
-
-        for (pat, gen) in PATTERNS.iter().zip(GENERATORS) {
-            let res = Self::check_txt(*pat, txt, *gen);
-            if res.is_some() { return res; }
-        }
-
-        None
-    }
-
-    fn check_txt(pat: &str, txt: &str, gen: fn(&str) -> Option<Self>) -> Option<Self> {
-        if txt.starts_with(pat) {
-            gen(&txt[pat.len()..])
-        } else {
-            None
-        }
-    }
-}
-
-// ----------------------------------------------------------------------------
-
-#[derive(Debug)]
-enum HellLine<'a> {
-    Invalid(&'a str),
-    Instruction(HellInstruction),
-    UniformDeclaration(GlslVarDeclaration<'a>),
-    PlainText(&'a str),
-    Comment(&'a str),
-}
-
-impl<'a> HellLine<'a> {
-    pub fn parce_line(line: &'a str) -> Self {
-        const INSTR_PAT: &str = "#hell";
-        const COMMENT_PAT: &str = "//";
-
-        let line = line.trim();
-
-        if line.starts_with(INSTR_PAT) {
-            if let Some(instr) = HellInstruction::parse_txt(&line[INSTR_PAT.len()..]) {
-                return HellLine::Instruction(instr);
-            }
-            return HellLine::Invalid(line);
-        }
-
-        if let Some(decl) = GlslVarDeclaration::parse_txt(line) {
-            return HellLine::UniformDeclaration(decl);
-        }
-
-        if line.starts_with(COMMENT_PAT) {
-        return HellLine::Comment(&line[COMMENT_PAT.len()..]);
-    }
-
-        HellLine::PlainText(line)
-    }
-}
-
-struct HellLineIter<'a> {
-    lines: Lines<'a>,
-}
-
-impl<'a> From<&'a str> for HellLineIter<'a> {
-    fn from(val: &'a str) -> Self {
-        Self { lines: val.lines() }
-    }
-}
-
-impl<'a> Iterator for HellLineIter<'a> {
-    type Item = HellLine<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.lines.next().and_then(|l| {
-            Some(HellLine::parce_line(l))
-        })
-    }
-}
-
-
-// ----------------------------------------------------------------------------
-
-
-#[derive(Debug)]
-struct ScopeInfo<'a> {
-    pub is_used: bool,
-    pub scope_type: ShaderScopeType,
-    pub set: usize,
-    pub binding: usize,
-    pub uniforms: Vec<GlslVarDeclaration<'a>>,
-}
-
-impl<'a> ScopeInfo<'a> {
-    pub fn new(scope_type: ShaderScopeType) -> Self {
-        Self {
-            is_used: false,
-            scope_type,
-            set: 0,
-            binding: 0,
-            uniforms: Vec::new(),
-        }
-    }
-
-    pub fn finalize(&mut self, set_idx: usize) {
-        self.set = set_idx;
-        // self.uniforms.iter_mut()
-        //     .filter(|u| u.var_type.is_sampler())
-        //     .enumerate()
-        //     .for_each(|(idx, u)| {
-        //         u.bin
-        //     })
-    }
-}
-
-impl<'a> std::fmt::Display for ScopeInfo<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.is_used {
-            writeln!(f, "layout(set = {}, binding = {}) {} {{", self.set, self.binding, self.scope_type.struct_name())?;
-            for uniform in &self.uniforms {
-                writeln!(f, "\t{}", uniform)?;
-            }
-            writeln!(f, "}} {};", self.scope_type.struct_typedef())?;
-        }
-
-        Ok(())
-    }
-}
-
-// ----------------------------------------------------------------------------
-
-#[allow(dead_code)]
-#[derive(Debug, Default)]
-struct ShaderInfo {
-    pub is_used: bool,
-    pub body: String,
-}
-
-impl std::fmt::Display for ShaderInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.body)
-    }
-}
-
-
-// ----------------------------------------------------------------------------
-
-struct ShaderParser<'a> {
-    lines: HellLineIter<'a>,
-    scopes: [ScopeInfo<'a>; ShaderScopeType::SCOPE_COUNT],
-    shaders: [ShaderInfo; ShaderType::SHADER_TYPE_COUNT],
-}
-
-impl<'a> ShaderParser<'a> {
-    pub fn new(raw: &'a str) -> Self {
-        let lines = HellLineIter::from(raw);
-        let scopes = array::from_fn(|idx| {
-            ScopeInfo::new(ShaderScopeType::from_usize(idx).unwrap())
-        });
-        let shaders = Default::default();
-
-        Self {
-            lines,
-            scopes,
-            shaders,
-        }
-    }
-
-    pub fn process(&mut self) -> HellResult<()> {
-        while let Some(line) = self.lines.next() {
-            println!("{:?}", line);
-            match line {
-                HellLine::Instruction(instr) => {
-                    match instr {
-                        HellInstruction::DefineScope(scope_type)   => { self.process_define_scope(scope_type); }
-                        HellInstruction::DefineShader(shader_type) => { self.process_define_shader(shader_type); }
-                        _ => { },
-                    }
-                }
-                _ => { }
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn finalize(&mut self) {
-        let mut scope_idx = 0;
-
-        for scope in &mut self.scopes {
-            if !scope.is_used { continue; }
-            scope.finalize(scope_idx);
-            scope_idx += 1;
-        }
-    }
-
-    pub fn write_to_file(&self) -> HellResult<()> {
-        self.write_shader(Path::new("shaders/out/parse.vert"), ShaderType::Vertex)?;
-        self.write_shader(Path::new("shaders/out/parse.frag"), ShaderType::Fragment)?;
-
-        Ok(())
-    }
-}
-
-impl<'a> ShaderParser<'a> {
-    pub fn write_shader(&self, path: &Path, scope_type: ShaderType) -> HellResult<()> {
-        use std::fmt::Write;
-        let mut buff = String::new();
-
-        for scope in &self.scopes {
-            if !scope.is_used { continue; }
-
-            writeln!(buff, "{}", scope)?;
-        }
-
-        let shader = &self.scopes[scope_type as usize];
-        writeln!(buff, "{}", shader)?;
-
-        fs::write(path, buff)?;
-
-        Ok(())
-    }
-
-    fn process_define_scope(&mut self, scope: ShaderScopeType) {
-        let scope = &mut self.scopes[scope as usize];
-        scope.is_used = true;
-
-        while let Some(line) = &self.lines.next() {
-            match line {
-                HellLine::Instruction(HellInstruction::DefineScope(_)) => { return; },
-                HellLine::UniformDeclaration(decl) => {
-                    scope.uniforms.push(decl.clone())
-                }
-                _ => { }
-            }
-        }
-    }
-
-    fn process_define_shader(&mut self, shader_type: ShaderType) {
-        let shader = &mut self.shaders[shader_type as usize];
-
-        while let Some(line) = &self.lines.next() {
-            println!("{:?}", line);
-            match line {
-                HellLine::Instruction(HellInstruction::DefineShader(_)) => { return; },
-                HellLine::PlainText(txt) => {
-                    shader.body.push_str(&format!("{}\n", txt));
-                }
-                _ => { }
-            }
-        }
-    }
-}
-
-// ------------------------
-
-#[derive(Debug)]
-pub enum ShaderKeyword {
-    GlslLayout,
-}
-
-
-
-// ----------------------------------------------------------------------------
-
 fn main() {
-    // let raw = fs::read_to_string("shaders/parse.glsl").unwrap();
-    // let mut parser = ShaderParser::new(&raw);
-    // parser.process().unwrap();
-    // parser.finalize();
-    // parser.write_to_file().unwrap();
-
-    // let in_buff = fs::read_to_string(Path::new("shaders/parse.glsl")).unwrap();
-    // let _abt: AbstractSyntaxTree<ShaderKeyword, GlslType> = AbstractSyntaxTree::parse_buff(&in_buff).unwrap();
-
     hell_pest::run().unwrap();
     print!("done");
 }
