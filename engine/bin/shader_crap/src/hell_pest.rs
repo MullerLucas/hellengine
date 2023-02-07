@@ -1,7 +1,8 @@
 use std::{hint::unreachable_unchecked, collections::HashMap, borrow::Borrow, path::Path, fs};
+use std::fmt::Write;
 
 use hell_collections::DynArray;
-use hell_error::HellResult;
+use hell_error::{HellResult, OptToHellErr, ErrToHellErr};
 use pest::{self, Parser, iterators::{Pair, Pairs}};
 use pest_derive::{self, Parser};
 
@@ -27,16 +28,14 @@ pub fn run() -> HellResult<()> {
             },
             Rule::scope_decl  => {
                 let scope = CrapScopeDef::new(pair.into_inner());
-                result.scopes.insert(scope.name, scope);
+                result.scopes.push(scope);
             },
             Rule::shader_decl => {
                 let shader = CrapShaderDef::new(pair.into_inner());
-                result.shaders.insert(shader.ident, shader);
+                result.shaders.push(shader);
             },
             Rule::EOI => { }
             _ => {
-                println!("INVALID: {:?}", pair.as_rule());
-                println!("{:#?}", pair);
                 unreachable!();
             }
         }
@@ -54,7 +53,7 @@ pub fn run() -> HellResult<()> {
         serde_yaml::to_string(&config).unwrap()
     );
 
-    result.shaders.iter().for_each(|(k, s)| s.write_files(out_dir, shader_file.clone(), &result.scopes).unwrap());
+    result.shaders.as_slice().iter().for_each(|s| s.write_files(out_dir, shader_file.clone(), &config).unwrap());
 
     Ok(())
 }
@@ -64,16 +63,19 @@ pub fn run() -> HellResult<()> {
 #[derive(Debug)]
 pub struct CrapFile<'a> {
     pub info: Option<CrapInfoDef<'a>>,
-    pub scopes: HashMap<&'a str, CrapScopeDef<'a>>,
-    pub shaders: HashMap<&'a str, CrapShaderDef<'a>>,
+    pub scopes: DynArray<CrapScopeDef<'a>, {CrapFile::MAX_SCOPES}>,
+    pub shaders: DynArray<CrapShaderDef<'a>, {CrapFile::MAX_SHADERS}>,
 }
 
 impl<'a> CrapFile<'a> {
+    pub const MAX_SCOPES: usize = 10;
+    pub const MAX_SHADERS: usize = 10;
+
     pub fn new() -> Self {
         Self {
             info: None,
-            scopes: HashMap::new(),
-            shaders: HashMap::new(),
+            scopes: DynArray::from_default(),
+            shaders: DynArray::from_default(),
         }
     }
 }
@@ -82,8 +84,8 @@ impl Into<ShaderProgramConfig> for &CrapFile<'_> {
     fn into(self) -> ShaderProgramConfig {
         ShaderProgramConfig {
             info: self.info.as_ref().unwrap().into(),
-            scopes: self.scopes.iter().map(|(k , s)| (k.to_lowercase(), s.into())).collect(),
-            shaders: self.shaders.iter().map(|(k , s)| (k.to_lowercase(), s.into())).collect(),
+            scopes: self.scopes.as_slice().iter().map(|s| s.into()).collect(),
+            shaders: self.shaders.as_slice().iter().map(|s| s.into()).collect(),
         }
     }
 }
@@ -140,7 +142,7 @@ impl<'a> CrapInfoVarDef<'a> {
 
 // -----------------------------------------------------------------------------
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CrapScopeDef<'a> {
     pub name: &'a str,
     pub buffers: DynArray<CrapUniformBufferDef<'a>, {CrapScopeDef::MAX_BUFFERS}>,
@@ -152,8 +154,6 @@ impl<'a> CrapScopeDef<'a> {
     pub const MAX_SAMPLERS: usize = 10;
 
     pub fn new(mut pairs: Pairs<'a, Rule>) -> Self {
-        // println!("scope =============: {:?}", pairs);
-
         let name = pairs.next().unwrap().as_str();
         let scope_block = pairs.next().unwrap().into_inner();
 
@@ -186,7 +186,7 @@ impl Into<ShaderProgramScopeConfig> for &CrapScopeDef<'_> {
             self.name,
             self.buffers.as_slice().iter().map(|b| b.into()).collect(),
             self.samplers.as_slice().iter().map(|s| s.into()).collect(),
-        )
+        ).unwrap()
     }
 }
 
@@ -280,7 +280,7 @@ impl Into<ShaderProgramSamplerConfig> for &CrapUniformSamplerDef<'_> {
 
 // -----------------------------------------------------------------------------
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CrapShaderDef<'a> {
     pub ident: &'a str,
     pub uniform_usages: DynArray<CrapUniformUsage<'a>, {CrapShaderDef::MAX_UNIFORM_USAGES}>,
@@ -309,12 +309,33 @@ impl<'a> CrapShaderDef<'a> {
         }
     }
 
-    pub fn write_files(&self, base_path: &Path, mut file_stem: String, scopes: &HashMap<&str, CrapScopeDef>) -> HellResult<()> {
+    pub fn write_code_block(&self, buffer: &mut String) {
+        buffer.push_str("// START: code\n");
+        buffer.push_str(self.raw_code.code);
+        buffer.push_str("\n// END: code");
+    }
+
+    pub fn write_files(&self, base_path: &Path, mut file_stem: String, config: &ShaderProgramConfig) -> HellResult<()> {
         let file_name = format!("{}_{}.glsl", file_stem, self.ident);
         let file_path = base_path.join(file_name);
 
-        let mut code = self.raw_code.code.to_owned();
+        let mut code = String::from("\n");
         code.insert_str(0, "\t");
+
+        for usage in self.uniform_usages.as_slice() {
+            let target_scope = ShaderScopeType::try_from(usage.scope_type).unwrap();
+            let scope = config.scope_ref(target_scope).ok_or_render_herr("failed to get scope while writing shader file")?;
+
+            if let Some(buffer) = scope.buffer(usage.ident) {
+                writeln!(code, "{}", buffer);
+            } else if let Some(sampler) = scope.sampler(usage.ident) {
+                writeln!(code, "{}", sampler);
+            } else {
+                write!(code, "\n// ERR: failed to write uniform '{}::{}'", usage.scope_type, usage.ident);
+            }
+        }
+
+        self.write_code_block(&mut code);
 
         fs::create_dir_all(base_path)?;
         fs::write(file_path, code)?;
@@ -328,7 +349,7 @@ impl Into<ShaderProgramShaderConfig> for &CrapShaderDef<'_> {
         ShaderProgramShaderConfig::from_raw(
             self.ident,
             self.uniform_usages.as_slice().iter().map(|u| u.into()).collect(),
-        )
+        ).unwrap()
     }
 }
 
@@ -360,7 +381,7 @@ impl Into<ShaderProgramUniformUsage> for &CrapUniformUsage<'_> {
 
 // -----------------------------------------------------------------------------
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CrapRawCode<'a> {
     pub code: &'a str,
 }

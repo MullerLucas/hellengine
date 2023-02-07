@@ -2,10 +2,10 @@ info:
   version: 0.1.0
   name: testing/test_shader
 scopes:
-  global:
+  Global:
     name: global
     buffers:
-    - ident: global
+    - ident: global_ubo
       var_ubos:
       - type_ubo: Vec4
         ident: color
@@ -14,22 +14,32 @@ scopes:
     samplers:
     - type_sampler: Sampler2d
       ident: global_tex
-  instance:
+  Instance:
     name: instance
-    buffers: []
+    buffers:
+    - ident: instance_ubo
+      var_ubos:
+      - type_ubo: Float
+        ident: foo
+      - type_ubo: Mat3
+        ident: bar
     samplers:
     - type_sampler: Sampler2d
       ident: instance_tex
 shaders:
+  vert:
+    name: vert
+    uniform_usages:
+    - scope_type: Global
+      ident: global_ubo
+    - scope_type: Instance
+      ident: instance_tex
   frag:
     name: frag
     uniform_usages:
     - scope_type: Global
       ident: global_tex
-  vert:
-    name: vert
-    uniform_usages:
     - scope_type: Global
-      ident: global
-    - scope_type: Instance
+      ident: instance_ubo
+    - scope_type: Global
       ident: instance_tex

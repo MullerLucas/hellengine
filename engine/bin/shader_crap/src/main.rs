@@ -10,10 +10,10 @@ use num_traits::FromPrimitive;
 
 use std::{fs, str::{Lines, FromStr}, path::Path, array};
 
-use hell_error::{HellResult, HellError, HellErrorHelper};
+use hell_error::{HellResult, HellError, HellErrorHelper, OptToHellErr};
 
 /// [opengl-wiki](https://www.khronos.org/opengl/wiki/Data_Type_(GLSL))
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash)]
 pub enum GlslType {
     // Scalars
     Bool,
@@ -211,7 +211,7 @@ pub enum GlslValue {
 
 // ----------------------------------------------------------------------------
 
-#[derive(Default, Debug, Clone, Copy, FromPrimitive, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Debug, Clone, Copy, FromPrimitive, serde::Serialize, serde::Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ShaderScopeType {
     #[default]
     Global = 0,
@@ -245,10 +245,10 @@ impl ShaderScopeType {
 impl ShaderScopeType {
     fn parse_txt(txt: &str) -> Option<Self> {
         match txt.trim() {
-            "global"|"GLOBAL"   => Some(Self::Global),
-            "shared"|"SHARED"   => Some(Self::Shared),
-            "instance"|"INSTANCE" => Some(Self::Instance),
-            "local"|"LOCAL"    => Some(Self::Local),
+            "global"|"GLOBAL"|"Global"   => Some(Self::Global),
+            "shared"|"SHARED"|"Shared"   => Some(Self::Shared),
+            "instance"|"INSTANCE"|"Instance" => Some(Self::Instance),
+            "local"|"LOCAL"|"Local"      => Some(Self::Local),
             _ => None,
         }
     }
@@ -264,11 +264,19 @@ impl TryFrom<&str> for ShaderScopeType {
 
 // ----------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(usize)]
-enum ShaderType {
+pub enum ShaderType {
     Vertex = 0,
     Fragment
+}
+
+impl TryFrom<&str> for ShaderType {
+    type Error = HellError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        ShaderType::parse_txt(value).ok_or_render_herr("faile to parse value into shader type")
+    }
 }
 
 impl ShaderType {

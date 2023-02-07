@@ -9,19 +9,24 @@
     uniform buffer {
         vec4 color;
         mat2 model;
-    } global;
+    } global_ubo;
 
     uniform sampler2D global_tex;
 }
 
 #SCOPE: INSTANCE
 {
+    uniform buffer {
+        float foo;
+        mat3 bar;
+    } instance_ubo;
+
     uniform sampler2D instance_tex;
 }
 
 #SHADER: VERT
 {
-    uniform GLOBAL::global;
+    uniform GLOBAL::global_ubo;
     uniform INSTANCE::instance_tex;
 
     #HELLPROGRAM
@@ -43,6 +48,8 @@
 #SHADER: FRAG
 {
     uniform GLOBAL::global_tex;
+    uniform GLOBAL::instance_ubo;
+    uniform GLOBAL::instance_tex;
 
     #HELLPROGRAM
 
