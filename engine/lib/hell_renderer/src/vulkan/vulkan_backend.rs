@@ -90,7 +90,7 @@ impl VulkanBackend {
         // clear-values
         // -----------
         const MAX_CLEAR_VALUE_COUNT: usize = 2;
-        let mut clear_values = DynArray::<vk::ClearValue, MAX_CLEAR_VALUE_COUNT>::from_default();
+        let mut clear_values = DynArray::<vk::ClearValue, MAX_CLEAR_VALUE_COUNT>::default();
 
         let should_clear_color = render_pass.clear_flags.contains(RenderPassClearFlags::COLORBUFFER);
         if should_clear_color {

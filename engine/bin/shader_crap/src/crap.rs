@@ -1,12 +1,13 @@
-use std::{hint::unreachable_unchecked, collections::HashMap, borrow::Borrow, path::Path, fs};
+use std::{collections::HashMap, borrow::Borrow, path::Path, fs};
 use std::fmt::Write;
 
 use hell_collections::DynArray;
-use hell_error::{HellResult, OptToHellErr, ErrToHellErr};
+use hell_error::{HellResult, OptToHellErr};
+use hell_renderer::render_types::scope::ShaderScopeType;
+use hell_renderer::resources::config::{ShaderProgramConfig, ShaderProgramInfoConfig, ShaderProgramScopeConfig, ShaderProgramBufferConfig, ShaderProgramUboVarConfig, ShaderProgramSamplerConfig, ShaderProgramShaderConfig, ShaderProgramUniformUsage};
 use pest::{self, Parser, iterators::{Pair, Pairs}};
 use pest_derive::{self, Parser};
 
-use crate::{shader_definition::{ShaderProgramInfoConfig, ShaderProgramConfig, ShaderProgramScopeConfig, ShaderProgramBufferConfig, ShaderProgramUboVarConfig, ShaderProgramSamplerConfig, ShaderProgramShaderConfig, ShaderProgramUniformUsage}, GlslType, ShaderScopeType};
 
 
 #[derive(Parser)]
@@ -47,11 +48,11 @@ pub fn run() -> HellResult<()> {
     std::fs::write(
         out_dir.join(format!("{}_DEF.json", shader_file)),
         serde_json::to_string_pretty(&config).unwrap()
-    );
+    ).unwrap();
     std::fs::write(
         out_dir.join(format!("{}_DEF.yaml", shader_file)),
         serde_yaml::to_string(&config).unwrap()
-    );
+    ).unwrap();
 
     result.shaders.as_slice().iter().for_each(|s| s.write_files(out_dir, shader_file.clone(), &config).unwrap());
 
@@ -297,7 +298,7 @@ impl<'a> CrapShaderDef<'a> {
 
         let mut uniform_usages = DynArray::default();
 
-        while let(Rule::uniform_usage) = shader_block.peek().unwrap().as_rule() {
+        while let Rule::uniform_usage = shader_block.peek().unwrap().as_rule() {
             uniform_usages.push(CrapUniformUsage::new(shader_block.next().unwrap().into_inner()))
         }
 
@@ -316,7 +317,7 @@ impl<'a> CrapShaderDef<'a> {
         buffer.push_str("\n// END: code");
     }
 
-    pub fn write_files(&self, base_path: &Path, mut file_stem: String, config: &ShaderProgramConfig) -> HellResult<()> {
+    pub fn write_files(&self, base_path: &Path, file_stem: String, config: &ShaderProgramConfig) -> HellResult<()> {
         let file_name = format!("{}_{}.glsl", file_stem, self.ident);
         let file_path = base_path.join(file_name);
 
@@ -328,11 +329,11 @@ impl<'a> CrapShaderDef<'a> {
             let scope = config.scope_ref(target_scope).ok_or_render_herr("failed to get scope while writing shader file")?;
 
             if let Some(buffer) = scope.buffer(usage.ident) {
-                writeln!(code, "{}", buffer);
+                writeln!(code, "{}", buffer)?;
             } else if let Some(sampler) = scope.sampler(usage.ident) {
-                writeln!(code, "{}", sampler);
+                writeln!(code, "{}", sampler)?;
             } else {
-                write!(code, "\n// ERR: failed to write uniform '{}::{}'", usage.scope_type, usage.ident);
+                write!(code, "\n// ERR: failed to write uniform '{}::{}'", usage.scope_type, usage.ident)?;
             }
         }
 

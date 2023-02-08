@@ -1,3 +1,6 @@
+pub mod config;
+
+
 use std::collections::HashMap;
 
 use hell_error::{HellResult, OptToHellErr};

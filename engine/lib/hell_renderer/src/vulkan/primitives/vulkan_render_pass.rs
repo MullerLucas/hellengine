@@ -59,7 +59,7 @@ impl VulkanRenderPass {
         // attachments
         // -----------
         const MAX_ATTACHMENT_COUNT: usize = 2;
-        let mut attachments = DynArray::<vk::AttachmentDescription, MAX_ATTACHMENT_COUNT>::from_default();
+        let mut attachments = DynArray::<vk::AttachmentDescription, MAX_ATTACHMENT_COUNT>::default();
 
         // color attachments
         // -----------------

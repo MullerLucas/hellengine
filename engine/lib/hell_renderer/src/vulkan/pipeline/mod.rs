@@ -129,7 +129,7 @@ impl VulkanPipeline {
 
         // push-constants
         // --------------
-        let mut push_constants: DynArray<vk::PushConstantRange, {config::VULKAN_SHADER_MAX_PUSH_CONSTANTS}> = DynArray::from_default();
+        let mut push_constants: DynArray<vk::PushConstantRange, {config::VULKAN_SHADER_MAX_PUSH_CONSTANTS}> = DynArray::default();
         for pcr in push_constant_infos {
             push_constants.push(vk::PushConstantRange::builder()
                 .offset(pcr.range.offset as u32)

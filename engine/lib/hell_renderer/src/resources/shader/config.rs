@@ -1,9 +1,8 @@
-use std::collections::HashMap;
-
-use hell_collections::DynArray;
 use hell_error::HellResult;
 
-use crate::{GlslType, ShaderScopeType, ShaderType};
+use crate::render_types::{scope::ShaderScopeType, stage::ShaderStageType, glsl::GlslType};
+
+
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ShaderProgramConfig {
@@ -17,7 +16,7 @@ impl ShaderProgramConfig {
         self.scopes.iter().find(|s| s.scope_type == scope_type)
     }
 
-    pub fn shader_ref(&self, shader_type: ShaderType) -> Option<&ShaderProgramShaderConfig> {
+    pub fn shader_ref(&self, shader_type: ShaderStageType) -> Option<&ShaderProgramShaderConfig> {
         self.shaders.iter().find(|s| s.shader_type == shader_type)
     }
 
@@ -91,14 +90,14 @@ impl ShaderProgramScopeConfig {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ShaderProgramShaderConfig {
-    pub shader_type: ShaderType,
+    pub shader_type: ShaderStageType,
     pub uniform_usages: Vec<ShaderProgramUniformUsage>,
 }
 
 impl ShaderProgramShaderConfig {
     pub fn from_raw(shader_ident: &str, uniform_usages: Vec<ShaderProgramUniformUsage>) -> HellResult<Self> {
         Ok(Self {
-            shader_type: ShaderType::try_from(shader_ident)?,
+            shader_type: ShaderStageType::try_from(shader_ident)?,
             uniform_usages,
         })
     }
@@ -119,7 +118,7 @@ impl std::fmt::Display for ShaderProgramBufferConfig {
         writeln!(f, "// START: buffer '{}'", &self.ident)?;
         writeln!(f, "layout(set = {}, binding = {}) uniform {} {{", 0, 0, buffer_type_ident)?;
         for ubo in &self.var_ubos {
-            writeln!(f, "\t{}", ubo);
+            writeln!(f, "\t{}", ubo)?;
         }
         writeln!(f, "}} {};", &self.ident)?;
         writeln!(f, "// END: buffer '{}'", &self.ident)?;
@@ -171,9 +170,9 @@ pub struct ShaderProgramSamplerConfig {
 
 impl std::fmt::Display for ShaderProgramSamplerConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "// START: sampler '{}'", self.ident);
-        writeln!(f, "{} {};", self.type_sampler, &self.ident);
-        writeln!(f, "// END: sampler '{}'", self.ident);
+        writeln!(f, "// START: sampler '{}'", self.ident)?;
+        writeln!(f, "{} {};", self.type_sampler, &self.ident)?;
+        writeln!(f, "// END: sampler '{}'", self.ident)?;
         Ok(())
     }
 }

@@ -1,3 +1,7 @@
+pub mod glsl;
+pub mod scope;
+pub mod stage;
+
 use ash::vk;
 use hell_core::config;
 
