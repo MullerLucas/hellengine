@@ -275,7 +275,7 @@ impl TryFrom<&str> for ShaderType {
     type Error = HellError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        ShaderType::parse_txt(value).ok_or_render_herr("faile to parse value into shader type")
+        ShaderType::parse_txt(value).ok_or_render_herr("failed to parse value into shader type")
     }
 }
 
@@ -283,10 +283,9 @@ impl ShaderType {
     pub const SHADER_TYPE_COUNT: usize = 2;
 
     fn parse_txt(txt: &str) -> Option<Self> {
-        println!("SHADERTYPE: '{}'", txt);
         match txt.trim_start() {
-            "vert"|"vertex"   => Some(Self::Vertex),
-            "frag"|"fragment" => Some(Self::Fragment),
+            "vert"|"VERT"|"Vert"|"vertex"|"VERTEX"|"Vertex"       => Some(Self::Vertex),
+            "frag"|"FRAG"|"Frag"|"fragment"|"FRAGMENT"|"Fragment" => Some(Self::Fragment),
             _ => None,
         }
     }

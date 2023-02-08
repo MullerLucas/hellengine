@@ -1,11 +1,12 @@
 {
   "info": {
     "version": "0.1.0",
-    "name": "testing/test_shader"
+    "name": "testing/test_shader",
+    "pass": "ui"
   },
-  "scopes": {
-    "Global": {
-      "name": "global",
+  "scopes": [
+    {
+      "scope_type": "Global",
       "buffers": [
         {
           "ident": "global_ubo",
@@ -28,8 +29,8 @@
         }
       ]
     },
-    "Instance": {
-      "name": "instance",
+    {
+      "scope_type": "Instance",
       "buffers": [
         {
           "ident": "instance_ubo",
@@ -52,10 +53,10 @@
         }
       ]
     }
-  },
-  "shaders": {
-    "vert": {
-      "name": "vert",
+  ],
+  "shaders": [
+    {
+      "shader_type": "Vertex",
       "uniform_usages": [
         {
           "scope_type": "Global",
@@ -67,22 +68,22 @@
         }
       ]
     },
-    "frag": {
-      "name": "frag",
+    {
+      "shader_type": "Fragment",
       "uniform_usages": [
         {
           "scope_type": "Global",
           "ident": "global_tex"
         },
         {
-          "scope_type": "Global",
+          "scope_type": "Instance",
           "ident": "instance_ubo"
         },
         {
-          "scope_type": "Global",
+          "scope_type": "Instance",
           "ident": "instance_tex"
         }
       ]
     }
-  }
+  ]
 }

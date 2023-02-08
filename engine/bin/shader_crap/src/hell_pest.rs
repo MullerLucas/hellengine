@@ -74,8 +74,8 @@ impl<'a> CrapFile<'a> {
     pub fn new() -> Self {
         Self {
             info: None,
-            scopes: DynArray::from_default(),
-            shaders: DynArray::from_default(),
+            scopes: Default::default(),
+            shaders: Default::default(),
         }
     }
 }
@@ -116,6 +116,7 @@ impl Into<ShaderProgramInfoConfig> for &CrapInfoDef<'_> {
         ShaderProgramInfoConfig::from_raw(
             self.fields["version"].value,
             self.fields["name"].value,
+            self.fields["pass"].value,
         )
     }
 }
@@ -157,8 +158,8 @@ impl<'a> CrapScopeDef<'a> {
         let name = pairs.next().unwrap().as_str();
         let scope_block = pairs.next().unwrap().into_inner();
 
-        let mut buffers = DynArray::from_default();
-        let mut samplers = DynArray::from_default();
+        let mut buffers = DynArray::default();
+        let mut samplers = DynArray::default();
 
         for pair in scope_block {
             match pair.as_rule() {
@@ -199,7 +200,7 @@ pub struct CrapUniformBufferDef<'a> {
 }
 
 impl<'a> CrapUniformBufferDef<'a> {
-    pub const MAX_VARS: usize = 100;
+    pub const MAX_VARS: usize = 20;
 
     pub fn new(mut pairs: Pairs<'a, Rule>) -> Self {
         let mut var_ubos = DynArray::from_fn(|_| CrapVarUboDef::default());
@@ -294,7 +295,7 @@ impl<'a> CrapShaderDef<'a> {
         let name = pairs.next().unwrap().as_str();
         let mut shader_block = pairs.next().unwrap().into_inner();
 
-        let mut uniform_usages = DynArray::from_default();
+        let mut uniform_usages = DynArray::default();
 
         while let(Rule::uniform_usage) = shader_block.peek().unwrap().as_rule() {
             uniform_usages.push(CrapUniformUsage::new(shader_block.next().unwrap().into_inner()))

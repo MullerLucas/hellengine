@@ -2,6 +2,7 @@
 {
     version = 0.1.0;
     name = "testing/test_shader";
+    pass = "ui";
 }
 
 #SCOPE: GLOBAL
@@ -48,8 +49,8 @@
 #SHADER: FRAG
 {
     uniform GLOBAL::global_tex;
-    uniform GLOBAL::instance_ubo;
-    uniform GLOBAL::instance_tex;
+    uniform INSTANCE::instance_ubo;
+    uniform INSTANCE::instance_tex;
 
     #HELLPROGRAM
 

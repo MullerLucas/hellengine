@@ -31,14 +31,16 @@ impl ShaderProgramConfig {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ShaderProgramInfoConfig {
     pub version: String,
-    pub name: String
+    pub name: String,
+    pub pass: String,
 }
 
 impl ShaderProgramInfoConfig {
-    pub fn from_raw(version: &str, name: &str) -> Self {
+    pub fn from_raw(version: &str, name: &str, pass: &str) -> Self {
         Self {
             version: version.to_lowercase(),
             name: name.to_lowercase().replace("\"", ""),
+            pass: pass.to_lowercase().replace("\"", ""),
         }
     }
 

@@ -1,45 +1,42 @@
 info:
   version: 0.1.0
   name: testing/test_shader
+  pass: ui
 scopes:
-  Global:
-    name: global
-    buffers:
-    - ident: global_ubo
-      var_ubos:
-      - type_ubo: Vec4
-        ident: color
-      - type_ubo: Mat2
-        ident: model
-    samplers:
-    - type_sampler: Sampler2d
-      ident: global_tex
-  Instance:
-    name: instance
-    buffers:
-    - ident: instance_ubo
-      var_ubos:
-      - type_ubo: Float
-        ident: foo
-      - type_ubo: Mat3
-        ident: bar
-    samplers:
-    - type_sampler: Sampler2d
-      ident: instance_tex
+- scope_type: Global
+  buffers:
+  - ident: global_ubo
+    var_ubos:
+    - type_ubo: Vec4
+      ident: color
+    - type_ubo: Mat2
+      ident: model
+  samplers:
+  - type_sampler: Sampler2d
+    ident: global_tex
+- scope_type: Instance
+  buffers:
+  - ident: instance_ubo
+    var_ubos:
+    - type_ubo: Float
+      ident: foo
+    - type_ubo: Mat3
+      ident: bar
+  samplers:
+  - type_sampler: Sampler2d
+    ident: instance_tex
 shaders:
-  vert:
-    name: vert
-    uniform_usages:
-    - scope_type: Global
-      ident: global_ubo
-    - scope_type: Instance
-      ident: instance_tex
-  frag:
-    name: frag
-    uniform_usages:
-    - scope_type: Global
-      ident: global_tex
-    - scope_type: Global
-      ident: instance_ubo
-    - scope_type: Global
-      ident: instance_tex
+- shader_type: Vertex
+  uniform_usages:
+  - scope_type: Global
+    ident: global_ubo
+  - scope_type: Instance
+    ident: instance_tex
+- shader_type: Fragment
+  uniform_usages:
+  - scope_type: Global
+    ident: global_tex
+  - scope_type: Instance
+    ident: instance_ubo
+  - scope_type: Instance
+    ident: instance_tex
