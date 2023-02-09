@@ -42,7 +42,9 @@ pub fn run() -> HellResult<()> {
         }
     }
 
-    let config: ShaderProgramConfig = result.borrow().into();
+    let mut config: ShaderProgramConfig = result.borrow().into();
+    config.update_sets_and_bindings();
+
     let shader_file = config.info.generate_path();
     let out_dir = std::path::Path::new("./generated");
     std::fs::write(
@@ -333,7 +335,7 @@ impl<'a> CrapShaderDef<'a> {
             } else if let Some(sampler) = scope.sampler(usage.ident) {
                 writeln!(code, "{}", sampler)?;
             } else {
-                write!(code, "\n// ERR: failed to write uniform '{}::{}'", usage.scope_type, usage.ident)?;
+                write!(code, "\n// ERROR: failed to write uniform '{}::{}'\n\n", usage.scope_type, usage.ident)?;
             }
         }
 

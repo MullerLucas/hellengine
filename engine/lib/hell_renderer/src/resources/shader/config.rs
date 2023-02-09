@@ -20,9 +20,11 @@ impl ShaderProgramConfig {
         self.shaders.iter().find(|s| s.shader_type == shader_type)
     }
 
-    pub fn update_indices(&mut self) {
+    pub fn update_sets_and_bindings(&mut self) {
+        for (idx, scope) in self.scopes.iter_mut().enumerate() {
+            scope.update_set_and_bindings(idx);
+        }
     }
-
 }
 
 // ----------------------------------------------------------------------------
@@ -84,6 +86,22 @@ impl ShaderProgramScopeConfig {
     pub fn sampler(&self, ident: &str) -> Option<&ShaderProgramSamplerConfig> {
         self.samplers.iter().find(|s| s.ident == ident)
     }
+
+    pub fn update_set_and_bindings(&mut self, set_idx: usize) {
+        let mut binding = 0;
+
+        for buffer in &mut self.buffers {
+            buffer.set = set_idx;
+            buffer.binding = binding;
+            binding += 1;
+        }
+
+        for sampler in &mut self.samplers {
+            sampler.set = set_idx;
+            sampler.binding = binding;
+            binding += 1;
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -107,6 +125,8 @@ impl ShaderProgramShaderConfig {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ShaderProgramBufferConfig {
+    pub set: usize,
+    pub binding: usize,
     pub ident: String,
     pub var_ubos: Vec<ShaderProgramUboVarConfig>,
 }
@@ -116,7 +136,7 @@ impl std::fmt::Display for ShaderProgramBufferConfig {
         let buffer_type_ident = format!("{}_buffer_type", self.ident);
 
         writeln!(f, "// START: buffer '{}'", &self.ident)?;
-        writeln!(f, "layout(set = {}, binding = {}) uniform {} {{", 0, 0, buffer_type_ident)?;
+        writeln!(f, "layout(set = {}, binding = {}) uniform {} {{", self.set, self.binding, buffer_type_ident)?;
         for ubo in &self.var_ubos {
             writeln!(f, "\t{}", ubo)?;
         }
@@ -130,6 +150,8 @@ impl std::fmt::Display for ShaderProgramBufferConfig {
 impl ShaderProgramBufferConfig {
     pub fn from_raw(ident: &str, var_ubos: Vec<ShaderProgramUboVarConfig>) -> HellResult<Self> {
         Ok(Self {
+            set: usize::MAX,
+            binding: usize::MAX,
             ident: ident.to_lowercase(),
             var_ubos,
         })
@@ -164,6 +186,8 @@ impl ShaderProgramUboVarConfig {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ShaderProgramSamplerConfig {
+    pub set: usize,
+    pub binding: usize,
     pub type_sampler: GlslType,
     pub ident: String,
 }
@@ -171,7 +195,7 @@ pub struct ShaderProgramSamplerConfig {
 impl std::fmt::Display for ShaderProgramSamplerConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "// START: sampler '{}'", self.ident)?;
-        writeln!(f, "{} {};", self.type_sampler, &self.ident)?;
+        writeln!(f, "layout(set = {}, binding = {}) {} {};", self.set, self.binding, self.type_sampler, &self.ident)?;
         writeln!(f, "// END: sampler '{}'", self.ident)?;
         Ok(())
     }
@@ -180,6 +204,8 @@ impl std::fmt::Display for ShaderProgramSamplerConfig {
 impl ShaderProgramSamplerConfig {
     pub fn from_raw(type_sampler: &str, ident: &str) -> HellResult<Self> {
         Ok(Self {
+            set: usize::MAX,
+            binding: usize::MAX,
             type_sampler: GlslType::try_from(type_sampler)?,
             ident: ident.to_lowercase(),
         })

@@ -6,9 +6,63 @@ layout(set = 0, binding = 0) uniform global_ubo_buffer_type {
 } global_ubo;
 // END: buffer 'global_ubo'
 
-// START: sampler 'instance_tex'
-sampler2D instance_tex;
-// END: sampler 'instance_tex'
+// START: sampler 'global_tex_0'
+layout(set = 0, binding = 1) sampler2D global_tex_0;
+// END: sampler 'global_tex_0'
+
+// START: sampler 'global_tex_1'
+layout(set = 0, binding = 2) sampler2D global_tex_1;
+// END: sampler 'global_tex_1'
+
+// START: sampler 'global_tex_2'
+layout(set = 0, binding = 3) sampler2D global_tex_2;
+// END: sampler 'global_tex_2'
+
+// START: sampler 'global_tex_3'
+layout(set = 0, binding = 4) sampler2D global_tex_3;
+// END: sampler 'global_tex_3'
+
+// START: buffer 'shared_ubo'
+layout(set = 1, binding = 0) uniform shared_ubo_buffer_type {
+	float foo;
+} shared_ubo;
+// END: buffer 'shared_ubo'
+
+// START: sampler 'shared_tex_0'
+layout(set = 1, binding = 1) sampler2D shared_tex_0;
+// END: sampler 'shared_tex_0'
+
+// START: sampler 'shared_tex_1'
+layout(set = 1, binding = 2) sampler2D shared_tex_1;
+// END: sampler 'shared_tex_1'
+
+// START: sampler 'shared_tex_2'
+layout(set = 1, binding = 3) sampler2D shared_tex_2;
+// END: sampler 'shared_tex_2'
+
+// START: buffer 'instance_ubo'
+layout(set = 2, binding = 0) uniform instance_ubo_buffer_type {
+	float foo;
+	mat3 bar;
+	mat2 moo;
+	mat2 glatz;
+} instance_ubo;
+// END: buffer 'instance_ubo'
+
+// START: sampler 'instance_tex_0'
+layout(set = 2, binding = 1) sampler2D instance_tex_0;
+// END: sampler 'instance_tex_0'
+
+// START: sampler 'instance_tex_1'
+layout(set = 2, binding = 2) sampler2D instance_tex_1;
+// END: sampler 'instance_tex_1'
+
+// START: sampler 'instance_tex_2'
+layout(set = 2, binding = 3) sampler2D instance_tex_2;
+// END: sampler 'instance_tex_2'
+
+
+// ERROR: failed to write uniform 'LOCAL::local_ubo'
 
 // START: code
 layout(location = 0) in vec3 in_pos;

@@ -12,7 +12,22 @@
         mat2 model;
     } global_ubo;
 
-    uniform sampler2D global_tex;
+    uniform sampler2D global_tex_0;
+    uniform sampler2D global_tex_1;
+    uniform sampler2D global_tex_2;
+    uniform sampler2D global_tex_3;
+    uniform sampler2D global_tex_4;
+}
+
+#SCOPE: SHARED
+{
+    uniform buffer {
+        float foo;
+    } shared_ubo;
+
+    uniform sampler2D shared_tex_0;
+    uniform sampler2D shared_tex_1;
+    uniform sampler2D shared_tex_2;
 }
 
 #SCOPE: INSTANCE
@@ -20,15 +35,43 @@
     uniform buffer {
         float foo;
         mat3 bar;
+        mat2 moo;
+        mat2 glatz;
     } instance_ubo;
 
-    uniform sampler2D instance_tex;
+    uniform sampler2D instance_tex_0;
+    uniform sampler2D instance_tex_1;
+    uniform sampler2D instance_tex_2;
+}
+
+#SCOPE: LOCAL
+{
+    uniform buffer {
+        mat4 model;
+        mat4 view;
+        mat4 view_model;
+    } instance_ubo;
 }
 
 #SHADER: VERT
 {
     uniform GLOBAL::global_ubo;
-    uniform INSTANCE::instance_tex;
+    uniform GLOBAL::global_tex_0;
+    uniform GLOBAL::global_tex_1;
+    uniform GLOBAL::global_tex_2;
+    uniform GLOBAL::global_tex_3;
+
+    uniform SHARED::shared_ubo;
+    uniform SHARED::shared_tex_0;
+    uniform SHARED::shared_tex_1;
+    uniform SHARED::shared_tex_2;
+
+    uniform INSTANCE::instance_ubo;
+    uniform INSTANCE::instance_tex_0;
+    uniform INSTANCE::instance_tex_1;
+    uniform INSTANCE::instance_tex_2;
+
+    uniform LOCAL::local_ubo;
 
     #HELLPROGRAM
 
@@ -49,8 +92,10 @@
 #SHADER: FRAG
 {
     uniform GLOBAL::global_tex;
+    uniform SHARED::shared_tex;
     uniform INSTANCE::instance_ubo;
     uniform INSTANCE::instance_tex;
+    uniform LOCAL::local_ubo;
 
     #HELLPROGRAM
 
