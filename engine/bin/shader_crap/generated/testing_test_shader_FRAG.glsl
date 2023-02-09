@@ -1,9 +1,15 @@
 	
+// START: sampler 'global_tex_1'
+layout(set = 0, binding = 2) sampler2D global_tex_1;
+// END: sampler 'global_tex_1'
 
-// ERROR: failed to write uniform 'GLOBAL::global_tex'
+// START: sampler 'shared_tex_1'
+layout(set = 1, binding = 2) sampler2D shared_tex_1;
+// END: sampler 'shared_tex_1'
 
-
-// ERROR: failed to write uniform 'SHARED::shared_tex'
+// START: sampler 'shared_tex_2'
+layout(set = 1, binding = 3) sampler2D shared_tex_2;
+// END: sampler 'shared_tex_2'
 
 // START: buffer 'instance_ubo'
 layout(set = 2, binding = 0) uniform instance_ubo_buffer_type {
@@ -14,11 +20,17 @@ layout(set = 2, binding = 0) uniform instance_ubo_buffer_type {
 } instance_ubo;
 // END: buffer 'instance_ubo'
 
+// START: sampler 'instance_tex_2'
+layout(set = 2, binding = 3) sampler2D instance_tex_2;
+// END: sampler 'instance_tex_2'
 
-// ERROR: failed to write uniform 'INSTANCE::instance_tex'
-
-
-// ERROR: failed to write uniform 'LOCAL::local_ubo'
+// START: buffer 'local_ubo'
+layout(set = 3, binding = 0) uniform local_ubo_buffer_type {
+	mat4 model;
+	mat4 view;
+	mat4 view_model;
+} local_ubo;
+// END: buffer 'local_ubo'
 
 // START: code
 layout(location = 0) in vec2 in_tex_coord;

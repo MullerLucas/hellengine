@@ -147,7 +147,7 @@
                 {
                     "set": 3,
                     "binding": 0,
-                    "ident": "instance_ubo",
+                    "ident": "local_ubo",
                     "var_ubos": [
                         {
                             "type_ubo": "Mat4",
@@ -234,11 +234,15 @@
             "uniform_usages": [
                 {
                     "scope_type": "Global",
-                    "ident": "global_tex"
+                    "ident": "global_tex_1"
                 },
                 {
                     "scope_type": "Shared",
-                    "ident": "shared_tex"
+                    "ident": "shared_tex_1"
+                },
+                {
+                    "scope_type": "Shared",
+                    "ident": "shared_tex_2"
                 },
                 {
                     "scope_type": "Instance",
@@ -246,7 +250,7 @@
                 },
                 {
                     "scope_type": "Instance",
-                    "ident": "instance_tex"
+                    "ident": "instance_tex_2"
                 },
                 {
                     "scope_type": "Local",

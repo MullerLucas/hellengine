@@ -50,7 +50,7 @@
         mat4 model;
         mat4 view;
         mat4 view_model;
-    } instance_ubo;
+    } local_ubo;
 }
 
 #SHADER: VERT
@@ -91,10 +91,11 @@
 
 #SHADER: FRAG
 {
-    uniform GLOBAL::global_tex;
-    uniform SHARED::shared_tex;
+    uniform GLOBAL::global_tex_1;
+    uniform SHARED::shared_tex_1;
+    uniform SHARED::shared_tex_2;
     uniform INSTANCE::instance_ubo;
-    uniform INSTANCE::instance_tex;
+    uniform INSTANCE::instance_tex_2;
     uniform LOCAL::local_ubo;
 
     #HELLPROGRAM

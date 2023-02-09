@@ -61,8 +61,13 @@ layout(set = 2, binding = 2) sampler2D instance_tex_1;
 layout(set = 2, binding = 3) sampler2D instance_tex_2;
 // END: sampler 'instance_tex_2'
 
-
-// ERROR: failed to write uniform 'LOCAL::local_ubo'
+// START: buffer 'local_ubo'
+layout(set = 3, binding = 0) uniform local_ubo_buffer_type {
+	mat4 model;
+	mat4 view;
+	mat4 view_model;
+} local_ubo;
+// END: buffer 'local_ubo'
 
 // START: code
 layout(location = 0) in vec3 in_pos;
