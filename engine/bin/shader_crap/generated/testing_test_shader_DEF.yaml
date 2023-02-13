@@ -3,140 +3,140 @@ info:
   name: testing/test_shader
   pass: ui
 scopes:
-  - scope_type: Global
-    buffers:
-      - set: 0
-        binding: 0
-        ident: global_ubo
-        var_ubos:
-          - type_ubo: Vec4
-            ident: color
-          - type_ubo: Mat2
-            ident: model
-    samplers:
-      - set: 0
-        binding: 1
-        type_sampler: Sampler2d
-        ident: global_tex_0
-      - set: 0
-        binding: 2
-        type_sampler: Sampler2d
-        ident: global_tex_1
-      - set: 0
-        binding: 3
-        type_sampler: Sampler2d
-        ident: global_tex_2
-      - set: 0
-        binding: 4
-        type_sampler: Sampler2d
-        ident: global_tex_3
-      - set: 0
-        binding: 5
-        type_sampler: Sampler2d
-        ident: global_tex_4
-  - scope_type: Shared
-    buffers:
-      - set: 1
-        binding: 0
-        ident: shared_ubo
-        var_ubos:
-          - type_ubo: Float
-            ident: foo
-    samplers:
-      - set: 1
-        binding: 1
-        type_sampler: Sampler2d
-        ident: shared_tex_0
-      - set: 1
-        binding: 2
-        type_sampler: Sampler2d
-        ident: shared_tex_1
-      - set: 1
-        binding: 3
-        type_sampler: Sampler2d
-        ident: shared_tex_2
-  - scope_type: Instance
-    buffers:
-      - set: 2
-        binding: 0
-        ident: instance_ubo
-        var_ubos:
-          - type_ubo: Float
-            ident: foo
-          - type_ubo: Mat3
-            ident: bar
-          - type_ubo: Mat2
-            ident: moo
-          - type_ubo: Mat2
-            ident: glatz
-    samplers:
-      - set: 2
-        binding: 1
-        type_sampler: Sampler2d
-        ident: instance_tex_0
-      - set: 2
-        binding: 2
-        type_sampler: Sampler2d
-        ident: instance_tex_1
-      - set: 2
-        binding: 3
-        type_sampler: Sampler2d
-        ident: instance_tex_2
-  - scope_type: Local
-    buffers:
-      - set: 3
-        binding: 0
-        ident: local_ubo
-        var_ubos:
-          - type_ubo: Mat4
-            ident: model
-          - type_ubo: Mat4
-            ident: view
-          - type_ubo: Mat4
-            ident: view_model
-    samplers: []
+- scope_type: Global
+  buffers:
+  - set: 0
+    binding: 0
+    ident: global_ubo
+    var_ubos:
+    - type_ubo: Vec4
+      ident: color
+    - type_ubo: Mat2
+      ident: model
+  samplers:
+  - set: 0
+    binding: 1
+    type_sampler: Sampler2d
+    ident: global_tex_0
+  - set: 0
+    binding: 2
+    type_sampler: Sampler2d
+    ident: global_tex_1
+  - set: 0
+    binding: 3
+    type_sampler: Sampler2d
+    ident: global_tex_2
+  - set: 0
+    binding: 4
+    type_sampler: Sampler2d
+    ident: global_tex_3
+  - set: 0
+    binding: 5
+    type_sampler: Sampler2d
+    ident: global_tex_4
+- scope_type: Shared
+  buffers:
+  - set: 1
+    binding: 0
+    ident: shared_ubo
+    var_ubos:
+    - type_ubo: Float
+      ident: foo
+  samplers:
+  - set: 1
+    binding: 1
+    type_sampler: Sampler2d
+    ident: shared_tex_0
+  - set: 1
+    binding: 2
+    type_sampler: Sampler2d
+    ident: shared_tex_1
+  - set: 1
+    binding: 3
+    type_sampler: Sampler2d
+    ident: shared_tex_2
+- scope_type: Instance
+  buffers:
+  - set: 2
+    binding: 0
+    ident: instance_ubo
+    var_ubos:
+    - type_ubo: Float
+      ident: foo
+    - type_ubo: Mat3
+      ident: bar
+    - type_ubo: Mat2
+      ident: moo
+    - type_ubo: Mat2
+      ident: glatz
+  samplers:
+  - set: 2
+    binding: 1
+    type_sampler: Sampler2d
+    ident: instance_tex_0
+  - set: 2
+    binding: 2
+    type_sampler: Sampler2d
+    ident: instance_tex_1
+  - set: 2
+    binding: 3
+    type_sampler: Sampler2d
+    ident: instance_tex_2
+- scope_type: Local
+  buffers:
+  - set: 3
+    binding: 0
+    ident: local_ubo
+    var_ubos:
+    - type_ubo: Mat4
+      ident: model
+    - type_ubo: Mat4
+      ident: view
+    - type_ubo: Mat4
+      ident: view_model
+  samplers: []
 shaders:
-  - shader_type: Vertex
-    uniform_usages:
-      - scope_type: Global
-        ident: global_ubo
-      - scope_type: Global
-        ident: global_tex_0
-      - scope_type: Global
-        ident: global_tex_1
-      - scope_type: Global
-        ident: global_tex_2
-      - scope_type: Global
-        ident: global_tex_3
-      - scope_type: Shared
-        ident: shared_ubo
-      - scope_type: Shared
-        ident: shared_tex_0
-      - scope_type: Shared
-        ident: shared_tex_1
-      - scope_type: Shared
-        ident: shared_tex_2
-      - scope_type: Instance
-        ident: instance_ubo
-      - scope_type: Instance
-        ident: instance_tex_0
-      - scope_type: Instance
-        ident: instance_tex_1
-      - scope_type: Instance
-        ident: instance_tex_2
-      - scope_type: Local
-        ident: local_ubo
-  - shader_type: Fragment
-    uniform_usages:
-      - scope_type: Global
-        ident: global_tex_1
-      - scope_type: Shared
-        ident: shared_tex_1
-      - scope_type: Shared
-        ident: shared_tex_2
-      - scope_type: Instance
-        ident: instance_ubo
-      - scope_type: Instance
-        ident: instance_tex_2
-      - scope_type: Local
-        ident: local_ubo
+- shader_type: Vertex
+  uniform_usages:
+  - scope_type: Global
+    ident: global_ubo
+  - scope_type: Global
+    ident: global_tex_0
+  - scope_type: Global
+    ident: global_tex_1
+  - scope_type: Global
+    ident: global_tex_2
+  - scope_type: Global
+    ident: global_tex_3
+  - scope_type: Shared
+    ident: shared_ubo
+  - scope_type: Shared
+    ident: shared_tex_0
+  - scope_type: Shared
+    ident: shared_tex_1
+  - scope_type: Shared
+    ident: shared_tex_2
+  - scope_type: Instance
+    ident: instance_ubo
+  - scope_type: Instance
+    ident: instance_tex_0
+  - scope_type: Instance
+    ident: instance_tex_1
+  - scope_type: Instance
+    ident: instance_tex_2
+  - scope_type: Local
+    ident: local_ubo
+- shader_type: Fragment
+  uniform_usages:
+  - scope_type: Global
+    ident: global_tex_1
+  - scope_type: Shared
+    ident: shared_tex_1
+  - scope_type: Shared
+    ident: shared_tex_2
+  - scope_type: Instance
+    ident: instance_ubo
+  - scope_type: Instance
+    ident: instance_tex_2
+  - scope_type: Local
+    ident: local_ubo

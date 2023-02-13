@@ -59,16 +59,16 @@ pub struct ShaderProgramScopeConfig {
     pub samplers: Vec<ShaderProgramSamplerConfig>,
 }
 
-impl std::fmt::Display for ShaderProgramScopeConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for buffer in &self.buffers {
-            writeln!(f, "\n// start: scope '{}'", &self.scope_type.struct_typedef())?;
-            writeln!(f, "{}", buffer)?;
-            writeln!(f, "// end: scope '{}'\n", &self.scope_type.struct_typedef())?;
-        }
-        Ok(())
-    }
-}
+// impl std::fmt::Display for ShaderProgramScopeConfig {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         for buffer in &self.buffers {
+//             writeln!(f, "\n// start: scope '{}'", &self.scope_type.struct_typedef())?;
+//             writeln!(f, "{}", buffer)?;
+//             writeln!(f, "// end: scope '{}'\n", &self.scope_type.struct_typedef())?;
+//         }
+//         Ok(())
+//     }
+// }
 
 impl ShaderProgramScopeConfig {
     pub fn from_raw(name: &str, buffers: Vec<ShaderProgramBufferConfig>, samplers: Vec<ShaderProgramSamplerConfig>) -> HellResult<Self> {
@@ -131,22 +131,6 @@ pub struct ShaderProgramBufferConfig {
     pub var_ubos: Vec<ShaderProgramUboVarConfig>,
 }
 
-impl std::fmt::Display for ShaderProgramBufferConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let buffer_type_ident = format!("{}_buffer_type", self.ident);
-
-        writeln!(f, "// START: buffer '{}'", &self.ident)?;
-        writeln!(f, "layout(set = {}, binding = {}) uniform {} {{", self.set, self.binding, buffer_type_ident)?;
-        for ubo in &self.var_ubos {
-            writeln!(f, "\t{}", ubo)?;
-        }
-        writeln!(f, "}} {};", &self.ident)?;
-        writeln!(f, "// END: buffer '{}'", &self.ident)?;
-
-        Ok(())
-    }
-}
-
 impl ShaderProgramBufferConfig {
     pub fn from_raw(ident: &str, var_ubos: Vec<ShaderProgramUboVarConfig>) -> HellResult<Self> {
         Ok(Self {
@@ -155,6 +139,43 @@ impl ShaderProgramBufferConfig {
             ident: ident.to_lowercase(),
             var_ubos,
         })
+    }
+
+    pub fn format(&self, scope: ShaderScopeType, txt: &mut String) -> HellResult<()> {
+        use std::fmt::Write;
+        let buffer_type_ident = format!("{}_buffer_type", self.ident);
+        let inner_buffer_type_ident = format!("inner_{}", buffer_type_ident);
+
+        writeln!(txt, "// --- START: buffer '{}' ---", &self.ident)?;
+
+        // generate start-tag
+        if scope == ShaderScopeType::Local {
+            writeln!(txt, "struct {} {{", inner_buffer_type_ident)?;
+        } else {
+            writeln!(txt, "layout(set = {}, binding = {}) uniform {} {{", self.set, self.binding, buffer_type_ident)?;
+        }
+
+        // generate members
+        for ubo in &self.var_ubos {
+            writeln!(txt, "\t{}", ubo)?;
+        }
+
+        // generate end-tag
+        if scope == ShaderScopeType::Local {
+            writeln!(txt, "\
+}};
+// std140 enforces cpp memory layout
+layout(std140, set = {}, binding = {}) readonly buffer {} {{
+    inner_{} data[];
+}} {};"
+            , self.set, self.binding, buffer_type_ident, inner_buffer_type_ident, self.ident)?;
+        } else {
+            writeln!(txt, "}} {};", &self.ident)?;
+        }
+
+        writeln!(txt, "// --- END: buffer '{}' ---", &self.ident)?;
+
+        Ok(())
     }
 }
 
@@ -194,9 +215,9 @@ pub struct ShaderProgramSamplerConfig {
 
 impl std::fmt::Display for ShaderProgramSamplerConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "// START: sampler '{}'", self.ident)?;
+        writeln!(f, "// --- START: sampler '{}' ---", self.ident)?;
         writeln!(f, "layout(set = {}, binding = {}) {} {};", self.set, self.binding, self.type_sampler, &self.ident)?;
-        writeln!(f, "// END: sampler '{}'", self.ident)?;
+        writeln!(f, "// --- END: sampler '{}' ---", self.ident)?;
         Ok(())
     }
 }

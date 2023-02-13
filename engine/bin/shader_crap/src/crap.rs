@@ -314,9 +314,9 @@ impl<'a> CrapShaderDef<'a> {
     }
 
     pub fn write_code_block(&self, buffer: &mut String) {
-        buffer.push_str("// START: code\n");
+        buffer.push_str("// --- START: code ---\n");
         buffer.push_str(self.raw_code.code);
-        buffer.push_str("\n// END: code");
+        buffer.push_str("\n// --- END: code ---");
     }
 
     pub fn write_files(&self, base_path: &Path, file_stem: String, config: &ShaderProgramConfig) -> HellResult<()> {
@@ -331,7 +331,8 @@ impl<'a> CrapShaderDef<'a> {
             let scope = config.scope_ref(target_scope).ok_or_render_herr("failed to get scope while writing shader file")?;
 
             if let Some(buffer) = scope.buffer(usage.ident) {
-                writeln!(code, "{}", buffer)?;
+                buffer.format(scope.scope_type, &mut code)?;
+                writeln!(code, "")?;
             } else if let Some(sampler) = scope.sampler(usage.ident) {
                 writeln!(code, "{}", sampler)?;
             } else {
