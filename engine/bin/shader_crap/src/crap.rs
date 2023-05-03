@@ -1,8 +1,8 @@
 use std::{collections::HashMap, borrow::Borrow, path::Path, fs};
 use std::fmt::Write;
 
-use hell_collections::DynArray;
-use hell_error::{HellResult, OptToHellErr};
+use hell_core::collections::dyn_array::DynArray;
+use hell_core::error::{HellResult, OptToHellErr};
 use hell_renderer::render_types::scope::ShaderScopeType;
 use hell_renderer::resources::config::{ShaderProgramConfig, ShaderProgramInfoConfig, ShaderProgramScopeConfig, ShaderProgramBufferConfig, ShaderProgramUboVarConfig, ShaderProgramSamplerConfig, ShaderProgramShaderConfig, ShaderProgramUniformUsage};
 use pest::{self, Parser, iterators::{Pair, Pairs}};

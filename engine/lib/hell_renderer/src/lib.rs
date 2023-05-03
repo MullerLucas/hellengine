@@ -11,3 +11,4 @@ pub mod render_types;
 pub mod scene;
 pub mod camera;
 pub mod resources;
+pub mod config;

@@ -5,10 +5,9 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
-hell_error.workspace = true
-hell_collections.workspace = true
-
+# hellmut
 hell_core.workspace = true
+# enging
 hell_common.workspace = true
 hell_utils.workspace = true
 hell_resources.workspace = true

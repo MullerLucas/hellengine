@@ -1,6 +1,6 @@
 use std::os::raw;
 
-use hell_error::HellResult;
+use hell_core::error::HellResult;
 
 
 #[derive(Clone, Copy)]

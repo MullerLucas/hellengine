@@ -1,5 +1,5 @@
 use ash::vk;
-use hell_error::{HellResult, ErrToHellErr};
+use hell_core::error::{HellResult, ErrToHellErr};
 
 use std::io::Read;
 use std::path::Path;

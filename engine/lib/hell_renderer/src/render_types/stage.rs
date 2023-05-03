@@ -1,4 +1,4 @@
-use hell_error::{HellError, OptToHellErr};
+use hell_core::error::{HellError, OptToHellErr};
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(usize)]

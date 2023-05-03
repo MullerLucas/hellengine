@@ -1,9 +1,6 @@
 use ash::vk;
-use hell_error::HellResult;
-
-use hell_core::config;
-
-use crate::vulkan::VulkanContextRef;
+use hell_core::error::HellResult;
+use crate::{vulkan::VulkanContextRef, config};
 
 use super::{VulkanSwapchain, VulkanImage, VulkanRenderPass};
 

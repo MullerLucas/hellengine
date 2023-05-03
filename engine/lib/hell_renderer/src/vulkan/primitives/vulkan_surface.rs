@@ -1,6 +1,6 @@
 use ash::vk;
 use hell_common::window::HellSurfaceInfo;
-use hell_error::{HellResult, ErrToHellErr};
+use hell_core::error::{HellResult, ErrToHellErr};
 
 
 pub struct VulkanSurface {

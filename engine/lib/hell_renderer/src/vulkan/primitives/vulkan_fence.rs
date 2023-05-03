@@ -1,6 +1,5 @@
 use ash::vk;
-use hell_error::{HellResult, ErrToHellErr};
-
+use hell_core::error::{HellResult, ErrToHellErr};
 use crate::vulkan::VulkanContextRef;
 
 

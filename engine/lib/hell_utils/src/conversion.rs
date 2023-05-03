@@ -1,7 +1,8 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
-use hell_error::{HellResult, ErrToHellErr};
+use hell_core::error::{HellResult, ErrToHellErr};
+
 
 
 

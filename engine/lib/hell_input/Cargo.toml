@@ -5,7 +5,7 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
-hell_error.workspace = true
+hell_core.workspace = true
 
 bitflags.workspace = true
 strum.workspace = true

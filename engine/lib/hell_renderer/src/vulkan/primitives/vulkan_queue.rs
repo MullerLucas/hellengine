@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use ash::vk;
-use hell_error::{HellResult, OptToHellErr};
-
+use hell_core::error::{HellResult, OptToHellErr};
 use super::VulkanSurface;
 
 

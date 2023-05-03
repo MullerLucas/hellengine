@@ -2,9 +2,10 @@
 use std::{ptr, ffi};
 
 use ash::vk;
-use hell_error::{HellResult, ErrToHellErr};
+use hell_core::error::{HellResult, ErrToHellErr};
 use hell_utils::conversion;
-use hell_core::config;
+
+use crate::config;
 
 use super::{VulkanPhysDevice, VulkanQueues};
 

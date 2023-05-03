@@ -1,9 +1,9 @@
 use std::array;
 
+use crate::config;
 use crate::render_types::PerFrame;
 use ash::vk;
-use hell_core::config;
-use hell_error::HellResult;
+use hell_core::error::HellResult;
 
 use super::VulkanContextRef;
 use super::primitives::{VulkanSemaphore, VulkanFence, VulkanCommandPool, VulkanCommandBuffer};

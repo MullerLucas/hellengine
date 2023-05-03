@@ -1,9 +1,8 @@
 use hell_common::window::{HellWindow, HellWindowExtent};
-use hell_core::config;
-use hell_error::HellResult;
+use hell_core::error::HellResult;
 use hell_input::InputManager;
 use hell_renderer::render_types::RenderPackage;
-use hell_renderer::{HellRenderer, HellRendererInfo};
+use hell_renderer::{HellRenderer, HellRendererInfo, config};
 
 
 

@@ -1,5 +1,5 @@
 use ash::vk;
-use hell_error::HellResult;
+use hell_core::error::HellResult;
 use crate::vulkan::{VulkanContextRef, primitives::{VulkanBuffer, VulkanCommands}, Vertex3D, Vertex2D};
 
 

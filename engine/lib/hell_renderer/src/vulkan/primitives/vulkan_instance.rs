@@ -2,10 +2,8 @@ use std::ffi;
 use std::os::raw;
 
 use ash::vk;
-use hell_core::config;
-use hell_error::{HellResult, ErrToHellErr};
-
-use crate::vulkan::{validation_layers, platforms, debugging};
+use hell_core::error::{HellResult, ErrToHellErr};
+use crate::{vulkan::{validation_layers, platforms, debugging}, config};
 
 
 

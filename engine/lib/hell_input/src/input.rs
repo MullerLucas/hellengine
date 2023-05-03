@@ -1,6 +1,6 @@
 use core::fmt;
 
-use hell_error::HellResult;
+use hell_core::error::HellResult;
 use strum::EnumCount;
 use crate::keycodes::KeyCode;
 

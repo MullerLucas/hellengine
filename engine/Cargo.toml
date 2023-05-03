@@ -10,16 +10,14 @@ edition = "2021"
 authors = [ "helloki <helloki@mailbox.org>" ]
 
 [workspace.dependencies]
-hell_core      = { path = "lib/hell_core" }
+hell_core      = { path = "hellmut/lib/hell_core" }
+
 hell_common    = { path = "lib/hell_common" }
 hell_app       = { path = "lib/hell_app" }
 hell_input     = { path = "lib/hell_input" }
 hell_renderer  = { path = "lib/hell_renderer" }
 hell_utils     = { path = "lib/hell_utils" }
 hell_resources = { path = "lib/hell_resources" }
-
-hell_error       = { path = "../hust/lib/hell_error" }
-hell_collections = { path = "../hust/lib/hell_collections" }
 
 
 num = "0.4.0"

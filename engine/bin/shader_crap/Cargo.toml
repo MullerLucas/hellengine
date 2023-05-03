@@ -5,8 +5,7 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
-hell_error.workspace = true
-hell_collections.workspace = true
+hell_core.workspace = true
 hell_renderer.workspace = true
 
 glam.workspace = true

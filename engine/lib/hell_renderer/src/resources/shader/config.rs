@@ -1,4 +1,4 @@
-use hell_error::HellResult;
+use hell_core::error::HellResult;
 
 use crate::render_types::{scope::ShaderScopeType, stage::ShaderStageType, glsl::GlslType};
 

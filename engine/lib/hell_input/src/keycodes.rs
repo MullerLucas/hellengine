@@ -1,4 +1,4 @@
-use hell_error::{HellError, HellErrorKind, HellErrorContent};
+use hell_core::error::{HellError, HellErrorKind, HellErrorContent};
 use num_traits::FromPrimitive;
 
 #[repr(u32)]

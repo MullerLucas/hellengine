@@ -6,7 +6,6 @@ authors.workspace = true
 
 [dependencies]
 hell_core.workspace = true
-hell_error.workspace = true
 
 image.workspace = true
 serde.workspace = true

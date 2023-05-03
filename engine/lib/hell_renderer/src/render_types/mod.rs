@@ -3,7 +3,6 @@ pub mod scope;
 pub mod stage;
 
 use ash::vk;
-use hell_core::config;
 
 
 
@@ -32,7 +31,7 @@ pub struct RenderPackage {
 
 use hell_common::transform::Transform;
 
-use crate::resources::ResourceHandle;
+use crate::{resources::ResourceHandle, config};
 
 pub struct RenderDataChunk<'a> {
     pub mesh_idx: usize,

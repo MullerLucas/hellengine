@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{BufReader, BufRead};
 use std::path::Path;
 
-use hell_error::HellResult;
+use hell_core::error::HellResult;
 
 pub struct FntFileCharRow {
     pub id: u64,

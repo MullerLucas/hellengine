@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use hell_common::window::{HellSurfaceInfo, HellWindowExtent};
-use hell_error::HellResult;
+use hell_core::error::HellResult;
 
 use crate::camera::HellCamera;
 use crate::render_types::RenderPackage;

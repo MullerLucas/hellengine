@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use hell_error::{HellError, HellErrorHelper};
+use hell_core::error::{HellError, HellErrorHelper};
 
 
 // ----------------------------------------------------------------------------

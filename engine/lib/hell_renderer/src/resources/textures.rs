@@ -1,6 +1,6 @@
 use std::{path::Path, collections::HashMap};
 
-use hell_error::{HellResult, HellErrorHelper};
+use hell_core::error::{HellResult, HellErrorHelper};
 use image::{RgbaImage, DynamicImage};
 
 use crate::vulkan::{RenderTexture, RenderBackend};

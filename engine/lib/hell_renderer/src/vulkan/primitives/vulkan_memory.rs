@@ -1,8 +1,7 @@
 use std::fmt::Debug;
 
 use ash::vk;
-use hell_error::{HellResult, HellError, HellErrorKind, HellErrorContent};
-
+use hell_core::error::{HellResult, HellError, HellErrorKind, HellErrorContent};
 use crate::vulkan::VulkanContextRef;
 
 

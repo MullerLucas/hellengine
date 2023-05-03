@@ -3,7 +3,7 @@ pub mod config;
 
 use std::collections::HashMap;
 
-use hell_error::{HellResult, OptToHellErr};
+use hell_core::error::{HellResult, OptToHellErr};
 
 use crate::vulkan::{shader_program::ShaderProgram, RenderBackend};
 

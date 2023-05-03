@@ -1,6 +1,6 @@
 use ash::vk;
-use hell_collections::DynArray;
-use hell_error::HellResult;
+use hell_core::collections::dyn_array::DynArray;
+use hell_core::error::HellResult;
 
 use crate::vulkan::VulkanContextRef;
 

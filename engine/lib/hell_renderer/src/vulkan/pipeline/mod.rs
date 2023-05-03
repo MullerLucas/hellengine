@@ -1,14 +1,12 @@
 mod shader;
-use hell_collections::DynArray;
-use hell_core::config;
+use hell_core::{error::{HellResult, HellErrorKind, HellError}, collections::dyn_array::DynArray};
 pub use shader::*;
 pub mod shader_data;
 
 
 
 use ash::vk;
-use hell_error::{HellResult, HellError, HellErrorKind};
-use crate::vulkan::VulkanContextRef;
+use crate::{vulkan::VulkanContextRef, config};
 
 use super::{primitives::{VulkanSwapchain, VulkanRenderPass}, shader_program::PushConstantInfo};
 

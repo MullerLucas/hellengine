@@ -1,9 +1,7 @@
 use std::ptr;
 use ash::vk;
-use hell_error::{HellResult, ErrToHellErr};
-use hell_core::config;
-
-use crate::vulkan::VulkanContextRef;
+use hell_core::error::{HellResult, ErrToHellErr};
+use crate::{vulkan::VulkanContextRef, config};
 
 
 

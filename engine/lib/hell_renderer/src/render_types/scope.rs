@@ -1,4 +1,4 @@
-use hell_error::{HellError, HellErrorHelper};
+use hell_core::error::{HellError, HellErrorHelper};
 
 #[derive(Default, Debug, Clone, Copy,  serde::Serialize, serde::Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ShaderScopeType {
