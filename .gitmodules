@@ -2,3 +2,6 @@
 	path = hust
 	url = git@gitlab.com:helloki-app/hust.git
 	branch = game/nocoru
+[submodule "engine/hellmut"]
+	path = engine/hellmut
+	url = git@gitlab.com:helloki/hellmut.git
